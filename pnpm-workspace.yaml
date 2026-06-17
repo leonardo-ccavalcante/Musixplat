@@ -1,0 +1,7 @@
+packages:
+  - "."
+
+# Allow these deps to run install scripts (fetch platform binaries).
+allowBuilds:
+  esbuild: true
+  supabase: true

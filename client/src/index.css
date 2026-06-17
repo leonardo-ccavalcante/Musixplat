@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — Design/musixmatch-pro-design-spec.md (dark-only, no invented colors). */
+:root {
+  --mxm-backgroundPrimary: #131313;
+  --mxm-backgroundPrimaryElevated: #1f1f1f;
+  --mxm-backgroundSecondary: #343434;
+  --mxm-backgroundTertiary: #757575;
+  --mxm-backgroundHover: rgba(255, 255, 255, 0.05);
+  --mxm-contentPrimary: #ffffff;
+  --mxm-contentPrimaryInverted: #131313;
+  --mxm-contentSecondary: #bdbdbd;
+  /* spec value #828282 fails AA (4.28:1) on the elevated #1f1f1f surface; bumped per the
+     design-spec §362 remediation note so de-emphasized text meets WCAG 2.1 AA on both surfaces. */
+  --mxm-contentTertiary: #9e9e9e;
+  --mxm-paletteBrand100: #fc532e;
+  --mxm-palettePurple100: #9013fe;
+  --mxm-paletteGreen100: #00cc99;
+  --mxm-systemRed100: #f54b40;
+  --mxm-systemRed200: #d32f2f;
+  --mxm-systemGreen100: #4caf50;
+  --mxm-systemGreen200: #388e3c;
+  --mxm-systemAmber100: #f0a83b;
+  --mxm-systemYellow100: #f0a83b;
+  --mxm-systemBlue100: #2979ff;
+  --mxm-borderPrimary: #343434;
+  --mxm-shadow: rgba(0, 0, 0, 0.2);
+  --mxm-radius: 12px;
+}
+
+html,
+body,
+#root {
+  block-size: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mxm-backgroundPrimary);
+  color: var(--mxm-contentPrimary);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: clamp(0.875rem, 0.8rem + 0.4vw, 1rem);
+}
+
+/* Tabular numbers everywhere we render metrics (percentile/gap). */
+.tabnum {
+  font-variant-numeric: tabular-nums;
+}
