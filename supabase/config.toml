@@ -1,0 +1,45 @@
+# Supabase local (docker) config. EU region in prod; local for dev/test (CLAUDE.md §1).
+project_id = "musixmatch-customer-ops"
+
+# Non-default ports: another local supabase project occupies the 5432x range. Coexist.
+[api]
+enabled = true
+port = 54521
+schemas = ["public", "catalog", "tenant", "cohort", "gov"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54522
+shadow_port = 54520
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54523
+
+[inbucket]
+enabled = false
+
+[storage]
+enabled = false
+
+# Not used by slice-01 (no live subscriptions yet); disabled to keep the local stack lean.
+[realtime]
+enabled = false
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173"]
+jwt_expiry = 3600
+enable_signup = true
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false
