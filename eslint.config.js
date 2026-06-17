@@ -9,7 +9,6 @@ export default tseslint.config(
       "node_modules/**",
       "supabase/**",
       "specs/**", // docs + a do-not-use workflow .mjs (not app source)
-      "server/pieces/**", // parallel 05A WIP (PII piece) authored outside this slice — left intact
       "playwright-report/**",
       "test-results/**",
     ],
