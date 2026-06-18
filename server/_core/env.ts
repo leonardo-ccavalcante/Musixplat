@@ -15,8 +15,8 @@ function name(key: string, fallback?: string): string {
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
   PORT: Number(process.env.PORT ?? 3000),
-  // Local supabase docker: postgres/postgres on 54322 (printed by `supabase start`).
-  DATABASE_URL: name("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"),
+  // Local supabase docker for this repo: postgres/postgres on 54522 (supabase/config.toml).
+  DATABASE_URL: name("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54522/postgres"),
   // Session cookie HS256 secret. Dev fallback only; prod refuses empty (see assertProdSecrets).
   JWT_SECRET: name("JWT_SECRET", "dev-only-insecure-secret-change-me"),
 };
