@@ -127,7 +127,7 @@ create index politica_tier_version_idx on gov."Politica_Tier"(policy_version);
 create table gov."Decision_Trace" (
   trace_id                 text primary key,                              -- decision_id canónico
   liberacion_id            text,                                          -- FK → Liberacion_Lote.liberacion_id (added below · cycle break)
-  conversa_id              text,  -- [deferred FK → Conversa_Episodio.episodio_id; NO global UNIQUE: conversa_id is tenant-scoped (PK=episodio_id=tenant:conversa), a UNIQUE(conversa_id) collides cross-tenant (§3.4). Confirm w/ Leo if a real FK→episodio_id is wanted] null si origen gobernanza
+  episodio_id              text references tenant."Conversa_Episodio"(episodio_id),  -- ROOT-CAUSE FIX (karpathy): 04 L269 names this "conversa_id", but the real conversation identity is episodio_id (PK = tenant:conversa, tenant-embedded). conversa_id alone is tenant-scoped ⇒ unsafe as a cross-table key (UNIQUE would collide cross-tenant §3.4). Reference the real PK with a real FK — integrity + tenant-safe. null si origen gobernanza. [FOLLOW-UP: min_calculo.conversa_id (013, merged) carries the same smell as a deferred provenance ref — unify on episodio_id in a later migration]
   calculo_id               uuid references gov."min_calculo"(calculo_id), -- FK → min_calculo log (gate-3, the par · 04 L269 / §3.4)
   accion                   public.accion_trace not null,
   proponente_id            text not null references gov."Usuario"(usuario_id),
@@ -149,10 +149,10 @@ create table gov."Decision_Trace" (
   independencia_garantida  boolean generated always as (confirmador_id is not null) stored,  -- 04 L270 (GENERATED)
   "timestamp"              timestamptz not null default now(),
   constraint decision_trace_4ojos check (confirmador_id is null or confirmador_id <> proponente_id),  -- 4-eyes (04 L270)
-  constraint decision_trace_origen_xor check ((liberacion_id is not null) <> (conversa_id is not null))  -- XOR origin
+  constraint decision_trace_origen_xor check ((liberacion_id is not null) <> (episodio_id is not null))  -- XOR origin (gobernanza vs conversa)
 );
 create index decision_trace_liberacion_idx on gov."Decision_Trace"(liberacion_id);
-create index decision_trace_conversa_idx   on gov."Decision_Trace"(conversa_id);
+create index decision_trace_episodio_idx   on gov."Decision_Trace"(episodio_id);
 create index decision_trace_credencial_idx on gov."Decision_Trace"(credencial_id);
 
 -- Append-only (04 §3.3): the before/after governance audit never mutates. Reuses the shared

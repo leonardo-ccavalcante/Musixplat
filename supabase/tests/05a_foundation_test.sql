@@ -25,19 +25,21 @@ insert into gov."Politica_Tier"(policy_id, policy_version, teto_tier) values ('P
 
 -- Decision_Trace 4-eyes CHECK: confirmador_id == proponente_id is rejected (23514 check_violation).
 select throws_ok(
-  $$ insert into gov."Decision_Trace"(trace_id, conversa_id, accion, proponente_id, confirmador_id, policy_version)
+  $$ insert into gov."Decision_Trace"(trace_id, episodio_id, accion, proponente_id, confirmador_id, policy_version)
      values ('t-4eyes', null, 'liberar', 'U-PROP', 'U-PROP', 'pv-test') $$,
   '23514', NULL, '4-eyes CHECK rejects confirmador_id == proponente_id');
 
--- Decision_Trace XOR origin: setting BOTH liberacion_id and conversa_id is rejected.
+-- Decision_Trace XOR origin: setting BOTH liberacion_id and episodio_id is rejected.
+-- episodio_id='E-test' must reference a real Conversa_Episodio (real FK) so the CHECK (23514),
+-- not the FK (23503), is what fails.
 insert into tenant."Conversa_Episodio"(episodio_id, conversa_id, tenant_id, restaurante_id)
   select 'E-test', 'conv-test', 'POOL-001', restaurante_id from tenant."Restaurante" limit 1;
 insert into gov."Liberacion_Lote"(liberacion_id, cohort_id, accion, proponente_id, operador_id)
   values ('L-test', 'cohort_test', 'LIBERAR', 'U-PROP', 'U-CONF');
 select throws_ok(
-  $$ insert into gov."Decision_Trace"(trace_id, liberacion_id, conversa_id, accion, proponente_id, policy_version)
-     values ('t-xor', 'L-test', 'conv-test', 'liberar', 'U-PROP', 'pv-test') $$,
-  '23514', NULL, 'XOR origin rejects both liberacion_id and conversa_id set');
+  $$ insert into gov."Decision_Trace"(trace_id, liberacion_id, episodio_id, accion, proponente_id, policy_version)
+     values ('t-xor', 'L-test', 'E-test', 'liberar', 'U-PROP', 'pv-test') $$,
+  '23514', NULL, 'XOR origin rejects both liberacion_id and episodio_id set');
 
 -- Liberacion_Lote 4-eyes CHECK: proponente_id == operador_id is rejected.
 select throws_ok(
@@ -46,8 +48,8 @@ select throws_ok(
   '23514', NULL, 'Liberacion 4-eyes CHECK rejects proponente_id == operador_id');
 
 -- Decision_Trace append-only: a valid trace cannot be UPDATEd or DELETEd (P0001 from tg_append_only).
-insert into gov."Decision_Trace"(trace_id, conversa_id, accion, proponente_id, confirmador_id, policy_version)
-  values ('t-ok', 'conv-test', 'liberar', 'U-PROP', 'U-CONF', 'pv-test');
+insert into gov."Decision_Trace"(trace_id, episodio_id, accion, proponente_id, confirmador_id, policy_version)
+  values ('t-ok', 'E-test', 'liberar', 'U-PROP', 'U-CONF', 'pv-test');
 select throws_ok(
   $$ update gov."Decision_Trace" set accion = 'pausar' where trace_id = 't-ok' $$,
   'P0001', NULL, 'Decision_Trace append-only: UPDATE rejected');
