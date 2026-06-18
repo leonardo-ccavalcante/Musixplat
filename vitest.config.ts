@@ -40,8 +40,9 @@ export default defineConfig({
           environment: "node",
           globals: true,
           include: ["tests/antifake/**/*.test.ts"],
-          testTimeout: 120_000,
-          hookTimeout: 120_000,
+          // resetDb (truncate + ~110k-row seed + ANALYZE) ~5-10s cold on the CI runner; no producers here.
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
         },
       },
       {
@@ -51,10 +52,11 @@ export default defineConfig({
           environment: "node",
           globals: true,
           include: ["tests/integration/**/*.test.ts"],
-          // serialized resetDb + 90k-row seed + full runP01(5000) per test, cold on the CI runner
-          // ⇒ generous per-test/hook budget (the cold first test is the slowest).
-          testTimeout: 300_000,
-          hookTimeout: 300_000,
+          // resetDb (truncate + ~110k-row seed + ANALYZE) + full runP01(5000) ≈ 10s cold on the CI
+          // runner. (Was 300s while runP01 nested-looped the Order table for 287s on a fresh, unanalyzed
+          // db — root-caused: runP01 now ANALYZEs after assignment, so 60s is ~6× real headroom.)
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
         },
       },
     ],
