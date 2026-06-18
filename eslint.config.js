@@ -9,6 +9,7 @@ export default tseslint.config(
       "node_modules/**",
       "supabase/**",
       "specs/**", // docs + a do-not-use workflow .mjs (not app source)
+      ".claude/**", // agent session artifacts (persisted workflow scripts) — not app source; absent on CI
       "playwright-report/**",
       "test-results/**",
     ],
