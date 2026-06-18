@@ -97,10 +97,22 @@ export async function proposeNba(
     return { nbaId, actionType: "A8", levered: false, effectiveLevel: null };
   }
 
-  // 02:1B — gate the candidate's autonomy. evals/tier empty ⇒ LOW (fail-closed); never auto-releases.
+  // 02:1B + 02:BR-5 — gate the candidate's autonomy and decide auto-dispatch vs human. evals/tier empty
+  // ⇒ LOW + policy unresolved ⇒ auto_releasable=false (fail-closed): the AI only acts alone when the
+  // action is low-stakes AND non-money AND the sample/policy hold (04 §3.3 L280). The number stays SQL.
   const arms = await loadArms(q, cohortId);
   const min = await sealMinCalculationNBA(
-    { nbaId, nbaRequest: cat.default_nba_request, releasedEvals: arms.releasedEvals, tierCap: arms.tierCap, cohortRuleVersion: version },
+    {
+      nbaId,
+      nbaRequest: cat.default_nba_request,
+      releasedEvals: arms.releasedEvals,
+      tierCap: arms.tierCap,
+      cohortRuleVersion: version,
+      financialDirect: cat.financial_class === "direct",
+      nMinOk: sel.lever.n_min_ok,
+      kAnonOk: sel.lever.k_anon_ok,
+      policyResolved: arms.tierCap != null,
+    },
     client,
   );
   return { nbaId, actionType: code, levered: true, effectiveLevel: min.effectiveLevel };
