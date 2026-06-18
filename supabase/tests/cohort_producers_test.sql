@@ -19,7 +19,7 @@ insert into catalog."Cohort_Rule_Version"(version_id, effective_date, what_chang
 -- F-1.3b k-anon boundary (k=5): below suppresses, at/above passes, NULL fail-closed.
 insert into cohort."Cohort"(cohort_id, tenure_bucket, tier_base, cohort_rule_version, n_accounts)
   values ('ck4','0-3m','long_tail','vtest',4), ('ck5','3-6m','long_tail','vtest',5), ('cknull','6-12m','long_tail','vtest',null);
-select cohort.fn_gate_k_anon('vtest');
+select cohort.fn_gate_k_anon(null, 'vtest');
 select is((select k_suppression_applied from cohort."Cohort" where cohort_id='ck4'), true, 'k-anon: n<5 suppresses');
 select is((select k_suppression_applied from cohort."Cohort" where cohort_id='ck5'), false, 'k-anon: n>=5 passes');
 select is((select k_suppression_applied from cohort."Cohort" where cohort_id='cknull'), true, 'k-anon: NULL fail-closed');

@@ -16,7 +16,7 @@ export async function runP01(opts: P01Options): Promise<void> {
     await c.query("select cohort.fn_annotate_scope($1)", [week]); // F-5.5
     await c.query("select cohort.fn_rank_cohort($1)", [week]); // F-1.2
     await c.query("select cohort.fn_gate_n_min($1)", [week]); // F-1.3
-    await c.query("select cohort.fn_gate_k_anon()"); // F-1.3b
+    await c.query("select cohort.fn_gate_k_anon($1)", [week]); // F-1.3b (per-week membership k_anon_ok)
     await c.query("select cohort.fn_descriptive_baseline($1)", [week]); // F-1.4
     await c.query("select cohort.fn_baseline_kpi($1)", [week]); // F-1.8
     await c.query("select cohort.fn_upside()"); // F-1.7

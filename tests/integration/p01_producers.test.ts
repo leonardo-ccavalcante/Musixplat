@@ -37,7 +37,7 @@ describe("F-1.1 assignment + F-1.2 ranking", () => {
     await runP01({ week: W1, refDate: REF });
 
     expect(await count(pool, 'tenant."Restaurant" where tenure_months is null')).toBe(0);
-    expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(100);
+    expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(5000);
     // every membership stamped with the vigente version
     expect(
       await count(pool, `cohort."Cohort_Membership_Snapshot" where cohort_rule_version <> 'v1'`),
