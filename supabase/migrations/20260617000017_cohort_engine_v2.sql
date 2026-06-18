@@ -174,6 +174,7 @@ $$;
 -- ── F-1.3b v2 — k-anon gate (re-identification). SEPARATE from n_min (own fn, own knob, own
 --    column k_anon_ok). Cohort/Subgroup flags from stored n_accounts. Membership k_anon_ok from an
 --    INLINE per-week subgroup count (only when a week is given). fail-closed: NULL count ⇒ suppress. ──
+drop function if exists cohort.fn_gate_k_anon(text);  -- supersede v1 signature (was (p_version text))
 create or replace function cohort.fn_gate_k_anon(p_week date default null, p_version text default null)
 returns void language plpgsql as $$
 declare

@@ -157,6 +157,7 @@ $$;
 -- ── F-1.7 v2 — UPSIDE [C]. Order-lift if the base (< P90) operated like the top (P90+), ATTRIBUTED
 --    across factors by the ratified upside weights. lift_orders = n_base · (top_orders − base_orders);
 --    attribution[f] = weight_f · lift. unit = orders (→ R$ via base avg_ticket). Never ascends to [V]. ──
+drop function if exists cohort.fn_upside(text);  -- supersede v1 signature (was (p_version text))
 create or replace function cohort.fn_upside(p_week date)
 returns void language plpgsql as $$
 declare

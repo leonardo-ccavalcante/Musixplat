@@ -31,3 +31,17 @@ export async function withTx<T>(fn: (client: pg.PoolClient) => Promise<T>): Prom
     client.release();
   }
 }
+
+// Run a unit of work that is ALWAYS rolled back — ephemeral simulation, no-commit BY CONSTRUCTION
+// (04 §14 sandbox: the what-if may reuse the real producers but must never persist). The caller
+// reads results from `fn`'s return value before the rollback discards every write.
+export async function withRollback<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    return await fn(client);
+  } finally {
+    await client.query("rollback");
+    client.release();
+  }
+}
