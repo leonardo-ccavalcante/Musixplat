@@ -22,6 +22,16 @@ insert into catalog."Config_Perillas"(key, valor, provenance, owner) values
   ('p90_percentil_corte',      '90', '[C]', 'leo'),   -- P90+ band for baseline_descriptivo
   ('at_risk_percentil_max',    '25', '[C]', 'leo');   -- delta below this + dropping ⇒ at_risk (F-2.2)
 
+-- ── 05B Diagnóstico knobs (CIERRE [C] table). Values are [C] placeholders TO DEFINE+DEFEND;
+--    every 05B threshold is read BY NAME, never a literal (CLAUDE.md §3.8). ──
+insert into catalog."Config_Perillas"(key, valor, provenance, owner) values
+  ('umbral_clasificacion',      '0.60', '[C]', 'leo'),  -- min confidence tipo/área before B.2 proceeds
+  ('piso_confianza_path',       '0.50', '[C]', 'leo'),  -- min confidence PATH A before acting (B.3)
+  ('cap_profundidad_arbol',     '5',    '[C]', 'leo'),  -- max issue-tree levels before degrade (B.3)
+  ('tolerancia_doublecheck',    '0.05', '[C]', 'leo'),  -- impact double-check band (B.7, BR-B10)
+  ('tolerancia_reconciliacion', '0',    '[C]', 'leo'),  -- pattern↔score divergence before fail-closed (B-block-1)
+  ('ventana_silenciosos',       '30',   '[C]', 'leo');  -- caza-silenciosos sweep window in days (B.5, B-block-2)
+
 -- ── Catalog: Cohort_Rule_Version (vigente v1 + prior v0 for anti-mezcla F-4.3 tests). ──
 insert into catalog."Cohort_Rule_Version"(version_id, fecha, que_cambio, efecto_en_baseline, provenance) values
   ('v0', date '2026-01-01', 'regla inicial de buckets', 'baseline v0', '[C]'),
