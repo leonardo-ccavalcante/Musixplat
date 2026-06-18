@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 // F-2.3 — reusable ordered delta panel: at_risk on top (deterministic), then gap desc. Render/sort
 // only — never recomputes deltas (produced by F-2.2). Order exposed semantically (aria-sort),
 // color is NOT the sole carrier (redundant "AT RISK" label). NULL passes through as "—".
-const RANK: Record<string, number> = { at_risk: 0, churn: 1, baixou_percentile: 2 };
+const RANK: Record<string, number> = { at_risk: 0, churn: 1, percentile_down: 2 };
 
 export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
   const sorted = useMemo(

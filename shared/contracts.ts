@@ -4,8 +4,8 @@ import { z } from "zod";
 
 export const deltaStatus = z.enum([
   "cohort_changed",
-  "melhorou_percentile",
-  "baixou_percentile",
+  "percentile_up",
+  "percentile_down",
   "at_risk",
   "new",
   "churn",
@@ -50,6 +50,7 @@ export const deltaRow = z.object({
   evento_id: z.string(),
   restaurant_id: z.string(),
   cohort_id: z.string(),
+  week: z.string(),
   delta_status: deltaStatus.nullable(),
   percentile_in_cohort: z.number().nullable(),
   gap_to_top: z.number().nullable(),

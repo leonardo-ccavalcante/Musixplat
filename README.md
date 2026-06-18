@@ -48,7 +48,7 @@ pnpm dev               # client :5173  +  server :3000
 pnpm lint && pnpm typecheck
 pnpm test              # unit + React component
 pnpm test:antifake     # §14 NULL-pre-run gate
-pnpm test:sql          # pgTAP (determinism + k-anon/n_min boundaries + anti-mezcla)
+pnpm test:sql          # reset local DB, then pgTAP (determinism + k-anon/n_min boundaries + anti-mezcla)
 pnpm test:integration  # P01 producers + handoff + sandbox (RLS, idempotency, cross-pool)
 pnpm test:e2e          # Playwright + axe (a11y WCAG 2.1 AA)
 ```

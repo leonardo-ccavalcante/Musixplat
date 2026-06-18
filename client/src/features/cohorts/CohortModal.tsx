@@ -19,8 +19,10 @@ export function CohortModal({ cell, onClose }: { cell: CohortCell | null; onClos
           <dl className="grid grid-cols-2 gap-1 text-sm">
             <dt className="text-mxm-content-tertiary">Tier</dt>
             <dd className="text-mxm-content">{cell.tier_base}</dd>
-            <dt className="text-mxm-content-tertiary">Tenure</dt>
-            <dd className="text-mxm-content">{cell.tenure_bucket}</dd>
+            <dt className="text-mxm-content-tertiary">Cuisine</dt>
+            <dd className="text-mxm-content">{cell.cuisine ?? "—"}</dd>
+            <dt className="text-mxm-content-tertiary">Zone</dt>
+            <dd className="text-mxm-content">{cell.zone ?? "—"}</dd>
             <dt className="text-mxm-content-tertiary">n_accounts</dt>
             <dd className="tabnum text-mxm-content">{cell.n_accounts ?? "—"}</dd>
           </dl>

@@ -34,6 +34,9 @@ export async function runP01(opts: P01Options): Promise<void> {
     await c.query("select cohort.fn_upside($1)", [week]); // F-1.7 (weighted, per week)
     if (prevSemana) {
       await c.query("select cohort.fn_diff_delta($1, $2)", [week, prevSemana]); // F-2.2
+      // fn_diff_delta bulk-upserts current-week events; refresh stats so the read API estimates
+      // current-week prioritized deltas correctly instead of assuming a near-empty event table.
+      await c.query('analyze cohort."Prioritized_NBA_Event"');
     }
     await c.query("select cohort.fn_log_movement($1)", [week]); // F-2.6
   });

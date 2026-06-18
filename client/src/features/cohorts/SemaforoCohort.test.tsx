@@ -4,7 +4,8 @@ import { SemaforoCohort, type CohortCell } from "./SemaforoCohort";
 
 const cell = (status: CohortCell["status"], id = status): CohortCell => ({
   cohort_id: id,
-  tenure_bucket: "0-3m",
+  cuisine: "sushi",
+  zone: "downtown",
   tier_base: "long_tail",
   n_accounts: 10,
   status,
