@@ -45,6 +45,32 @@ export const eventoPriorizadoNba = z.object({
 });
 export type EventoPriorizadoNba = z.infer<typeof eventoPriorizadoNba>;
 
+// 03:NBA-TEST — the deterministic verdict object (cohort.fn_nba_test). The NUMBER is always SQL (§14);
+// measured/standard/gap are NULL on no_data. action_code keys the row (A2/A3 share a dimension).
+export const nbaVerdict = z.object({
+  action_code: z.string(),
+  dimension: z.string().nullable(),
+  measured: z.number().nullable(),
+  standard: z.number().nullable(),
+  verdict: z.enum(["below", "ok", "above", "no_data"]),
+  gap: z.number().nullable(),
+  within_range: z.boolean(),
+  n_min_ok: z.boolean().nullable(),
+  k_anon_ok: z.boolean().nullable(),
+  provenance: z.string(),
+});
+export type NbaVerdict = z.infer<typeof nbaVerdict>;
+
+export const nbaTestInput = z.object({
+  restaurant_id: z.string().min(1),
+  action_code: z.string().min(1),
+  week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+export const nbaTestAllInput = z.object({
+  restaurant_id: z.string().min(1),
+  week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 // Delta panel row (F-2.3) — read-only projection of Prioritized_NBA_Event.
 export const deltaRow = z.object({
   evento_id: z.string(),
