@@ -31,13 +31,21 @@ The AI does NOT call a fixed test. It analyzes WHICH function to call, calls the
 then interprets WITHIN range. §8 golden rule: the AGENTE reasons/selects/interprets **text**; the NUMBER is
 always `fn_nba_test`, never fabricated.
 
-1. **/problem-solving (McKinsey) — structure + rank.** Build the MECE funnel issue-tree
-   (`01_nba_issue_tree.md`) for the underperformance; produce **up to 3 hypotheses, RANKED by probability**
-   along availability → attractiveness → demand → fulfillment → integrity. **HARD CAP = 3** (cost control:
-   no unbounded hypothesis generation / token burn).
-2. **Sequential elimination, carry-forward (≤3 rounds).** Test the highest-probability hypothesis first via
+1. **/problem-solving (McKinsey) — structure + rank (BLENDED, ratified 2026-06-18).** Build the MECE funnel
+   issue-tree (`01_nba_issue_tree.md`), then rank candidate actions by a DETERMINISTIC blend (the AI RUNS the
+   blend; it never invents the probability — §8):
+   - **(a) data-driven / present:** call `fn_nba_test_all(R, week)` ONCE → which dimensions are actually out +
+     normalized `|gap|` (what is wrong NOW; ~2ms).
+   - **(b) priors / history:** historical resolution rate per action for this restaurant's pattern, from
+     `tenant."Knowledge_Case"` (resolved `path_used` ↑, dead `discarded_branches` ↓).
+   - **(c) blend:** `score = nba_rank_weight_gap·gap_norm + nba_rank_weight_prior·prior` (weights = knobs,
+     editable in the modal). Gap dominates (present evidence); the prior only modulates (history ≠ future).
+   Take the **top 3** → the ranked hypotheses. **HARD CAP = 3** (cost control). This blend IS the improvement
+   loop: the priors come from `Knowledge_Case`, so resolved paths replicate and dead branches get pruned.
+2. **Sequential elimination, carry-forward (≤3 rounds).** Test the highest-ranked hypothesis first via
    `fn_nba_test(R, action_code, week)`:
-   - verdict CONFIRMS (`below`/`above` matching the action's `verdict_sense`) ⇒ that is the lever; proceed.
+   - verdict CONFIRMS (any `below`/`above` matching the action's `verdict_sense` — no magnitude gate) ⇒ that
+     is the lever; proceed.
    - verdict DISCONFIRMS (`ok`) ⇒ record in `discarded_branches`, move to the 2nd, then 3rd. **Never re-test
      a discarded branch.**
    - `no_data` ⇒ cannot test this branch; record + move on.
@@ -128,8 +136,14 @@ session — contract only, so the next session adds `server/routers/nba.ts` (or 
 
 - **Shipped (this session):** `fn_nba_test` + `fn_nba_test_all` + the catalog contract + the seed fixes +
   17 integration tests green + antifake/pgTAP/typecheck/lint green; perf = Index Scan, <3ms/call.
-- **Next sessions:** the AGENTE engine (the named-step orchestration + prompts), the value-edit modal, and
-  the `min()` autonomy gate `02:1B` (`nivel_efectivo = min(nba_request, released_evals, tier_cap)` —
-  `gov."min_calculation"` was hardened with `episode_id`/XOR in mig `20260618163314`).
-- Open `[I]`: runtime of `02:1A` (n8n vs TS) — fixes whether the engine reaches the substrate via SQL or a
-  tRPC `nba.test` wrapper; the modal needs the tRPC config endpoints either way.
+- **Engine decisions (ratified 2026-06-18 with Leo):** ranking = a DETERMINISTIC blend of data-driven gap
+  (`fn_nba_test_all`, present) + `Knowledge_Case` priors (history) — `score = nba_rank_weight_gap·gap_norm +
+  nba_rank_weight_prior·prior`, gap dominates; `outcome='resolved'` = PRE-action (a hypothesis confirmed + an
+  NBA proposed — the post-action KPI move is the separate EPIC-3 ROI eval); CONFIRM = any below/above (no
+  magnitude gate); **runtime = TS module** (`server/agente/nba_engine.ts`, named steps
+  `rankHypotheses`/`testHypothesis`/`satGate`/`trace`) calling the substrate via a tRPC `nba.test` wrapper.
+- **Next sessions:** implement the TS engine (named-step orchestration + the /problem-solving + /sat prompt)
+  + tRPC `nba.test` + the value-edit modal + the `min()` autonomy gate `02:1B` (`nivel_efectivo =
+  min(nba_request, released_evals, tier_cap)` — `gov."min_calculation"` hardened with `episode_id`/XOR in mig
+  `20260618163314`).
+- **New knobs to seed when the engine lands:** `nba_rank_weight_gap`, `nba_rank_weight_prior`.
