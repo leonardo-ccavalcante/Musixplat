@@ -63,18 +63,37 @@ create table tenant."Affected" (
 create index afetado_problema_idx on tenant."Affected"(problema_id);
 
 -- ── Knowledge_Case (04 §3): KB for grounding (BR-B3) + RL guard (BR-B16). Real governance
---    entity (NOT a §4 phantom). Empty pre-run; producers are EPIC-B4 (thin) / FILA. ─────────
+--    entity (NOT a §4 phantom). Empty pre-run; producers are EPIC-B4 (thin) / FILA.
+--    Stores BOTH polarities of a closed case so the learning loop CONVERGES, not oscillates:
+--      POSITIVE (how it was solved) = resolucao + caminho_usado → replicated next time.
+--      NEGATIVE (why it did NOT)    = not_resolved_reason + discarded_branches → grounding
+--      prunes those dead hypotheses next time, so the AI stops re-proposing them.
+--    Provenance split (§14 + BR-B8): `outcome` is MEASURED ⇒ [V]/[I]; the narrative
+--    `not_resolved_reason` is AI text ⇒ [C], never a number, human-gated (revisado=false). ──
 create table tenant."Knowledge_Case" (
-  kb_case_id      uuid primary key default gen_random_uuid(),
-  tenant_id       text not null,
-  tipo_area       text not null,
-  padrao          text,
-  resolucao       text,
-  probabilidad    numeric,                                                 -- [C] historical likelihood
-  caminho_usado   jsonb,
-  links_similares jsonb not null default '[]'::jsonb,
-  revisado        boolean not null default false,                         -- BR-B16: pendiente-de-revisión until human RLHF
-  created_at      timestamptz not null default now()
+  kb_case_id           uuid primary key default gen_random_uuid(),
+  tenant_id            text not null,
+  tipo_area            text not null,
+  padrao               text,
+  outcome              text,                                              -- RESULT §14 — measured: 'resolved'|'not_resolved'|'escalated' (NULL pre-producer)
+  resolucao            text,                                              -- POSITIVE polarity: how it was solved (NULL when not resolved)
+  caminho_usado        jsonb,                                             -- the issue-tree path that worked
+  not_resolved_reason  text,                                             -- NEGATIVE polarity [C]: why it did NOT close (NULL when resolved)
+  discarded_branches   jsonb not null default '[]'::jsonb,                -- hypotheses tried+falsified (+why) ⇒ grounding prunes them next case
+  probabilidad         numeric,                                           -- [C] historical likelihood
+  links_similares      jsonb not null default '[]'::jsonb,
+  revisado             boolean not null default false,                   -- BR-B16: pendiente-de-revisión until human RLHF
+  provenance_by_field  jsonb not null default '{}'::jsonb,                -- per-field [V]/[I]/[C] (04 §7, BR-B8)
+  created_at           timestamptz not null default now(),
+  -- two-polarity invariant (fail-closed, §3.7): an outcome must carry its evidence —
+  -- resolved ⇒ HOW (resolucao); not_resolved/escalated ⇒ WHY (not_resolved_reason).
+  constraint knowledge_case_outcome_ck
+    check (outcome is null or outcome in ('resolved','not_resolved','escalated')),
+  constraint knowledge_case_polarity_ck check (
+    outcome is null
+    or (outcome = 'resolved' and resolucao is not null)
+    or (outcome in ('not_resolved','escalated') and not_resolved_reason is not null)
+  )
 );
 create index knowledge_case_tipo_idx on tenant."Knowledge_Case"(tenant_id, tipo_area);
 

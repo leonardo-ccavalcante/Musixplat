@@ -6,8 +6,11 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 dotenv.config();
 
+// `||` (not `??`) so an EMPTY string falls back to the local default. A stray empty `DATABASE_URL=`
+// (e.g. a vestigial MySQL placeholder line in .env) would otherwise leave pg to silently default to
+// port 5432 and fail with ECONNREFUSED instead of hitting the Supabase test db on 54522.
 const connectionString =
-  process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54522/postgres";
+  process.env.DATABASE_URL?.trim() || "postgresql://postgres:postgres@127.0.0.1:54522/postgres";
 
 export function makePool(): pg.Pool {
   return new pg.Pool({ connectionString, max: Number(process.env.PG_POOL_MAX ?? 4) });
