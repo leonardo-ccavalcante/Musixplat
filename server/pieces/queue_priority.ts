@@ -34,15 +34,17 @@ export function queuePriority(
     return { prioridad_cola: signal.spike ? "ALTA" : "NORMAL" };
   }
 
-  // Numeric intensity path — requires a valid finite threshold from the caller.
-  const hasValidUmbral =
-    typeof umbral === "number" && Number.isFinite(umbral) && umbral > 0;
-  const hasValidIntensidad =
-    typeof signal.intensidad === "number" && Number.isFinite(signal.intensidad);
+  // Numeric intensity path — capture the narrowed values so TS proves them non-null
+  // (no `!` assertion, no eslint-disable). Threshold MUST be finite + positive (fail-closed).
+  const umbralNum =
+    typeof umbral === "number" && Number.isFinite(umbral) && umbral > 0 ? umbral : null;
+  const intensidadNum =
+    typeof signal.intensidad === "number" && Number.isFinite(signal.intensidad)
+      ? signal.intensidad
+      : null;
 
-  if (hasValidUmbral && hasValidIntensidad) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return { prioridad_cola: signal.intensidad! >= umbral! ? "ALTA" : "NORMAL" };
+  if (umbralNum !== null && intensidadNum !== null) {
+    return { prioridad_cola: intensidadNum >= umbralNum ? "ALTA" : "NORMAL" };
   }
 
   // Fallthrough: no usable signal ⇒ conservative default (fail-closed).
