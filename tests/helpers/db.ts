@@ -23,7 +23,7 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
     truncate
       cohort."Evento_Priorizado_NBA", cohort."Pertenencia_Cohort_Snapshot",
       cohort."Subgrupo", cohort."Cohort",
-      gov."ROI_Operador",
+      gov."ROI_Operador", gov."min_calculo",
       tenant."Evento_Uso", tenant."Conversa_Episodio", tenant."KPI",
       tenant."Orden", tenant."Restaurante",
       gov."Usuario",

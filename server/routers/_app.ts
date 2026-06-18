@@ -3,6 +3,7 @@ import { handoffRouter } from "./handoff.js";
 import { cohortsRouter } from "./cohorts.js";
 import { moneyRouter } from "./money.js";
 import { sandboxRouter } from "./sandbox.js";
+import { conversaRouter } from "./conversa.js";
 
 // Root tRPC router.
 export const appRouter = router({
@@ -11,6 +12,7 @@ export const appRouter = router({
   money: moneyRouter,
   handoff: handoffRouter,
   sandbox: sandboxRouter,
+  conversa: conversaRouter,
 });
 
 export type AppRouter = typeof appRouter;
