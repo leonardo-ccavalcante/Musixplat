@@ -24,7 +24,7 @@ create table tenant."Restaurant" (
 );
 create index restaurant_tenant_idx on tenant."Restaurant"(tenant_id);
 
--- Order: ALL orders/payments. Source of R$ + silenciosos. net_value is GENERATED arithmetic
+-- Order: ALL orders/payments. Source of R$ + silent ones. net_value is GENERATED arithmetic
 -- (its named producer is the column itself; 04 §14 "Aritmética de fila"), not a seeded result.
 create table tenant."Order" (
   order_id       bigint generated always as identity primary key,

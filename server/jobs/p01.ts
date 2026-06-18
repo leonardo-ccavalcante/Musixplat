@@ -14,6 +14,12 @@ export async function runP01(opts: P01Options): Promise<void> {
   await withTx(async (c) => {
     await c.query("select cohort.fn_assign_cohorts($1, $2)", [week, refDate]); // F-1.1
     await c.query("select cohort.fn_annotate_scope($1)", [week]); // F-5.5
+    // Refresh planner statistics before the heavy producers. The brutos are bulk-loaded (~107k orders)
+    // and fn_assign just bulk-inserted ~5000 memberships — all with zero stats on a fresh db. Without
+    // this, the cold optimizer nested-loops the Order table per membership in fn_rank_cohort (measured
+    // 287s vs 0.2s). Cheap (~hundreds of ms) and runs once per weekly batch. This is what makes the
+    // batch resilient to a fresh load (CI, the demo generator, a first deploy) — not a config knob.
+    await c.query("analyze");
     await c.query("select cohort.fn_rank_cohort($1)", [week]); // F-1.2
     await c.query("select cohort.fn_gate_n_min($1)", [week]); // F-1.3
     await c.query("select cohort.fn_gate_k_anon($1)", [week]); // F-1.3b (per-week membership k_anon_ok)
