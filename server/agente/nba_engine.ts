@@ -26,21 +26,41 @@ type Q = <T extends pg.QueryResultRow = pg.QueryResultRow>(sql: string, params: 
 const runner = (client?: pg.PoolClient): Q =>
   client ? async (sql, params) => (await client.query(sql, params as unknown[])).rows : (sql, params) => query(sql, params);
 
-// 2nd/3rd min() arms; empty pre-producer (Eval_Cell/Policy_Tier are RESULT/bruto) ⇒ null ⇒ LOW.
+// 2nd/3rd min() arms. FAIL-CLOSED (§3.7) + anti-mix (§3.5): grant a non-LOW arm ONLY from an
+// UNAMBIGUOUS resolution — exactly one distinct candidate value. Eval_Cell is keyed
+// (cohort_id, intent, version) and Policy_Tier carries a semver policy_version, so a cohort has MANY
+// candidate rows; with no production "current (policy|eval) version" source yet, we cannot pin the
+// single governing row, so any disagreement (0 or >1 distinct values, e.g. across intents/versions)
+// ⇒ null ⇒ LOW. This mirrors resolvePolicy (05A:A.2.3, none/stale/ambiguous ⇒ not sealed). It can
+// only LOWER autonomy, never raise it wrongly — the old `order by ... desc limit 1` took the MAX
+// (most-permissive) and sorted policy_version lexicographically ('v9'>'v10'), both anti-fail-closed.
+// TODO(02:gov): once the governing (intent, version) for an NBA is specified, resolve the single
+//   sealed arm here (reuse resolvePolicy); a non-LOW arm must come from exactly one current-version row.
 async function loadArms(q: Q, cohortId: string): Promise<{ releasedEvals: Level | null; tierCap: Level | null }> {
   const tier = await q<{ tier_cap: Level }>(
-    `select pt.tier_cap from cohort."Cohort" c join gov."Policy_Tier" pt on pt.tier_id = c.tier_base::text
-     where c.cohort_id=$1 order by pt.policy_version desc limit 1`,
+    `select distinct pt.tier_cap from cohort."Cohort" c
+       join gov."Policy_Tier" pt on pt.tier_id = c.tier_base::text
+     where c.cohort_id=$1`,
     [cohortId],
   );
   const ev = await q<{ released_evals: Level }>(
-    `select released_evals from gov."Eval_Cell" where cohort_id=$1 and released_evals is not null
-     order by released_evals desc limit 1`,
+    `select distinct released_evals from gov."Eval_Cell" where cohort_id=$1 and released_evals is not null`,
     [cohortId],
   );
-  return { releasedEvals: ev[0]?.released_evals ?? null, tierCap: tier[0]?.tier_cap ?? null };
+  // Unambiguous (exactly one distinct value) ⇒ use it; otherwise fail-closed to null ⇒ LOW.
+  return {
+    releasedEvals: ev.length === 1 ? ev[0]!.released_evals : null,
+    tierCap: tier.length === 1 ? tier[0]!.tier_cap : null,
+  };
 }
 
+// PRECONDITION (§3.4 RLS single-pool): this is an INTERNAL server-side function with NO tenant guard of
+// its own — it reads fn_nba_test_all + Cohort/Policy/Eval and writes NBA_Proposal trusting `input`. The
+// CALLER (the P01 Evento_Priorizado_NBA trigger / future tRPC mutation) MUST have already resolved
+// tenant_id server-side and verified restaurantId+cohortId belong to it (as nba.ts does via ctx.tenantId).
+// It has no production caller yet; the typed door nba.test/testAll IS tenant-gated.
+// TODO(02:1A-wiring): when wiring the trigger, thread a server-resolved tenantId into ProposeInput and
+//   scope the reads (and assert the cohort↔tenant link), so the trust is enforced, not just documented.
 export async function proposeNba(
   input: ProposeInput,
   reasoning: NbaReasoning = deterministicReasoning,
@@ -81,7 +101,11 @@ export async function proposeNba(
         gap: sel.lever.gap,
       })
     : null;
-  const provenance = JSON.stringify({ root_cause: "[C]", before_after_expected: "[C]" });
+  // root_cause is templated interpretation ⇒ [C]. before_after_expected currently carries ONLY the
+  // measured diagnosis snapshot (dimension/measured/standard/gap straight from fn_nba_test) ⇒ [V];
+  // tagging it [C] would misreport measured data as projection (§3.10). The projected "after" is a
+  // later piece — when added, that portion ascends to [C].
+  const provenance = JSON.stringify({ root_cause: "[C]", before_after_expected: "[V]" });
 
   const ins = await q<{ nba_id: string }>(
     `insert into gov."NBA_Proposal"(action_type, cohort_id, root_cause, nba_request,

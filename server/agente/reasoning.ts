@@ -28,21 +28,23 @@ export interface NbaReasoning {
 
 // A signal is a "problem" only when it is out of range (below/above per its catalog sense) with a real
 // number — never on 'ok' or 'no_data' (§14 fail-closed). Severity = relative gap |gap|/|standard| so
-// dimensions on different scales (connection 0-1 vs price 0-100) compare fairly. Tie ⇒ action_code asc.
+// dimensions on different scales (connection 0-1 vs price 0-100) compare fairly. A zero standard ⇒ any
+// breach is maximal (Infinity) so it ranks WORST — it is NEVER silently dropped, else the AGENTE would
+// contradict an SQL verdict that DID attribute a cause (§8). Comparator is NaN-safe: equal severities
+// (including Infinity===Infinity) fall through to the action_code tiebreak ⇒ total, deterministic order.
+const severity = (v: NbaVerdict): number =>
+  v.standard === 0 ? Infinity : Math.abs(v.gap!) / Math.abs(v.standard!);
+
 export const deterministicReasoning: NbaReasoning = {
   select(verdicts: NbaVerdict[]): NbaSelection {
     const problems = verdicts
       .filter(
-        (v) =>
-          (v.verdict === "below" || v.verdict === "above") &&
-          v.standard != null &&
-          v.standard !== 0 &&
-          v.gap != null,
+        (v) => (v.verdict === "below" || v.verdict === "above") && v.standard != null && v.gap != null,
       )
       .sort((a, b) => {
-        const sa = Math.abs(a.gap!) / Math.abs(a.standard!);
-        const sb = Math.abs(b.gap!) / Math.abs(b.standard!);
-        return sb - sa || a.action_code.localeCompare(b.action_code);
+        const sa = severity(a);
+        const sb = severity(b);
+        return sa === sb ? a.action_code.localeCompare(b.action_code) : sb - sa;
       });
 
     const ranked = problems.slice(0, 3).map((v) => v.action_code); // HARD CAP 3 (cost discipline)
