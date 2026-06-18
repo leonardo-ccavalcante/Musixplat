@@ -4,9 +4,9 @@ import { sealVersions } from "../version_seal.js";
 
 const ok = {
   actedPolicyVersion: "policy-v3",
-  vigentePolicyVersion: "policy-v3",
+  currentPolicyVersion: "policy-v3",
   actedTonoVersion: "tono-v2",
-  vigenteTonoVersion: "tono-v2",
+  currentTonoVersion: "tono-v2",
 };
 
 describe("sealVersions — 05A:A.6.1 (anti-mezcla version seal, fail-closed)", () => {
@@ -20,14 +20,14 @@ describe("sealVersions — 05A:A.6.1 (anti-mezcla version seal, fail-closed)", (
   });
 
   it("policy drifted ⇒ sealed:false, stale:true, drifted=['policy_version']", () => {
-    const r = sealVersions({ ...ok, vigentePolicyVersion: "policy-v4" });
+    const r = sealVersions({ ...ok, currentPolicyVersion: "policy-v4" });
     expect(r.sealed).toBe(false);
     expect(r.stale).toBe(true);
     expect(r.drifted).toEqual(["policy_version"]);
   });
 
   it("tono drifted ⇒ sealed:false, stale:true, drifted=['tono_version']", () => {
-    const r = sealVersions({ ...ok, vigenteTonoVersion: "tono-v3" });
+    const r = sealVersions({ ...ok, currentTonoVersion: "tono-v3" });
     expect(r.sealed).toBe(false);
     expect(r.stale).toBe(true);
     expect(r.drifted).toEqual(["tono_version"]);
@@ -36,9 +36,9 @@ describe("sealVersions — 05A:A.6.1 (anti-mezcla version seal, fail-closed)", (
   it("both drifted ⇒ drifted contains both keys", () => {
     const r = sealVersions({
       actedPolicyVersion: "policy-v1",
-      vigentePolicyVersion: "policy-v2",
+      currentPolicyVersion: "policy-v2",
       actedTonoVersion: "tono-v1",
-      vigenteTonoVersion: "tono-v2",
+      currentTonoVersion: "tono-v2",
     });
     expect(r.sealed).toBe(false);
     expect(r.stale).toBe(true);
@@ -66,7 +66,7 @@ describe("sealVersions — 05A:A.6.1 (anti-mezcla version seal, fail-closed)", (
   });
 
   it("versions are null in the output when sealed:false (no attributable version on drift)", () => {
-    const r = sealVersions({ ...ok, vigentePolicyVersion: "policy-v99" });
+    const r = sealVersions({ ...ok, currentPolicyVersion: "policy-v99" });
     expect(r.policy_version).toBeNull();
     expect(r.tono_version).toBeNull();
   });

@@ -1,14 +1,14 @@
 // Piece 05A:A.6.1 — Seal policy_version/tono_version + no-stale check. Pure, fail-closed,
 // anti-mezcla (CLAUDE.md §3.5). At episode close, verifies the versions the episode ACTED
-// under still match the current vigente versions. Drift on either ⇒ sealed:false (the
+// under still match the current versions. Drift on either ⇒ sealed:false (the
 // episode's numbers/decisions can't be honestly attributed to the current version).
 // Deterministic, no LLM, no side-effects. (04 §7)
 
 export interface VersionSealInput {
   actedPolicyVersion: string;
-  vigentePolicyVersion: string;
+  currentPolicyVersion: string;
   actedTonoVersion: string;
-  vigenteTonoVersion: string;
+  currentTonoVersion: string;
 }
 
 export interface VersionSeal {
@@ -31,8 +31,8 @@ export function sealVersions(i: VersionSealInput | null | undefined): VersionSea
 
   const drifted: string[] = [];
 
-  if (i.actedPolicyVersion !== i.vigentePolicyVersion) drifted.push("policy_version");
-  if (i.actedTonoVersion !== i.vigenteTonoVersion) drifted.push("tono_version");
+  if (i.actedPolicyVersion !== i.currentPolicyVersion) drifted.push("policy_version");
+  if (i.actedTonoVersion !== i.currentTonoVersion) drifted.push("tono_version");
 
   if (drifted.length > 0) {
     // Versions null on drift: no honest attribution possible (anti-mezcla invariant).

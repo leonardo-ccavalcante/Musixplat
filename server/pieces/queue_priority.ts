@@ -1,5 +1,5 @@
 // Piece 05A:A.4.7 — Compute prioridad_cola from a demand-spike signal.
-// CRITICAL: NEVER touches autonomy tier / level_efectivo — priority and tier are isolated concerns.
+// CRITICAL: NEVER touches autonomy tier / effective_level — priority and tier are isolated concerns.
 // Fail-closed: missing or garbage input ⇒ 'NORMAL' (non-disruptive conservative default, §3.7).
 // Threshold (`umbral`) is always supplied by the caller, which reads it by-name from
 // Config_Knobs; this function embeds no literal threshold (CLAUDE.md §3.8).

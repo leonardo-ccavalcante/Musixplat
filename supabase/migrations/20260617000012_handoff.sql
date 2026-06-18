@@ -1,13 +1,13 @@
--- F-5.5 + F-5.2 (04 §3/§14). scope_owner_ref annotation + the único mutante handoff.
+-- F-5.5 + F-5.2 (04 §3/§14). scope_owner_ref annotation + the single mutating handoff.
 
--- F-5.5 — annotate scope_owner_ref {dueno_id, level} from the pool's operator. Deterministic;
--- dueno validated against gov.User (never an arbitrary client value).
+-- F-5.5 — annotate scope_owner_ref {owner_id, level} from the pool's operator. Deterministic;
+-- owner validated against gov.User (never an arbitrary client value).
 create or replace function cohort.fn_annotate_scope(p_week date)
 returns void language plpgsql as $$
 declare v_version text := catalog.knob_text('cohort_rule_version_current');
 begin
   update cohort."Cohort_Membership_Snapshot" p
-    set scope_owner_ref = jsonb_build_object('dueno_id', o.user_id, 'level', o.org_level)
+    set scope_owner_ref = jsonb_build_object('owner_id', o.user_id, 'level', o.org_level)
   from tenant."Restaurant" r
   cross join lateral (
     select user_id, org_level from gov."User" where tenant_id = r.tenant_id

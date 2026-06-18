@@ -1,7 +1,7 @@
 -- pgTAP — Chunk 4 topo-vs-base bands (F-1.6) + weighted UPSIDE (F-1.7). 50 restaurants in one cell
 -- with DISTINCT order volumes (1..50) so composite percentiles spread 0..100 and the P90+/P10- bands
 -- reach n ≥ k_anon. connection/quality/cancel held equal ⇒ composite ordering = order volume.
--- begin/rollback; brutos truncated for isolation.
+-- begin/rollback; raw inputs truncated for isolation.
 begin;
 select plan(6);
 

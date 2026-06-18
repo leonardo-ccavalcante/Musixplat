@@ -30,7 +30,7 @@ async function inTx(fn: (c: pg.PoolClient) => Promise<void>): Promise<void> {
 }
 
 describe("F-1.1 assignment + F-1.2 ranking", () => {
-  it("links every active restaurant, stamps version, computes tenure/percentile from brutos", async () => {
+  it("links every active restaurant, stamps version, computes tenure/percentile from raw", async () => {
     await resetDb(pool);
     // pre-run: results NULL (anti-fake within the flow)
     expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(0);
@@ -38,7 +38,7 @@ describe("F-1.1 assignment + F-1.2 ranking", () => {
 
     expect(await count(pool, 'tenant."Restaurant" where tenure_months is null')).toBe(0);
     expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(5000);
-    // every membership stamped with the vigente version
+    // every membership stamped with the current version
     expect(
       await count(pool, `cohort."Cohort_Membership_Snapshot" where cohort_rule_version <> 'v1'`),
     ).toBe(0);
@@ -147,7 +147,7 @@ describe("F-2.2 diff + F-4.3 anti-mezcla", () => {
     await runP01({ week: W2, refDate: REF, prevSemana: W1 });
     const events = await count(pool, `cohort."Prioritized_NBA_Event" where week='${W2}'`);
     expect(events).toBeGreaterThan(0);
-    // every event carries a valid delta_status and the vigente version
+    // every event carries a valid delta_status and the current version
     expect(
       await count(
         pool,

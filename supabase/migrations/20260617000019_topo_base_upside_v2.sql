@@ -168,7 +168,7 @@ declare
   w_p numeric := catalog.knob_required_num('weight_upside_price');
   v_k numeric := catalog.knob_required_num('k_anon_threshold');
 begin
-  -- fail-closed: the ratified ponderação must fully allocate the lift (Σweights = 1.0).
+  -- fail-closed: the ratified weighting must fully allocate the lift (Σweights = 1.0).
   if abs(w_c + w_q + w_x + w_p - 1.0) > 0.0001 then
     raise exception 'upside weights must sum to 1.0 (got %)', w_c + w_q + w_x + w_p;
   end if;

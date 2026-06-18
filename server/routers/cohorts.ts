@@ -7,13 +7,13 @@ import { assertSingleVersion } from "../_core/antimezcla.js";
 // reads honor k-anon (k_suppression_applied) and anti-mezcla (single cohort_rule_version).
 // NULL pre-run passes through as NULL — never a fabricated number (§14).
 
-async function vigente(): Promise<string> {
+async function current(): Promise<string> {
   const r = await query<{ value: string }>(
     `select value from catalog."Config_Knobs" where key='cohort_rule_version_current'`,
   );
   return r[0]?.value ?? "v1";
 }
-async function latestSemana(v: string): Promise<string | null> {
+async function latestWeek(v: string): Promise<string | null> {
   const r = await query<{ s: string }>(
     `select max(week)::text s from cohort."Cohort_Membership_Snapshot" where cohort_rule_version=$1`,
     [v],
@@ -33,7 +33,7 @@ type CohortRow = {
   opportunity_value: number | null;
 };
 
-// Semáforo status (F-2.1): redundant text/icon carrier, never color-only.
+// Semaphore status (F-2.1): redundant text/icon carrier, never color-only.
 function status(c: CohortRow): "pending" | "suppressed" | "collapsed" | "ok" {
   if (c.k_suppression_applied) return "suppressed";
   if (c.n_accounts === null) return "pending";
@@ -42,9 +42,9 @@ function status(c: CohortRow): "pending" | "suppressed" | "collapsed" | "ok" {
 }
 
 export const cohortsRouter = router({
-  // F-2.1 / F-4.1 — cohort cells + semáforo status.
+  // F-2.1 / F-4.1 — cohort cells + semaphore status.
   list: tenantProcedure.query(async ({ ctx }) => {
-    const v = await vigente();
+    const v = await current();
     const rows = await query<CohortRow>(
       `select cohort_id, tenure_bucket, tier_base, n_accounts, collapsed, k_suppression_applied,
               cohort_rule_version, descriptive_baseline, opportunity_value
@@ -57,7 +57,7 @@ export const cohortsRouter = router({
 
   // F-1.6 — top-vs-base baseline comparison for one cohort (suppressed ⇒ no data).
   compare: tenantProcedure.input(z.object({ cohort_id: z.string() })).query(async ({ ctx, input }) => {
-    const v = await vigente();
+    const v = await current();
     const rows = await query<CohortRow>(
       `select cohort_id, k_suppression_applied, descriptive_baseline, cohort_rule_version
        from cohort."Cohort" where cohort_id=$1 and cohort_rule_version=$2`,
@@ -71,7 +71,7 @@ export const cohortsRouter = router({
 
   // F-2.3 / F-2.7 — prioritized deltas (at_risk first), gap exposed. Tenant-scoped via join.
   deltas: tenantProcedure.query(async ({ ctx }) => {
-    const v = await vigente();
+    const v = await current();
     const rows = await query(
       `select e.evento_id, e.restaurant_id, e.cohort_id, e.delta_status,
               e.percentile_in_cohort, e.gap_to_top
@@ -86,8 +86,8 @@ export const cohortsRouter = router({
 
   // F-5.1 — drill into one cohort's accounts, ordered by gap. Tenant-scoped.
   drill: tenantProcedure.input(z.object({ cohort_id: z.string() })).query(async ({ ctx, input }) => {
-    const v = await vigente();
-    const s = await latestSemana(v);
+    const v = await current();
+    const s = await latestWeek(v);
     if (!s) return [];
     return query(
       `select p.restaurant_id, p.percentile_in_cohort, p.gap_to_top, p.subgroup_id,
@@ -110,8 +110,8 @@ export const cohortsRouter = router({
 
   // F-3.3 / F-3.4 — raw ticket distribution intent × cohort, tenant-scoped, k-anon respected.
   intentCounts: tenantProcedure.query(async ({ ctx }) => {
-    const v = await vigente();
-    const s = await latestSemana(v);
+    const v = await current();
+    const s = await latestWeek(v);
     if (!s) return [];
     return query<{ cohort_id: string; intent: string; n: number }>(
       `select p.cohort_id, ce.intent, count(*)::int n

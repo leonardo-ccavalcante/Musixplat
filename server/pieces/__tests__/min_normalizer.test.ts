@@ -1,17 +1,17 @@
 import { describe, it, expect } from "vitest";
 import { normalizeArms } from "../min_normalizer.js";
-import type { Nivel } from "../min_normalizer.js";
+import type { Level } from "../min_normalizer.js";
 
 // 05A:A.4.1 — normalize the 3 min() arms; missing/invalid arm ⇒ LOW (most conservative). (04 §7)
 
 describe("normalizeArms — 05A:A.4.1 (fail-closed, deterministic)", () => {
   // All valid — pass through unchanged
   it.each([
-    ["all LOW", { pedidoNBA: "LOW", liberadoEvals: "LOW", tetoTier: "LOW" }],
-    ["all MEDIUM", { pedidoNBA: "MEDIUM", liberadoEvals: "MEDIUM", tetoTier: "MEDIUM" }],
-    ["all HIGH", { pedidoNBA: "HIGH", liberadoEvals: "HIGH", tetoTier: "HIGH" }],
-    ["mixed valid", { pedidoNBA: "HIGH", liberadoEvals: "MEDIUM", tetoTier: "LOW" }],
-  ] as [string, { pedidoNBA: Nivel; liberadoEvals: Nivel; tetoTier: Nivel }][])(
+    ["all LOW", { nbaRequest: "LOW", releasedEvals: "LOW", tierCap: "LOW" }],
+    ["all MEDIUM", { nbaRequest: "MEDIUM", releasedEvals: "MEDIUM", tierCap: "MEDIUM" }],
+    ["all HIGH", { nbaRequest: "HIGH", releasedEvals: "HIGH", tierCap: "HIGH" }],
+    ["mixed valid", { nbaRequest: "HIGH", releasedEvals: "MEDIUM", tierCap: "LOW" }],
+  ] as [string, { nbaRequest: Level; releasedEvals: Level; tierCap: Level }][])(
     "all valid pass through unchanged: %s",
     (_label, arms) => {
       expect(normalizeArms(arms)).toEqual(arms);
@@ -19,65 +19,65 @@ describe("normalizeArms — 05A:A.4.1 (fail-closed, deterministic)", () => {
   );
 
   // Single null arm ⇒ that arm becomes LOW, others pass through
-  it("null pedidoNBA ⇒ LOW, others unchanged", () => {
-    const r = normalizeArms({ pedidoNBA: null, liberadoEvals: "HIGH", tetoTier: "MEDIUM" });
-    expect(r).toEqual({ pedidoNBA: "LOW", liberadoEvals: "HIGH", tetoTier: "MEDIUM" });
+  it("null nbaRequest ⇒ LOW, others unchanged", () => {
+    const r = normalizeArms({ nbaRequest: null, releasedEvals: "HIGH", tierCap: "MEDIUM" });
+    expect(r).toEqual({ nbaRequest: "LOW", releasedEvals: "HIGH", tierCap: "MEDIUM" });
   });
 
-  it("null liberadoEvals ⇒ LOW, others unchanged", () => {
-    const r = normalizeArms({ pedidoNBA: "HIGH", liberadoEvals: null, tetoTier: "HIGH" });
-    expect(r).toEqual({ pedidoNBA: "HIGH", liberadoEvals: "LOW", tetoTier: "HIGH" });
+  it("null releasedEvals ⇒ LOW, others unchanged", () => {
+    const r = normalizeArms({ nbaRequest: "HIGH", releasedEvals: null, tierCap: "HIGH" });
+    expect(r).toEqual({ nbaRequest: "HIGH", releasedEvals: "LOW", tierCap: "HIGH" });
   });
 
-  it("null tetoTier ⇒ LOW, others unchanged", () => {
-    const r = normalizeArms({ pedidoNBA: "MEDIUM", liberadoEvals: "HIGH", tetoTier: null });
-    expect(r).toEqual({ pedidoNBA: "MEDIUM", liberadoEvals: "HIGH", tetoTier: "LOW" });
+  it("null tierCap ⇒ LOW, others unchanged", () => {
+    const r = normalizeArms({ nbaRequest: "MEDIUM", releasedEvals: "HIGH", tierCap: null });
+    expect(r).toEqual({ nbaRequest: "MEDIUM", releasedEvals: "HIGH", tierCap: "LOW" });
   });
 
   // undefined arms
-  it("undefined pedidoNBA ⇒ LOW", () => {
-    const r = normalizeArms({ pedidoNBA: undefined, liberadoEvals: "HIGH", tetoTier: "MEDIUM" });
-    expect(r).toEqual({ pedidoNBA: "LOW", liberadoEvals: "HIGH", tetoTier: "MEDIUM" });
+  it("undefined nbaRequest ⇒ LOW", () => {
+    const r = normalizeArms({ nbaRequest: undefined, releasedEvals: "HIGH", tierCap: "MEDIUM" });
+    expect(r).toEqual({ nbaRequest: "LOW", releasedEvals: "HIGH", tierCap: "MEDIUM" });
   });
 
   // Invalid string ⇒ LOW
   it("invalid string 'foo' ⇒ LOW for that arm", () => {
-    const r = normalizeArms({ pedidoNBA: "foo", liberadoEvals: "HIGH", tetoTier: "MEDIUM" });
-    expect(r).toEqual({ pedidoNBA: "LOW", liberadoEvals: "HIGH", tetoTier: "MEDIUM" });
+    const r = normalizeArms({ nbaRequest: "foo", releasedEvals: "HIGH", tierCap: "MEDIUM" });
+    expect(r).toEqual({ nbaRequest: "LOW", releasedEvals: "HIGH", tierCap: "MEDIUM" });
   });
 
-  it("invalid string 'baja' (lowercase) ⇒ LOW (enum is strict)", () => {
-    const r = normalizeArms({ pedidoNBA: "baja", liberadoEvals: "MEDIUM", tetoTier: "HIGH" });
-    expect(r).toEqual({ pedidoNBA: "LOW", liberadoEvals: "MEDIUM", tetoTier: "HIGH" });
+  it("invalid string 'low' (lowercase) ⇒ LOW (enum is strict)", () => {
+    const r = normalizeArms({ nbaRequest: "low", releasedEvals: "MEDIUM", tierCap: "HIGH" });
+    expect(r).toEqual({ nbaRequest: "LOW", releasedEvals: "MEDIUM", tierCap: "HIGH" });
   });
 
   it("numeric arm ⇒ LOW", () => {
-    const r = normalizeArms({ pedidoNBA: 1, liberadoEvals: "HIGH", tetoTier: "HIGH" });
-    expect(r).toEqual({ pedidoNBA: "LOW", liberadoEvals: "HIGH", tetoTier: "HIGH" });
+    const r = normalizeArms({ nbaRequest: 1, releasedEvals: "HIGH", tierCap: "HIGH" });
+    expect(r).toEqual({ nbaRequest: "LOW", releasedEvals: "HIGH", tierCap: "HIGH" });
   });
 
   // All null/undefined/invalid ⇒ all LOW
   it("all null ⇒ all LOW", () => {
-    expect(normalizeArms({ pedidoNBA: null, liberadoEvals: null, tetoTier: null })).toEqual({
-      pedidoNBA: "LOW",
-      liberadoEvals: "LOW",
-      tetoTier: "LOW",
+    expect(normalizeArms({ nbaRequest: null, releasedEvals: null, tierCap: null })).toEqual({
+      nbaRequest: "LOW",
+      releasedEvals: "LOW",
+      tierCap: "LOW",
     });
   });
 
   it("all undefined ⇒ all LOW", () => {
-    expect(normalizeArms({ pedidoNBA: undefined, liberadoEvals: undefined, tetoTier: undefined })).toEqual({
-      pedidoNBA: "LOW",
-      liberadoEvals: "LOW",
-      tetoTier: "LOW",
+    expect(normalizeArms({ nbaRequest: undefined, releasedEvals: undefined, tierCap: undefined })).toEqual({
+      nbaRequest: "LOW",
+      releasedEvals: "LOW",
+      tierCap: "LOW",
     });
   });
 
   it("all invalid strings ⇒ all LOW", () => {
-    expect(normalizeArms({ pedidoNBA: "x", liberadoEvals: "y", tetoTier: "z" })).toEqual({
-      pedidoNBA: "LOW",
-      liberadoEvals: "LOW",
-      tetoTier: "LOW",
+    expect(normalizeArms({ nbaRequest: "x", releasedEvals: "y", tierCap: "z" })).toEqual({
+      nbaRequest: "LOW",
+      releasedEvals: "LOW",
+      tierCap: "LOW",
     });
   });
 
@@ -85,31 +85,31 @@ describe("normalizeArms — 05A:A.4.1 (fail-closed, deterministic)", () => {
   it("null input object ⇒ all LOW (fail-closed, degrade not throw)", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(normalizeArms(null as any)).toEqual({
-      pedidoNBA: "LOW",
-      liberadoEvals: "LOW",
-      tetoTier: "LOW",
+      nbaRequest: "LOW",
+      releasedEvals: "LOW",
+      tierCap: "LOW",
     });
   });
 
   it("undefined input object ⇒ all LOW (fail-closed, degrade not throw)", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(normalizeArms(undefined as any)).toEqual({
-      pedidoNBA: "LOW",
-      liberadoEvals: "LOW",
-      tetoTier: "LOW",
+      nbaRequest: "LOW",
+      releasedEvals: "LOW",
+      tierCap: "LOW",
     });
   });
 
   // Determinism
   it("deterministic: same input twice ⇒ identical output", () => {
-    const input = { pedidoNBA: "HIGH" as Nivel, liberadoEvals: null, tetoTier: "foo" };
+    const input = { nbaRequest: "HIGH" as Level, releasedEvals: null, tierCap: "foo" };
     expect(normalizeArms(input)).toEqual(normalizeArms(input));
   });
 
   // Output is always a fresh object (no mutation)
   it("does not mutate input", () => {
-    const input = { pedidoNBA: null, liberadoEvals: "HIGH" as Nivel, tetoTier: "MEDIUM" as Nivel };
+    const input = { nbaRequest: null, releasedEvals: "HIGH" as Level, tierCap: "MEDIUM" as Level };
     normalizeArms(input);
-    expect(input.pedidoNBA).toBeNull();
+    expect(input.nbaRequest).toBeNull();
   });
 });

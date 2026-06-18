@@ -1,66 +1,66 @@
 import { z } from "zod";
 
-// 05B Diagnóstico — shared tRPC io + domain types (Zod v3, CLAUDE.md §1). Domain vocab native.
+// 05B Diagnosis — shared tRPC io + domain types (Zod v3, CLAUDE.md §1). Domain vocab native.
 // Piece-specific types live inside each server/diagnostico/* module; this file holds only the
 // cross-cutting enums + the orchestrator input/row shapes that the router and many pieces share.
 
-// Criticidad: ordered (grave > media > baja). grave ⇒ "ahora" (BR-B11). String-backed, but the
-// ORDER is encoded in CRITICIDAD_RANK so a number never depends on alphabetical sort.
-export const criticidad = z.enum(["grave", "media", "baja"]);
-export type Criticidad = z.infer<typeof criticidad>;
-export const CRITICIDAD_RANK: Record<Criticidad, number> = { grave: 3, media: 2, baja: 1 };
+// Criticality: ordered (critical > moderate > low). critical ⇒ "now" (BR-B11). String-backed, but the
+// ORDER is encoded in CRITICALITY_RANK so a number never depends on alphabetical sort.
+export const criticality = z.enum(["critical", "moderate", "low"]);
+export type Criticality = z.infer<typeof criticality>;
+export const CRITICALITY_RANK: Record<Criticality, number> = { critical: 3, moderate: 2, low: 1 };
 
-// Ruta: the 5 destinations (BR-B6.1). Closed set.
-export const ruta = z.enum([
-  "actuar_rapido",
-  "entregar_al_team",
-  "prototipo_testar",
-  "corregir_interno",
-  "monitorear_con_gatilho",
+// Route: the 5 destinations (BR-B6.1). Closed set.
+export const route = z.enum([
+  "act_fast",
+  "hand_to_team",
+  "prototype_test",
+  "fix_internal",
+  "monitor_with_trigger",
 ]);
-export type Ruta = z.infer<typeof ruta>;
+export type Route = z.infer<typeof route>;
 
-// Comunicación proactiva (BR-B13): the configured policy, and the resolved decision.
-export const comunicacionPolitica = z.enum(["avisar", "corregir_callado"]);
-export type ComunicacionPolitica = z.infer<typeof comunicacionPolitica>;
-export type ComunicacionDecision = "avisar" | "no_comunicar";
+// Proactive communication (BR-B13): the configured policy, and the resolved decision.
+export const communicationPolicy = z.enum(["notify", "fix_silently"]);
+export type CommunicationPolicy = z.infer<typeof communicationPolicy>;
+export type CommunicationDecision = "notify" | "do_not_notify";
 
-// reportProblema input (US-B1.1.1 gate + B.1.3 dedup). NO tenant_id — resolved server-side from
+// reportProblem input (US-B1.1.1 gate + B.1.3 dedup). NO tenant_id — resolved server-side from
 // the session (anti-spoofing, §7). restaurant_id is DATA within the pool (required, not the
-// frontier). criticidad is an optional trigger hint.
-export const reportProblemaInput = z.object({
+// frontier). criticality is an optional trigger hint.
+export const reportProblemInput = z.object({
   restaurantId: z.string().min(1),
   conversationId: z.string().optional(),
-  criticidad: criticidad.optional(),
+  criticality: criticality.optional(),
 });
-export type ReportProblemaInput = z.infer<typeof reportProblemaInput>;
+export type ReportProblemInput = z.infer<typeof reportProblemInput>;
 
 // Diagnosed_Problem row shape (snake_case = DB). RESULT columns are null pre-producer (§14).
-export interface ProblemaRow {
-  problema_id: string;
+export interface ProblemRow {
+  problem_id: string;
   tenant_id: string;
   restaurant_id: string;
   conversation_id: string | null;
-  criticidad: string | null;
+  criticality: string | null;
   status: string;
-  frecuencia: number;
-  tipo_area: string | null;
-  raiz_hipotese: string | null;
-  confianza: string | null;
-  rs_perdido: string | null;
+  frequency: number;
+  area_type: string | null;
+  hypothesis_root: string | null;
+  confidence: string | null;
+  revenue_lost: string | null;
   churn_risk: string | null;
-  custo_resolver: string | null;
-  value_ganho: string | null;
-  ruta_sugerida: string | null;
-  silenciosos_status: string | null;
-  primera_vez_ts: string;
-  ultima_vez_ts: string | null;
+  cost_to_resolve: string | null;
+  value_gained: string | null;
+  suggested_route: string | null;
+  silent_status: string | null;
+  first_seen_ts: string;
+  last_seen_ts: string | null;
 }
 
-export const reportProblemaResult = z.object({
-  problema_id: z.string(),
+export const reportProblemResult = z.object({
+  problem_id: z.string(),
   status: z.string(),
-  frecuencia: z.number(),
+  frequency: z.number(),
   created: z.boolean(),
 });
-export type ReportProblemaResult = z.infer<typeof reportProblemaResult>;
+export type ReportProblemResult = z.infer<typeof reportProblemResult>;

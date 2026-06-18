@@ -1,48 +1,48 @@
 import { describe, it, expect } from "vitest";
 import {
   lazyFetchPath,
-  resolveFonte,
+  resolveSource,
   assertSingleFetch,
   type IssueTree,
 } from "./issue_tree.js";
 
-// Piece 05B:US-B2.3.1 — fetch perezoso (BR-B2): only the ACTIVE path's single source is
-// consulted; never barre todas las fuentes. Deterministic, no LLM, fail-closed. (04 §14)
+// Piece 05B:US-B2.3.1 — lazy fetch (BR-B2): only the ACTIVE path's single source is
+// consulted; never sweeps all sources. Deterministic, no LLM, fail-closed. (04 §14)
 
 function makeTree(): IssueTree {
   return {
     paths: [
-      { path_id: 1, hipotese: "reembolso financiero pendiente", probabilidad: null, fonte_consultada: null, resultado: "abierto" },
-      { path_id: 2, hipotese: "baja adopción del producto", probabilidad: null, fonte_consultada: null, resultado: "abierto" },
-      { path_id: 3, hipotese: "queja genérica del usuario", probabilidad: null, fonte_consultada: null, resultado: "abierto" },
+      { path_id: 1, hypothesis: "reembolso financiero pendiente", probability: null, source_consulted: null, result: "open" },
+      { path_id: 2, hypothesis: "baja adopción del producto", probability: null, source_consulted: null, result: "open" },
+      { path_id: 3, hypothesis: "queja genérica del usuario", probability: null, source_consulted: null, result: "open" },
     ],
   };
 }
 
 describe("lazyFetchPath — 05B:US-B2.3.1 (deterministic, fail-closed, single-source)", () => {
-  it("sets fonte_consultada ONLY on the active path; others stay null (no barrido)", () => {
+  it("sets source_consulted ONLY on the active path; others stay null (no sweep)", () => {
     const tree = makeTree();
     const active = lazyFetchPath(tree, 2);
 
-    expect(active.fonte_consultada).toBe("tenant.Usage_Event"); // producto hypothesis
+    expect(active.source_consulted).toBe("tenant.Usage_Event"); // product hypothesis
     // every OTHER path in the original tree is untouched.
     for (const p of tree.paths) {
-      expect(p.fonte_consultada).toBeNull();
+      expect(p.source_consulted).toBeNull();
     }
   });
 
   it("does not mutate the input tree (pure)", () => {
     const tree = makeTree();
     lazyFetchPath(tree, 1);
-    expect(tree.paths.find((p) => p.path_id === 1)?.fonte_consultada).toBeNull();
+    expect(tree.paths.find((p) => p.path_id === 1)?.source_consulted).toBeNull();
   });
 
-  it("maps a finanzas hypothesis to tenant.Order", () => {
-    expect(lazyFetchPath(makeTree(), 1).fonte_consultada).toBe("tenant.Order");
+  it("maps a finance hypothesis to tenant.Order", () => {
+    expect(lazyFetchPath(makeTree(), 1).source_consulted).toBe("tenant.Order");
   });
 
   it("defaults an un-typed hypothesis to tenant.Conversation_Episode", () => {
-    expect(lazyFetchPath(makeTree(), 3).fonte_consultada).toBe("tenant.Conversation_Episode");
+    expect(lazyFetchPath(makeTree(), 3).source_consulted).toBe("tenant.Conversation_Episode");
   });
 
   it("throws on an unknown path_id (fail-closed, never fetch a fabricated path)", () => {
@@ -50,11 +50,11 @@ describe("lazyFetchPath — 05B:US-B2.3.1 (deterministic, fail-closed, single-so
   });
 });
 
-describe("resolveFonte — deterministic hypothesis→source map (BR-B2)", () => {
-  it("finanzas → Order, producto → Usage_Event, default → Conversation_Episode", () => {
-    expect(resolveFonte("pago no procesado")).toBe("tenant.Order");
-    expect(resolveFonte("feature sin uso")).toBe("tenant.Usage_Event");
-    expect(resolveFonte("algo ambiguo")).toBe("tenant.Conversation_Episode");
+describe("resolveSource — deterministic hypothesis→source map (BR-B2)", () => {
+  it("finance → Order, product → Usage_Event, default → Conversation_Episode", () => {
+    expect(resolveSource("pago no procesado")).toBe("tenant.Order");
+    expect(resolveSource("feature sin uso")).toBe("tenant.Usage_Event");
+    expect(resolveSource("algo ambiguo")).toBe("tenant.Conversation_Episode");
   });
 });
 
@@ -67,7 +67,7 @@ describe("assertSingleFetch — BR-B2 bulk-block guard", () => {
     expect(() => assertSingleFetch([1, 2])).toThrow("bulk fetch blocked");
   });
 
-  it("blocks an empty (0) request (fail-closed, never barre)", () => {
+  it("blocks an empty (0) request (fail-closed, never sweeps)", () => {
     expect(() => assertSingleFetch([])).toThrow("bulk fetch blocked");
   });
 });

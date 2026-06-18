@@ -3,7 +3,7 @@ import type pg from "pg";
 import { makePool, resetDb, count, rows } from "../helpers/db";
 
 // ── §14 ANTI-FAKE GATE (MASTER) ──────────────────────────────────────────────
-// After seed (brutos only) and BEFORE any producer runs, every RESULT column must be
+// After seed (raw only) and BEFORE any producer runs, every RESULT column must be
 // NULL/empty. A seeded result number = fatal bug (CLAUDE.md §3.1). This test resets to the
 // pristine post-seed state, then asserts. It is the FIRST gate (TDD: gate before producers).
 
@@ -11,7 +11,7 @@ let pool: pg.Pool;
 
 beforeAll(async () => {
   pool = makePool();
-  await resetDb(pool); // brutos only, no producers
+  await resetDb(pool); // raw only, no producers
 }, 300_000);
 
 afterAll(async () => {
@@ -27,9 +27,9 @@ describe("§14 anti-fake — results are NULL/empty pre-run", () => {
     expect(await count(pool, 'gov."ROI_Operator"')).toBe(0);
   });
 
-  it("05B: diagnosis tables are EMPTY pre-run (Problema/Affected/Knowledge_Case)", async () => {
-    // Problemas are CREATED at runtime by the orchestrator; Affected rows are PRODUCED by the
-    // caza-silenciosos anti-join. Neither is ever seeded (§14, BR-B4). Knowledge_Case has no
+  it("05B: diagnosis tables are EMPTY pre-run (Problem/Affected/Knowledge_Case)", async () => {
+    // Problems are CREATED at runtime by the orchestrator; Affected rows are PRODUCED by the
+    // silent-hunter anti-join. Neither is ever seeded (§14, BR-B4). Knowledge_Case has no
     // producer this session ⇒ empty.
     expect(await count(pool, 'tenant."Diagnosed_Problem"')).toBe(0);
     expect(await count(pool, 'tenant."Affected"')).toBe(0);
@@ -60,10 +60,10 @@ describe("§14 anti-fake — results are NULL/empty pre-run", () => {
   });
 });
 
-// ── MODEL v2 brutos contract (Leo ratified: 5000, cohort axis = cuisine×zone×tier,
+// ── MODEL v2 raw contract (Leo ratified: 5000, cohort axis = cuisine×zone×tier,
 // generated operational signals with real correlations). Still NO results computed. ───────────
-describe("MODEL v2 — correlated brutos present (5000), results still NULL", () => {
-  it("5000 restaurants carry location + cuisine + promised hours (brutos, cohort axes)", async () => {
+describe("MODEL v2 — correlated raw present (5000), results still NULL", () => {
+  it("5000 restaurants carry location + cuisine + promised hours (raw, cohort axes)", async () => {
     expect(await count(pool, 'tenant."Restaurant"')).toBe(5000);
     expect(await count(pool, 'tenant."Restaurant" where zone is not null')).toBe(5000);
     expect(await count(pool, 'tenant."Restaurant" where cuisine is not null')).toBe(5000);
@@ -91,21 +91,21 @@ describe("MODEL v2 — correlated brutos present (5000), results still NULL", ()
     expect(await count(pool, "tenant.\"Order\" where has_description = true")).toBeGreaterThan(0);
   });
 
-  it("connection telemetry exists as weekly brutos (conexión numerator+denominator)", async () => {
+  it("connection telemetry exists as weekly raw (connection numerator+denominator)", async () => {
     expect(await count(pool, 'tenant."Weekly_Connection"')).toBeGreaterThan(10000);
     expect(await count(pool, 'tenant."Weekly_Connection" where connected_hours is not null')).toBeGreaterThan(10000);
     expect(await count(pool, 'tenant."Weekly_Connection" where committed_hours is not null')).toBeGreaterThan(10000);
   });
 
-  it("new support intents seeded (menu, order_review, cancelamento)", async () => {
+  it("new support intents seeded (menu, order_review, cancellation)", async () => {
     expect(
       await count(pool, `catalog."Intent_Catalog" where intent_id in ('menu','order_review','cancellation')`),
     ).toBe(3);
   });
 
-  it("conexión RATIO is a RESULT — NOT computed pre-run (no producer ran)", async () => {
+  it("connection RATIO is a RESULT — NOT computed pre-run (no producer ran)", async () => {
     // The ratio connected_hours/committed_hours lives in KPI/baseline AFTER a producer.
-    // Brutos are present, but the derived conexión value must still be NULL (§14).
+    // Raw are present, but the derived connection value must still be NULL (§14).
     expect(await count(pool, 'tenant."KPI" where current_value is not null')).toBe(0);
     expect(await count(pool, 'cohort."Cohort" where descriptive_baseline is not null')).toBe(0);
   });

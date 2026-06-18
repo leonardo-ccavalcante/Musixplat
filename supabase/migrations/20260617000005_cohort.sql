@@ -31,13 +31,13 @@ create table cohort."Cohort_Membership_Snapshot" (
   cohort_id            text not null references cohort."Cohort"(cohort_id),
   subgroup_id          text references cohort."Subgroup"(subgroup_id),
   week               date not null,
-  percentile_in_cohort  numeric default null,                      -- RESULT (F-1.2) — null si sin-percentile
+  percentile_in_cohort  numeric default null,                      -- RESULT (F-1.2) — null if no-percentile
   gap_to_top        numeric default null,                      -- RESULT (F-1.2)
   n_min_ok             boolean default null,                      -- RESULT (F-1.3)
   mode                 public.percentile_mode default null,        -- RESULT (F-1.3)
   freshness_ts         timestamptz default null,                  -- RESULT
   cohort_rule_version  text not null references catalog."Cohort_Rule_Version"(version_id),
-  scope_owner_ref      jsonb default null,                        -- written by F-5.5 {dueno_id, level}
+  scope_owner_ref      jsonb default null,                        -- written by F-5.5 {owner_id, level}
   provenance           text not null default '[V]',
   unique (restaurant_id, cohort_id, week, cohort_rule_version) -- anti-double-count weekly
 );
@@ -53,7 +53,7 @@ create table cohort."Prioritized_NBA_Event" (
   cohort_id            text not null references cohort."Cohort"(cohort_id),
   subgroup_id          text references cohort."Subgroup"(subgroup_id),
   week               date not null,
-  percentile_in_cohort  numeric default null,                      -- null si sin-percentile
+  percentile_in_cohort  numeric default null,                      -- null if no-percentile
   gap_to_top        numeric default null,
   delta_status         public.delta_status default null,          -- RESULT (F-2.2)
   n_min_ok             boolean default null,

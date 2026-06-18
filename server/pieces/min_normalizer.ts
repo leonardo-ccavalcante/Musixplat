@@ -1,28 +1,28 @@
 // Piece 05A:A.4.1 — normalize the 3 min() arms; missing/invalid arm ⇒ LOW (most conservative).
-// Feeds A.4.6's least() motor (gov.compute_level_efectivo) — does NOT compute min, only sanitizes.
+// Feeds A.4.6's least() engine (gov.compute_effective_level) — does NOT compute min, only sanitizes.
 // Fail-closed (CLAUDE.md §3.7): null | undefined | non-enum string ⇒ LOW.
 // Deterministic, no LLM, no I/O. (04 §7)
 
-export type Nivel = "LOW" | "MEDIUM" | "HIGH";
+export type Level = "LOW" | "MEDIUM" | "HIGH";
 
 export interface Arms {
-  pedidoNBA: unknown;
-  liberadoEvals: unknown;
-  tetoTier: unknown;
+  nbaRequest: unknown;
+  releasedEvals: unknown;
+  tierCap: unknown;
 }
 
 export interface NormalizedArms {
-  pedidoNBA: Nivel;
-  liberadoEvals: Nivel;
-  tetoTier: Nivel;
+  nbaRequest: Level;
+  releasedEvals: Level;
+  tierCap: Level;
 }
 
-const VALID: ReadonlySet<string> = new Set<Nivel>(["LOW", "MEDIUM", "HIGH"]);
-const CONSERVATIVE: Nivel = "LOW";
+const VALID: ReadonlySet<string> = new Set<Level>(["LOW", "MEDIUM", "HIGH"]);
+const CONSERVATIVE: Level = "LOW";
 
-/** Coerce an unknown value to a valid Nivel; anything that is not a member of the enum ⇒ LOW. */
-function coerce(v: unknown): Nivel {
-  return typeof v === "string" && VALID.has(v) ? (v as Nivel) : CONSERVATIVE;
+/** Coerce an unknown value to a valid Level; anything that is not a member of the enum ⇒ LOW. */
+function coerce(v: unknown): Level {
+  return typeof v === "string" && VALID.has(v) ? (v as Level) : CONSERVATIVE;
 }
 
 /**
@@ -32,11 +32,11 @@ function coerce(v: unknown): Nivel {
  */
 export function normalizeArms(a: Arms | null | undefined): NormalizedArms {
   if (a == null) {
-    return { pedidoNBA: CONSERVATIVE, liberadoEvals: CONSERVATIVE, tetoTier: CONSERVATIVE };
+    return { nbaRequest: CONSERVATIVE, releasedEvals: CONSERVATIVE, tierCap: CONSERVATIVE };
   }
   return {
-    pedidoNBA: coerce(a.pedidoNBA),
-    liberadoEvals: coerce(a.liberadoEvals),
-    tetoTier: coerce(a.tetoTier),
+    nbaRequest: coerce(a.nbaRequest),
+    releasedEvals: coerce(a.releasedEvals),
+    tierCap: coerce(a.tierCap),
   };
 }

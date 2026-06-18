@@ -1,6 +1,6 @@
 // EPIC-B6 handoff #8 (deterministic gate, no LLM). Piece:
 //   US-B6.3.1   — emitDossier: 11-field completeness + provenance gate over v_dossier_handoff;
-//                 any empty field or missing provenance ⇒ fail-closed (no emit). PII saneada
+//                 any empty field or missing provenance ⇒ fail-closed (no emit). PII sanitized
 //                 via scanBorderPII (EC-B6). BR-B17/B18: never hand off work half-done.
 import { query } from "../db/pool.js";
 import { scanBorderPII } from "./guards.js";
@@ -14,13 +14,13 @@ export interface DossierGateResult {
 
 // The 11 derived dossier fields exposed by tenant.v_dossier_handoff (04 §3.4, §4).
 const FIELDS = [
-  "f1_tipo_raiz", "f2_evidencia", "f3_quien", "f4_onde_concentra", "f5_cuanto",
-  "f6_recurrence", "f7_casos_similares", "f8_hipotese_auditable", "f9_ruta_sugerida",
-  "f10_dados_crudos", "f11_provenance",
+  "f1_tipo_raiz", "f2_evidence", "f3_who", "f4_where_concentrated", "f5_how_much",
+  "f6_recurrence", "f7_similar_cases", "f8_auditable_hypothesis", "f9_suggested_route",
+  "f10_raw_data", "f11_provenance",
 ] as const;
 type Field = (typeof FIELDS)[number];
 
-type DossierRow = Record<Field, unknown> & { problema_id: string };
+type DossierRow = Record<Field, unknown> & { problem_id: string };
 
 const isNil = (v: unknown): boolean => v === null || v === undefined;
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -34,12 +34,12 @@ function isGap(field: Field, value: unknown): boolean {
   switch (field) {
     // composite jsonb objects: GAP if null OR any inner value is null.
     case "f1_tipo_raiz":
-    case "f5_cuanto":
-    case "f8_hipotese_auditable":
+    case "f5_how_much":
+    case "f8_auditable_hypothesis":
       return !objectComplete(value);
     // arrays: GAP if null OR empty [].
-    case "f3_quien":
-    case "f7_casos_similares":
+    case "f3_who":
+    case "f7_similar_cases":
       return !arrayNonEmpty(value);
     // provenance object: GAP if null OR empty {} (no provenance ⇒ no render/export, §3 R10).
     case "f11_provenance":
@@ -51,11 +51,11 @@ function isGap(field: Field, value: unknown): boolean {
 }
 
 /** US-B6.3.1 — gate the dossier: emit only when all 11 fields are present with provenance. */
-export async function emitDossier(problemaId: string): Promise<DossierGateResult> {
+export async function emitDossier(problemId: string): Promise<DossierGateResult> {
   const rows = await query<DossierRow>(
-    `select problema_id, ${FIELDS.join(", ")}
-       from tenant.v_dossier_handoff where problema_id = $1`,
-    [problemaId],
+    `select problem_id, ${FIELDS.join(", ")}
+       from tenant.v_dossier_handoff where problem_id = $1`,
+    [problemId],
   );
   const row = rows[0];
   // No row ⇒ every field is a gap (fail-closed: a missing case is never a complete dossier).

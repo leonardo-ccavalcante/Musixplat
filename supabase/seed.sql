@@ -1,13 +1,13 @@
 -- ============================================================================
--- SEED — BRUTOS ONLY (04 §6, §14). Populates ONLY raw business inputs + catalog/config.
--- Every RESULT (percentile, gap, baselines, n_accounts, delta_status, current_value, conexión RATIO,
+-- SEED — RAW ONLY (04 §6, §14). Populates ONLY raw business inputs + catalog/config.
+-- Every RESULT (percentile, gap, baselines, n_accounts, delta_status, current_value, connection RATIO,
 -- upside, ...) stays NULL/empty until its producer runs. pnpm test:antifake fails if broken.
 --
 -- MODEL v2 (Leo ratified 2026-06-18): 5000 restaurants; cohort axes = cuisine × zone × tier;
--- operational signals (conexión horas, cancelled_by, desconto, qualidade foto/descrição) GENERATED
+-- operational signals (connection hours, cancelled_by, discount, quality photo/description) GENERATED
 -- DETERMINISTICALLY with the real correlations Leo described:
---   qualidade↑ → vendas↑ · conexão↑ → recebe + orders · cancel↑ penaliza · cada zone tem demanda própria
---   (→ permite detectar "bom restaurant, zone fraca" = problema de demanda, não de oferta).
+--   quality↑ → sales↑ · connection↑ → receives + orders · cancel↑ penalizes · each zone has its own demand
+--   (→ allows detecting "good restaurant, weak zone" = a demand problem, not a supply problem).
 -- Same input ⇒ same seed (reproducible). det_int lives in migration 20260617000006.
 -- ============================================================================
 
@@ -34,7 +34,7 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('weight_upside_cancel',       '0.20', '[C]', 'leo'),
   ('weight_upside_price',        '0.15', '[C]', 'leo');
 
--- ── 05B Diagnóstico knobs ([C] placeholders, read BY NAME). ──
+-- ── 05B Diagnosis knobs ([C] placeholders, read BY NAME). ──
 insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('threshold_classification',      '0.60', '[C]', 'leo'),
   ('floor_confidence_path',       '0.50', '[C]', 'leo'),
@@ -43,7 +43,7 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('tolerance_reconciliation', '0',    '[C]', 'leo'),
   ('window_silent',       '30',   '[C]', 'leo');
 
--- ── Catalog: Cohort_Rule_Version (vigente v1 + prior v0 for anti-mezcla F-4.3 tests). ──
+-- ── Catalog: Cohort_Rule_Version (current v1 + prior v0 for anti-mezcla F-4.3 tests). ──
 insert into catalog."Cohort_Rule_Version"(version_id, effective_date, what_changed, baseline_effect, provenance) values
   ('v0', date '2026-01-01', 'initial bucket rule', 'baseline v0', '[C]'),
   ('v1', date '2026-06-01', 'tenure border adjustment', 'rebaseline v1', '[V]');

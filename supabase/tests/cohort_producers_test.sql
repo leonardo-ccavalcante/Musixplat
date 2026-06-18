@@ -7,12 +7,12 @@ select plan(9);
 select is(public.det_int('R001', 7, 100), public.det_int('R001', 7, 100), 'det_int deterministic');
 select ok(public.det_int('R001', 7, 100) >= 0 and public.det_int('R001', 7, 100) < 100, 'det_int in [0,100)');
 
--- net_value is GENERATED arithmetic (bruto - fee), not a seeded result.
+-- net_value is GENERATED arithmetic (raw - fee), not a seeded result.
 insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date)
   values ('RT01','POOLT','long_tail','long_tail', date '2025-01-01');
 insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status)
   values ('RT01', date '2026-06-01', 100.00, 20.00, 'ok');
-select is((select net_value from tenant."Order" where restaurant_id='RT01'), 80.00::numeric, 'net_value = bruto - fee');
+select is((select net_value from tenant."Order" where restaurant_id='RT01'), 80.00::numeric, 'net_value = raw - fee');
 
 insert into catalog."Cohort_Rule_Version"(version_id, effective_date, what_changed) values ('vtest', date '2026-06-01', 'test');
 

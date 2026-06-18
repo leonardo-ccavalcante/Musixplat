@@ -2,7 +2,7 @@ import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 
 // F-3.1 / F-3.2 — money panel. READS/LINKS ROI_Operator, never recalculates (the number is its
-// owner's, P02/P03). Invariant: sin señal = conservative state, never gross/estimado (§14).
+// owner's, P02/P03). Invariant: no signal = conservative state, never gross/estimated (§14).
 export const moneyRouter = router({
   summary: tenantProcedure.query(async ({ ctx }) => {
     const rows = await query<{
@@ -17,13 +17,13 @@ export const moneyRouter = router({
     );
     const r = rows[0];
     if (!r) {
-      // F-3.2: no signal ⇒ conservative, never a fabricated gross/estimado.
-      return { hasSignal: false as const, value: null, sello: "no-confiable" as const, freshness: null };
+      // F-3.2: no signal ⇒ conservative, never a fabricated gross/estimated.
+      return { hasSignal: false as const, value: null, seal: "unreliable" as const, freshness: null };
     }
     return {
       hasSignal: true as const,
       value: r.attributable_business_impact,
-      sello: "confirmado" as const,
+      seal: "confirmed" as const,
       freshness: r.freshness_ts,
     };
   }),

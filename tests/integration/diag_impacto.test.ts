@@ -1,23 +1,23 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { makePool, resetDb, rows } from "../helpers/db";
-import { computeRsPerdido, writeLedger } from "../../server/diagnostico/impacto";
+import { computeRevenueLost, writeLedger } from "../../server/diagnostico/impacto";
 
-// 05B:US-B5.1.1 + US-B5.3.1 — impacto puntuador + libro-razón. Math lives in SQL
-// (tenant.fn_impacto_rs_perdido); TS orchestrates. Anti-fake §14: rs_perdido / custo_resolver /
-// value_ganho are NULL pre-run; churn_risk fail-closed to NULL (no pre-churn producer wired).
+// 05B:US-B5.1.1 + US-B5.3.1 — impact scorer + ledger. Math lives in SQL
+// (tenant.fn_impact_revenue_lost); TS orchestrates. Anti-fake §14: revenue_lost / cost_to_resolve /
+// value_gained are NULL pre-run; churn_risk fail-closed to NULL (no pre-churn producer wired).
 // Modeled on diagnostico_spine.test.ts. Uses dedicated fixture restaurants (R-DIAG-*) with
-// CONTROLLED Order rows so the expected sum(net_value fallido) is exact, independent of the
+// CONTROLLED Order rows so the expected sum(net_value failed) is exact, independent of the
 // seed's deterministic per-restaurant noise. fn sums over the Affected set only.
 
 let pool: pg.Pool;
 
 // Two fixture restaurants in POOL-001. Order net_value = gross_value - fee (generated col).
-// Only fallido orders over the AFETADO restaurants count.
-//   R-DIAG-1: fallido (100-20)=80, fallido (50-10)=40, ok (999-0)=ignored   → 120
-//   R-DIAG-2: fallido (200-50)=150                                          → 150
-// expected rs_perdido = 80 + 40 + 150 = 270 (the ok order is excluded by payment_status).
-const EXPECTED_RS_PERDIDO = 270;
+// Only failed orders over the AFFECTED restaurants count.
+//   R-DIAG-1: failed (100-20)=80, failed (50-10)=40, ok (999-0)=ignored   → 120
+//   R-DIAG-2: failed (200-50)=150                                         → 150
+// expected revenue_lost = 80 + 40 + 150 = 270 (the ok order is excluded by payment_status).
+const EXPECTED_REVENUE_LOST = 270;
 
 async function seedFixture(): Promise<string> {
   await pool.query(`
@@ -31,20 +31,20 @@ async function seedFixture(): Promise<string> {
            ('R-DIAG-1', date '2026-06-03', 999,  0, 'ok'),
            ('R-DIAG-2', date '2026-06-01', 200, 50, 'failed');
   `);
-  const r = await pool.query<{ problema_id: string }>(`
-    insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, criticidad, status)
-    values ('POOL-001','R-DIAG-1','grave','abierto')
-    returning problema_id;
+  const r = await pool.query<{ problem_id: string }>(`
+    insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, criticality, status)
+    values ('POOL-001','R-DIAG-1','critical','open')
+    returning problem_id;
   `);
-  const problemaId = r.rows[0]!.problema_id;
-  // Affected set = both fixture restaurants (caza-silenciosos output, stubbed here directly).
+  const problemId = r.rows[0]!.problem_id;
+  // Affected set = both fixture restaurants (silent-hunter output, stubbed here directly).
   await pool.query(
-    `insert into tenant."Affected"(problema_id, tenant_id, restaurant_id, reclamou, silencioso)
+    `insert into tenant."Affected"(problem_id, tenant_id, restaurant_id, complained, silent)
        values ($1,'POOL-001','R-DIAG-1', true, false),
               ($1,'POOL-001','R-DIAG-2', false, true)`,
-    [problemaId],
+    [problemId],
   );
-  return problemaId;
+  return problemId;
 }
 
 beforeAll(async () => {
@@ -60,62 +60,62 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("05B:US-B5.1.1 — computeRsPerdido (Named_Query, churn fail-closed NULL)", () => {
-  it("anti-fake §14: rs_perdido is NULL before computeRsPerdido runs", async () => {
-    const problemaId = await seedFixture();
-    const before = await rows<{ rs_perdido: string | null; churn_risk: string | null }>(
+describe("05B:US-B5.1.1 — computeRevenueLost (Named_Query, churn fail-closed NULL)", () => {
+  it("anti-fake §14: revenue_lost is NULL before computeRevenueLost runs", async () => {
+    const problemId = await seedFixture();
+    const before = await rows<{ revenue_lost: string | null; churn_risk: string | null }>(
       pool,
-      `select rs_perdido, churn_risk from tenant."Diagnosed_Problem" where problema_id = $1`,
-      [problemaId],
+      `select revenue_lost, churn_risk from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [problemId],
     );
-    expect(before[0]?.rs_perdido).toBeNull();
+    expect(before[0]?.revenue_lost).toBeNull();
     expect(before[0]?.churn_risk).toBeNull();
 
-    const out = await computeRsPerdido(problemaId);
-    // SQL is the canonical formula: sum(net_value fallido) over the Affected set.
-    expect(out.rsPerdido).toBe(EXPECTED_RS_PERDIDO);
+    const out = await computeRevenueLost(problemId);
+    // SQL is the canonical formula: sum(net_value failed) over the Affected set.
+    expect(out.revenueLost).toBe(EXPECTED_REVENUE_LOST);
     expect(out.churnRisk).toBeNull(); // BR-B10/§14: no pre-churn producer ⇒ null, never invented.
 
-    const after = await rows<{ rs_perdido: string | null; churn_risk: string | null; prov: Record<string, string> }>(
+    const after = await rows<{ revenue_lost: string | null; churn_risk: string | null; prov: Record<string, string> }>(
       pool,
-      `select rs_perdido, churn_risk, provenance_by_field as prov
-         from tenant."Diagnosed_Problem" where problema_id = $1`,
-      [problemaId],
+      `select revenue_lost, churn_risk, provenance_by_field as prov
+         from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [problemId],
     );
-    expect(Number(after[0]?.rs_perdido)).toBe(EXPECTED_RS_PERDIDO);
+    expect(Number(after[0]?.revenue_lost)).toBe(EXPECTED_REVENUE_LOST);
     expect(after[0]?.churn_risk).toBeNull(); // stays NULL in the DB (fail-closed).
-    expect(after[0]?.prov.rs_perdido).toBe("[I]"); // worst-provenance stamp written by the fn.
+    expect(after[0]?.prov.revenue_lost).toBe("[I]"); // worst-provenance stamp written by the fn.
   });
 });
 
-describe("05B:US-B5.3.1 — writeLedger (custo_resolver vs value_ganho, NULL pre-run)", () => {
+describe("05B:US-B5.3.1 — writeLedger (cost_to_resolve vs value_gained, NULL pre-run)", () => {
   it("anti-fake §14: ledger columns are NULL pre-run, then persisted with provenance", async () => {
-    const problemaId = await seedFixture();
-    const before = await rows<{ custo_resolver: string | null; value_ganho: string | null }>(
+    const problemId = await seedFixture();
+    const before = await rows<{ cost_to_resolve: string | null; value_gained: string | null }>(
       pool,
-      `select custo_resolver, value_ganho from tenant."Diagnosed_Problem" where problema_id = $1`,
-      [problemaId],
+      `select cost_to_resolve, value_gained from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [problemId],
     );
-    expect(before[0]?.custo_resolver).toBeNull();
-    expect(before[0]?.value_ganho).toBeNull();
+    expect(before[0]?.cost_to_resolve).toBeNull();
+    expect(before[0]?.value_gained).toBeNull();
 
-    await writeLedger(problemaId, { custoResolver: 40, valueGanho: 320 });
+    await writeLedger(problemId, { costToResolve: 40, valueGained: 320 });
 
     const after = await rows<{
-      custo_resolver: string | null;
-      value_ganho: string | null;
+      cost_to_resolve: string | null;
+      value_gained: string | null;
       prov: Record<string, string>;
-      ultima_vez_ts: string | null;
+      last_seen_ts: string | null;
     }>(
       pool,
-      `select custo_resolver, value_ganho, provenance_by_field as prov, ultima_vez_ts
-         from tenant."Diagnosed_Problem" where problema_id = $1`,
-      [problemaId],
+      `select cost_to_resolve, value_gained, provenance_by_field as prov, last_seen_ts
+         from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [problemId],
     );
-    expect(Number(after[0]?.custo_resolver)).toBe(40);
-    expect(Number(after[0]?.value_ganho)).toBe(320);
-    expect(after[0]?.prov.custo_resolver).toBe("[I]");
-    expect(after[0]?.prov.value_ganho).toBe("[I]");
-    expect(after[0]?.ultima_vez_ts).not.toBeNull(); // bumped by the write.
+    expect(Number(after[0]?.cost_to_resolve)).toBe(40);
+    expect(Number(after[0]?.value_gained)).toBe(320);
+    expect(after[0]?.prov.cost_to_resolve).toBe("[I]");
+    expect(after[0]?.prov.value_gained).toBe("[I]");
+    expect(after[0]?.last_seen_ts).not.toBeNull(); // bumped by the write.
   });
 });

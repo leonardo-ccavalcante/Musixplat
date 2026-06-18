@@ -15,7 +15,7 @@ export function makePool(): pg.Pool {
 
 const SEED_SQL = fileURLToPath(new URL("../../supabase/seed.sql", import.meta.url));
 
-// Pristine state = brutos only, NO producers. Truncate all data + re-exec seed.sql via pg.
+// Pristine state = raw only, NO producers. Truncate all data + re-exec seed.sql via pg.
 // SERIALIZED across vitest projects/files (antifake + integration share one DB) via a session
 // advisory lock held on ONE dedicated connection across truncate+seed — concurrent resets would
 // otherwise deadlock on the truncate cascade. The seed generator emits R001..R5000 (lpad 3), so the

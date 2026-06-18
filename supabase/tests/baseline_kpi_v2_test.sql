@@ -1,6 +1,6 @@
 -- pgTAP — Chunk 3 cohort KPI profile (F-1.8 v2). Isolated cohort of 6 restaurants (≥ k_anon=5 ⇒
--- NOT suppressed) with fully controlled brutos so every KPI family is exactly predictable.
--- begin/rollback; brutos truncated for isolation (live DB holds the 5000 seed).
+-- NOT suppressed) with fully controlled raw inputs so every KPI family is exactly predictable.
+-- begin/rollback; raw inputs truncated for isolation (live DB holds the 5000 seed).
 begin;
 select plan(7);
 
