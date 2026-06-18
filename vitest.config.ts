@@ -51,9 +51,10 @@ export default defineConfig({
           environment: "node",
           globals: true,
           include: ["tests/integration/**/*.test.ts"],
-          // serialized resetDb + 90k-row seed per test ⇒ generous per-test/hook budget
-          testTimeout: 120_000,
-          hookTimeout: 120_000,
+          // serialized resetDb + 90k-row seed + full runP01(5000) per test, cold on the CI runner
+          // ⇒ generous per-test/hook budget (the cold first test is the slowest).
+          testTimeout: 300_000,
+          hookTimeout: 300_000,
         },
       },
     ],
