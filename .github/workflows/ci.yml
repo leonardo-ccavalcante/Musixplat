@@ -37,8 +37,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          # cache: pnpm removed — the restored pnpm store hit EACCES (exit 236) during reuse/hardlink
-          # on the runner (fails on pinned 11.7.0 too, so not the pnpm version). Fresh install instead.
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
 
       # Static + unit gates (no DB).
