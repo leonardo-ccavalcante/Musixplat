@@ -2,13 +2,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { HandoffButton } from "./HandoffButton";
 
 export type DrillRow = {
-  restaurante_id: string;
+  restaurant_id: string;
   cohort_id: string;
-  subgrupo_id: string | null;
-  semana: string;
-  percentil_en_cohort: number | null;
-  gap_hasta_top: number | null;
-  modo: string | null;
+  subgroup_id: string | null;
+  week: string;
+  percentile_in_cohort: number | null;
+  gap_to_top: number | null;
+  mode: string | null;
 };
 
 // F-5.1 — drill: accounts ordered by gap (server-ordered). Each row offers the F-5.2 handoff.
@@ -19,7 +19,7 @@ export function DrillTable({ rows }: { rows: DrillRow[] }) {
     <table className="w-full text-sm">
       <thead>
         <tr className="text-left text-mxm-content-tertiary">
-          <th scope="col">Restaurante</th>
+          <th scope="col">Restaurant</th>
           <th scope="col" className="text-right">
             Percentil
           </th>
@@ -31,16 +31,16 @@ export function DrillTable({ rows }: { rows: DrillRow[] }) {
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.restaurante_id} className="text-mxm-content">
-            <td>{r.restaurante_id}</td>
-            <td className="tabnum text-right">{r.percentil_en_cohort ?? "—"}</td>
-            <td className="tabnum text-right">{r.gap_hasta_top ?? "—"}</td>
+          <tr key={r.restaurant_id} className="text-mxm-content">
+            <td>{r.restaurant_id}</td>
+            <td className="tabnum text-right">{r.percentile_in_cohort ?? "—"}</td>
+            <td className="tabnum text-right">{r.gap_to_top ?? "—"}</td>
             <td>
               <HandoffButton
-                restaurante_id={r.restaurante_id}
+                restaurant_id={r.restaurant_id}
                 cohort_id={r.cohort_id}
-                subgrupo_id={r.subgrupo_id}
-                semana={r.semana}
+                subgroup_id={r.subgroup_id}
+                week={r.week}
               />
             </td>
           </tr>

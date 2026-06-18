@@ -3,7 +3,7 @@ import { buildExecRequest } from "../idempotency.js";
 import type { ExecRequestInput } from "../idempotency.js";
 
 const base: ExecRequestInput = {
-  conversaId: "conv-001",
+  conversationId: "conv-001",
   nbaId: "nba-42",
   policyVersion: "v1.0",
   pedido: { action: "discount", value: 10 },
@@ -35,9 +35,9 @@ describe("buildExecRequest — 05A:A.5.1 (pedido_ejecucion + deterministic idemp
     expect(a.idempotency_key).not.toBe(b.idempotency_key);
   });
 
-  it("changing conversaId ⇒ different key", () => {
+  it("changing conversationId ⇒ different key", () => {
     const a = buildExecRequest(base);
-    const b = buildExecRequest({ ...base, conversaId: "conv-999" });
+    const b = buildExecRequest({ ...base, conversationId: "conv-999" });
     expect(a.idempotency_key).not.toBe(b.idempotency_key);
   });
 
@@ -62,8 +62,8 @@ describe("buildExecRequest — 05A:A.5.1 (pedido_ejecucion + deterministic idemp
     expect(r.idempotency_key).toBeNull();
   });
 
-  it("missing conversaId (empty string) ⇒ fail-closed: {idempotency_key: null}", () => {
-    const r = buildExecRequest({ ...base, conversaId: "" });
+  it("missing conversationId (empty string) ⇒ fail-closed: {idempotency_key: null}", () => {
+    const r = buildExecRequest({ ...base, conversationId: "" });
     expect(r.idempotency_key).toBeNull();
   });
 
@@ -77,7 +77,7 @@ describe("buildExecRequest — 05A:A.5.1 (pedido_ejecucion + deterministic idemp
     expect(r.idempotency_key).toBeNull();
   });
 
-  it("pedido contents do NOT affect idempotency_key (key depends only on conversaId|nbaId|policyVersion)", () => {
+  it("pedido contents do NOT affect idempotency_key (key depends only on conversationId|nbaId|policyVersion)", () => {
     const a = buildExecRequest(base);
     const b = buildExecRequest({ ...base, pedido: { action: "refund", value: 99 } });
     expect(a.idempotency_key).toBe(b.idempotency_key);

@@ -17,7 +17,7 @@ beforeAll(async () => {
   // Insert the Problema brute (no producers): caso_repo + frecuencia default per DDL.
   const inserted = await rows<{ problema_id: string }>(
     pool,
-    `insert into tenant."Problema_Diagnosticado"(tenant_id, restaurante_id, criticidad)
+    `insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, criticidad)
        values ('POOL-001', 'R001', 'grave') returning problema_id`,
   );
   problemaId = inserted[0]!.problema_id;
@@ -31,7 +31,7 @@ describe("05B:US-B6.2.1 — upsertCasoRepo create-or-increment + PII redaction",
   it("anti-fake §14: caso_repo is NULL pre-run (only the producer fills it)", async () => {
     const r = await rows<{ caso_repo: unknown }>(
       pool,
-      `select caso_repo from tenant."Problema_Diagnosticado" where problema_id = $1`,
+      `select caso_repo from tenant."Diagnosed_Problem" where problema_id = $1`,
       [problemaId],
     );
     expect(r[0]!.caso_repo).toBeNull();
@@ -42,14 +42,14 @@ describe("05B:US-B6.2.1 — upsertCasoRepo create-or-increment + PII redaction",
       cliente_id: "cliente joao joao.silva@example.com",
       dia: "2026-06-17",
       links_replicaveis: ["repro-step-1"],
-      onde_concentra: { zona: "centro" },
+      onde_concentra: { zone: "centro" },
     });
     expect(out.created).toBe(true);
     expect(out.frecuencia).toBe(1); // unchanged from the DDL default
 
     const r = await rows<{ caso_repo: { cliente_id: string }; ultima_vez_ts: string | null }>(
       pool,
-      `select caso_repo, ultima_vez_ts from tenant."Problema_Diagnosticado" where problema_id = $1`,
+      `select caso_repo, ultima_vez_ts from tenant."Diagnosed_Problem" where problema_id = $1`,
       [problemaId],
     );
     expect(r[0]!.caso_repo).not.toBeNull(); // now set
@@ -66,7 +66,7 @@ describe("05B:US-B6.2.1 — upsertCasoRepo create-or-increment + PII redaction",
 
     const r = await rows<{ frecuencia: number }>(
       pool,
-      `select frecuencia from tenant."Problema_Diagnosticado" where problema_id = $1`,
+      `select frecuencia from tenant."Diagnosed_Problem" where problema_id = $1`,
       [problemaId],
     );
     expect(r[0]!.frecuencia).toBe(2);

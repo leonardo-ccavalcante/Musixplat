@@ -26,23 +26,23 @@ export type ComunicacionPolitica = z.infer<typeof comunicacionPolitica>;
 export type ComunicacionDecision = "avisar" | "no_comunicar";
 
 // reportProblema input (US-B1.1.1 gate + B.1.3 dedup). NO tenant_id — resolved server-side from
-// the session (anti-spoofing, §7). restaurante_id is DATA within the pool (required, not the
+// the session (anti-spoofing, §7). restaurant_id is DATA within the pool (required, not the
 // frontier). criticidad is an optional trigger hint.
 export const reportProblemaInput = z.object({
-  restauranteId: z.string().min(1),
-  conversaId: z.string().optional(),
+  restaurantId: z.string().min(1),
+  conversationId: z.string().optional(),
   criticidad: criticidad.optional(),
 });
 export type ReportProblemaInput = z.infer<typeof reportProblemaInput>;
 
-// Problema_Diagnosticado row shape (snake_case = DB). RESULT columns are null pre-producer (§14).
+// Diagnosed_Problem row shape (snake_case = DB). RESULT columns are null pre-producer (§14).
 export interface ProblemaRow {
   problema_id: string;
   tenant_id: string;
-  restaurante_id: string;
-  conversa_id: string | null;
+  restaurant_id: string;
+  conversation_id: string | null;
   criticidad: string | null;
-  estado: string;
+  status: string;
   frecuencia: number;
   tipo_area: string | null;
   raiz_hipotese: string | null;
@@ -50,16 +50,16 @@ export interface ProblemaRow {
   rs_perdido: string | null;
   churn_risk: string | null;
   custo_resolver: string | null;
-  valor_ganho: string | null;
+  value_ganho: string | null;
   ruta_sugerida: string | null;
-  silenciosos_estado: string | null;
+  silenciosos_status: string | null;
   primera_vez_ts: string;
   ultima_vez_ts: string | null;
 }
 
 export const reportProblemaResult = z.object({
   problema_id: z.string(),
-  estado: z.string(),
+  status: z.string(),
   frecuencia: z.number(),
   created: z.boolean(),
 });

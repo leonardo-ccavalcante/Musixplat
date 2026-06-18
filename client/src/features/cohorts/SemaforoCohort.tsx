@@ -5,7 +5,7 @@ export type CohortCell = {
   cohort_id: string;
   tenure_bucket: string;
   tier_base: string;
-  n_cuentas: number | null;
+  n_accounts: number | null;
   status: "pending" | "suppressed" | "collapsed" | "ok";
 };
 
@@ -49,7 +49,7 @@ export function SemaforoCohort({
                   </div>
                   <div className={`text-xs ${m.cls}`}>{m.label}</div>
                   <div className="tabnum text-xs text-mxm-content-tertiary">
-                    n = {c.n_cuentas ?? "—"}
+                    n = {c.n_accounts ?? "—"}
                   </div>
                 </button>
               </li>

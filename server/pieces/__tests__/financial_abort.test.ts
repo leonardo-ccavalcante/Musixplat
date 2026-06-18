@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { financialAbort } from "../financial_abort.js";
 
-// umbralAntifrac supplied by caller reading Config_Perillas by name (CLAUDE.md §3.8)
+// umbralAntifrac supplied by caller reading Config_Knobs by name (CLAUDE.md §3.8)
 const UMBRAL = 1000;
 
 const base = {
-  claseFinanciera: "indirecta",
+  classFinanciera: "indirecta",
   autonomo: false,
   sumaVentana: 0,
   montoNuevo: 100,
@@ -15,7 +15,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
   // --- hard-no: directa + autonomo ---
   it("directa + autonomo ⇒ abort 'directa_no_auto'", () => {
     const r = financialAbort(
-      { claseFinanciera: "directa", autonomo: true, sumaVentana: 0, montoNuevo: 100 },
+      { classFinanciera: "directa", autonomo: true, sumaVentana: 0, montoNuevo: 100 },
       UMBRAL,
     );
     expect(r.abort).toBe(true);
@@ -25,7 +25,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
   // --- directa + NOT autonomo: human proposes ⇒ no directa_no_auto; antifrac still applies ---
   it("directa + NOT autonomo + under umbral ⇒ {abort:false,'none'}", () => {
     const r = financialAbort(
-      { claseFinanciera: "directa", autonomo: false, sumaVentana: 0, montoNuevo: 100 },
+      { classFinanciera: "directa", autonomo: false, sumaVentana: 0, montoNuevo: 100 },
       UMBRAL,
     );
     expect(r.abort).toBe(false);
@@ -34,7 +34,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
 
   it("directa + NOT autonomo + over umbral ⇒ abort 'antifrac'", () => {
     const r = financialAbort(
-      { claseFinanciera: "directa", autonomo: false, sumaVentana: 900, montoNuevo: 200 },
+      { classFinanciera: "directa", autonomo: false, sumaVentana: 900, montoNuevo: 200 },
       UMBRAL,
     );
     expect(r.abort).toBe(true);
@@ -44,7 +44,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
   // --- directa + autonomo + also over umbral: directa_no_auto takes precedence ---
   it("directa + autonomo + over umbral ⇒ reason is 'directa_no_auto' (hard-no checked first)", () => {
     const r = financialAbort(
-      { claseFinanciera: "directa", autonomo: true, sumaVentana: 900, montoNuevo: 200 },
+      { classFinanciera: "directa", autonomo: true, sumaVentana: 900, montoNuevo: 200 },
       UMBRAL,
     );
     expect(r.abort).toBe(true);
@@ -54,7 +54,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
   // --- antifrac: indirecta ---
   it("indirecta + sum+nuevo > umbral ⇒ abort 'antifrac'", () => {
     const r = financialAbort(
-      { claseFinanciera: "indirecta", autonomo: true, sumaVentana: 900, montoNuevo: 200 },
+      { classFinanciera: "indirecta", autonomo: true, sumaVentana: 900, montoNuevo: 200 },
       UMBRAL,
     );
     expect(r.abort).toBe(true);
@@ -63,7 +63,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
 
   it("indirecta + sum+nuevo === umbral (boundary) ⇒ {abort:false,'none'}", () => {
     const r = financialAbort(
-      { claseFinanciera: "indirecta", autonomo: true, sumaVentana: 900, montoNuevo: 100 },
+      { classFinanciera: "indirecta", autonomo: true, sumaVentana: 900, montoNuevo: 100 },
       UMBRAL,
     );
     expect(r.abort).toBe(false);
@@ -72,7 +72,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
 
   it("indirecta + sum+nuevo < umbral ⇒ {abort:false,'none'}", () => {
     const r = financialAbort(
-      { claseFinanciera: "indirecta", autonomo: false, sumaVentana: 0, montoNuevo: 100 },
+      { classFinanciera: "indirecta", autonomo: false, sumaVentana: 0, montoNuevo: 100 },
       UMBRAL,
     );
     expect(r.abort).toBe(false);
@@ -136,7 +136,7 @@ describe("financialAbort — 05A:A.5.3 (financial abort gate, hard-no + anti-fra
 
   // --- determinism ---
   it("deterministic: same input twice ⇒ identical output", () => {
-    const ctx = { claseFinanciera: "indirecta", autonomo: true, sumaVentana: 500, montoNuevo: 200 };
+    const ctx = { classFinanciera: "indirecta", autonomo: true, sumaVentana: 500, montoNuevo: 200 };
     expect(financialAbort(ctx, UMBRAL)).toEqual(financialAbort(ctx, UMBRAL));
   });
 });

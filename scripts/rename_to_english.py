@@ -114,7 +114,6 @@ PLAIN = [
     ("fn_ticket_medio", "fn_avg_ticket"),
     ("fn_log_movimiento", "fn_log_movement"),
     # ── quoted VALUES (single-quoted; whole-token, longest first) ──
-    ("'live_awaiting_retention'", "'live_awaiting_retention'"),  # no-op guard (already replaced above)
     ("'usuario'", "'customer'"),       # cancelled_by value = end customer (NOT operator User)
     ("'restaurante'", "'restaurant'"), # cancelled_by value
     ("'fallido'", "'failed'"),
@@ -128,6 +127,7 @@ PLAIN = [
     ("'baixou_percentil'", "'percentile_down'"),
     ("'novo'", "'new'"),
     ("'equipo'", "'team'"),
+    ("'empresa'", "'company'"),
     ("'noche'", "'night'"),
     ("'ventana'", "'window'"),
     ("'fuso'", "'timezone'"),
@@ -175,6 +175,7 @@ PLAIN = [
     ("perilla", "knob"),
     ("colapsada", "collapsed"),
     ("brecha", "gap"),
+    ("semanal", "weekly"),
     ("semana", "week"),
     ("orden", "order"),
     ("zona", "zone"),
@@ -199,10 +200,19 @@ BOUNDARY = [
 ]
 
 def transform(text: str) -> str:
-    for old, new in PLAIN:
-        text = text.replace(old, new)
-    for old, new in BOUNDARY:
-        text = re.sub(rf"\b{re.escape(old)}\b", new, text)
+    # Two-phase: ES token -> unique sentinel (composites BEFORE parts), then sentinel -> EN.
+    # Sentinels contain no letters, so an English target is NEVER re-scanned (no re-trigger:
+    # 'percentil'->'percentile' can't become 'percentilee', 'Conversa'->'Conversation' stays).
+    rules = [(old, new, f"\x00{i}\x00") for i, (old, new) in enumerate(PLAIN)]
+    boundary = [(old, new, f"\x00b{i}\x00") for i, (old, new) in enumerate(BOUNDARY)]
+    for old, _new, sent in rules:
+        text = text.replace(old, sent)
+    for old, _new, sent in boundary:
+        text = re.sub(rf"\b{re.escape(old)}\b", sent, text)
+    for _old, new, sent in rules:
+        text = text.replace(sent, new)
+    for _old, new, sent in boundary:
+        text = text.replace(sent, new)
     return text
 
 def main():

@@ -11,7 +11,7 @@ export interface CritiqueInput {
   verdict: "pass" | "fail" | string;
   /** 0-based: 0 = first try. */
   attempt: number;
-  /** Supplied by caller from Config_Perillas by name (§3.8). */
+  /** Supplied by caller from Config_Knobs by name (§3.8). */
   maxRetries: number;
 }
 

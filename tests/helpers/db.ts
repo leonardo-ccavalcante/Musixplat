@@ -21,15 +21,15 @@ const SEED_SQL = fileURLToPath(new URL("../../supabase/seed.sql", import.meta.ur
 export async function resetDb(pool: pg.Pool): Promise<void> {
   await pool.query(`
     truncate
-      cohort."Evento_Priorizado_NBA", cohort."Pertenencia_Cohort_Snapshot",
-      cohort."Subgrupo", cohort."Cohort",
-      gov."ROI_Operador", gov."min_calculo",
-      tenant."Afetado", tenant."Problema_Diagnosticado", tenant."Knowledge_Case",
-      tenant."Evento_Uso", tenant."Conexion_Semanal", tenant."Conversa_Episodio", tenant."KPI",
-      tenant."Orden", tenant."Restaurante",
-      gov."Usuario",
+      cohort."Prioritized_NBA_Event", cohort."Cohort_Membership_Snapshot",
+      cohort."Subgroup", cohort."Cohort",
+      gov."ROI_Operator", gov."min_calculation",
+      tenant."Affected", tenant."Diagnosed_Problem", tenant."Knowledge_Case",
+      tenant."Usage_Event", tenant."Weekly_Connection", tenant."Conversation_Episode", tenant."KPI",
+      tenant."Order", tenant."Restaurant",
+      gov."User",
       catalog."Named_Query", catalog."Intent_Catalog",
-      catalog."Cohort_Rule_Version", catalog."Config_Perillas"
+      catalog."Cohort_Rule_Version", catalog."Config_Knobs"
     restart identity cascade;
   `);
   await pool.query(readFileSync(SEED_SQL, "utf8"));

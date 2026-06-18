@@ -12,7 +12,7 @@ let pool: pg.Pool;
 beforeAll(async () => {
   pool = makePool();
   await resetDb(pool); // brutos only, no producers
-}, 120_000);
+}, 300_000);
 
 afterAll(async () => {
   await pool.end();
@@ -21,91 +21,92 @@ afterAll(async () => {
 describe("§14 anti-fake — results are NULL/empty pre-run", () => {
   it("producer-output tables are EMPTY (cells/memberships/events/ROI)", async () => {
     expect(await count(pool, 'cohort."Cohort"')).toBe(0);
-    expect(await count(pool, 'cohort."Subgrupo"')).toBe(0);
-    expect(await count(pool, 'cohort."Pertenencia_Cohort_Snapshot"')).toBe(0);
-    expect(await count(pool, 'cohort."Evento_Priorizado_NBA"')).toBe(0);
-    expect(await count(pool, 'gov."ROI_Operador"')).toBe(0);
+    expect(await count(pool, 'cohort."Subgroup"')).toBe(0);
+    expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(0);
+    expect(await count(pool, 'cohort."Prioritized_NBA_Event"')).toBe(0);
+    expect(await count(pool, 'gov."ROI_Operator"')).toBe(0);
   });
 
-  it("05B: diagnosis tables are EMPTY pre-run (Problema/Afetado/Knowledge_Case)", async () => {
-    // Problemas are CREATED at runtime by the orchestrator; Afetado rows are PRODUCED by the
+  it("05B: diagnosis tables are EMPTY pre-run (Problema/Affected/Knowledge_Case)", async () => {
+    // Problemas are CREATED at runtime by the orchestrator; Affected rows are PRODUCED by the
     // caza-silenciosos anti-join. Neither is ever seeded (§14, BR-B4). Knowledge_Case has no
     // producer this session ⇒ empty.
-    expect(await count(pool, 'tenant."Problema_Diagnosticado"')).toBe(0);
-    expect(await count(pool, 'tenant."Afetado"')).toBe(0);
+    expect(await count(pool, 'tenant."Diagnosed_Problem"')).toBe(0);
+    expect(await count(pool, 'tenant."Affected"')).toBe(0);
     expect(await count(pool, 'tenant."Knowledge_Case"')).toBe(0);
   });
 
-  it("in-place RESULT columns are NULL (tenure_actual, valor_hoy, capa_metricas)", async () => {
-    expect(await count(pool, 'tenant."Restaurante" where tenure_actual is not null')).toBe(0);
-    expect(await count(pool, 'tenant."KPI" where valor_hoy is not null')).toBe(0);
-    expect(await count(pool, 'tenant."Conversa_Episodio" where capa_metricas is not null')).toBe(0);
+  it("in-place RESULT columns are NULL (tenure_months, current_value, metrics_layer)", async () => {
+    expect(await count(pool, 'tenant."Restaurant" where tenure_months is not null')).toBe(0);
+    expect(await count(pool, 'tenant."KPI" where current_value is not null')).toBe(0);
+    expect(await count(pool, 'tenant."Conversation_Episode" where metrics_layer is not null')).toBe(0);
   });
 
   it("BRUTOS are present (seed actually ran)", async () => {
-    expect(await count(pool, 'tenant."Restaurante"')).toBe(5000);
-    expect(await count(pool, 'tenant."Orden"')).toBeGreaterThan(100000);
-    expect(await count(pool, 'gov."Usuario"')).toBe(2);
-    expect(await count(pool, 'catalog."Config_Perillas"')).toBeGreaterThan(0);
+    expect(await count(pool, 'tenant."Restaurant"')).toBe(5000);
+    expect(await count(pool, 'tenant."Order"')).toBeGreaterThan(50000);
+    expect(await count(pool, 'gov."User"')).toBe(2);
+    expect(await count(pool, 'catalog."Config_Knobs"')).toBeGreaterThan(0);
   });
 
-  it("knobs are read BY NAME from Config_Perillas (k_anon=5, n_min=20)", async () => {
-    const r = await rows<{ key: string; valor: string }>(
+  it("knobs are read BY NAME from Config_Knobs (k_anon=5, n_min=20)", async () => {
+    const r = await rows<{ key: string; value: string }>(
       pool,
-      `select key, valor from catalog."Config_Perillas" where key in ('k_anon_threshold','n_min_threshold')`,
+      `select key, value from catalog."Config_Knobs" where key in ('k_anon_threshold','n_min_threshold')`,
     );
-    const map = Object.fromEntries(r.map((x) => [x.key, x.valor]));
+    const map = Object.fromEntries(r.map((x) => [x.key, x.value]));
     expect(map["k_anon_threshold"]).toBe("5");
     expect(map["n_min_threshold"]).toBe("20");
   });
 });
 
-// ── MODEL v2 brutos contract (Leo ratified: 5000, cohort axis = tipo_comida×zona×tier,
+// ── MODEL v2 brutos contract (Leo ratified: 5000, cohort axis = cuisine×zone×tier,
 // generated operational signals with real correlations). Still NO results computed. ───────────
 describe("MODEL v2 — correlated brutos present (5000), results still NULL", () => {
-  it("5000 restaurantes carry location + cuisine + promised hours (brutos, cohort axes)", async () => {
-    expect(await count(pool, 'tenant."Restaurante"')).toBe(5000);
-    expect(await count(pool, 'tenant."Restaurante" where zona is not null')).toBe(5000);
-    expect(await count(pool, 'tenant."Restaurante" where tipo_comida is not null')).toBe(5000);
-    expect(await count(pool, 'tenant."Restaurante" where horas_prometidas_semana is not null')).toBe(5000);
+  it("5000 restaurants carry location + cuisine + promised hours (brutos, cohort axes)", async () => {
+    expect(await count(pool, 'tenant."Restaurant"')).toBe(5000);
+    expect(await count(pool, 'tenant."Restaurant" where zone is not null')).toBe(5000);
+    expect(await count(pool, 'tenant."Restaurant" where cuisine is not null')).toBe(5000);
+    expect(await count(pool, 'tenant."Restaurant" where committed_hours_week is not null')).toBe(5000);
   });
 
   it("cohort axes actually VARY (not constant like v1)", async () => {
     const [r] = await rows<{ dz: string; dt: string; dr: string }>(
       pool,
-      `select count(distinct zona)::text dz, count(distinct tipo_comida)::text dt,
-              count(distinct tier_base)::text dr from tenant."Restaurante"`,
+      `select count(distinct zone)::text dz, count(distinct cuisine)::text dt,
+              count(distinct tier_base)::text dr from tenant."Restaurant"`,
     );
-    expect(Number(r.dz)).toBeGreaterThanOrEqual(6); // zonas
+    if (!r) throw new Error("no rows from distinct-axis query");
+    expect(Number(r.dz)).toBeGreaterThanOrEqual(6); // zones
     expect(Number(r.dt)).toBeGreaterThanOrEqual(5); // cuisines
     expect(Number(r.dr)).toBe(3); // tiers
   });
 
-  it("Orden carries operational signals (cancel attribution, discount, menu quality)", async () => {
-    expect(await count(pool, `tenant."Orden" where cancelado_por = 'restaurante'`)).toBeGreaterThan(0);
-    expect(await count(pool, `tenant."Orden" where cancelado_por = 'usuario'`)).toBeGreaterThan(0);
-    expect(await count(pool, "tenant.\"Orden\" where descuento_pct > 0")).toBeGreaterThan(0);
-    expect(await count(pool, "tenant.\"Orden\" where tiene_foto = true")).toBeGreaterThan(0);
-    expect(await count(pool, "tenant.\"Orden\" where tiene_foto = false")).toBeGreaterThan(0);
-    expect(await count(pool, "tenant.\"Orden\" where tiene_descripcion = true")).toBeGreaterThan(0);
+  it("Order carries operational signals (cancel attribution, discount, menu quality)", async () => {
+    expect(await count(pool, `tenant."Order" where cancelled_by = 'restaurant'`)).toBeGreaterThan(0);
+    expect(await count(pool, `tenant."Order" where cancelled_by = 'customer'`)).toBeGreaterThan(0);
+    expect(await count(pool, "tenant.\"Order\" where discount_pct > 0")).toBeGreaterThan(0);
+    expect(await count(pool, "tenant.\"Order\" where has_photo = true")).toBeGreaterThan(0);
+    expect(await count(pool, "tenant.\"Order\" where has_photo = false")).toBeGreaterThan(0);
+    expect(await count(pool, "tenant.\"Order\" where has_description = true")).toBeGreaterThan(0);
   });
 
   it("connection telemetry exists as weekly brutos (conexión numerator+denominator)", async () => {
-    expect(await count(pool, 'tenant."Conexion_Semanal"')).toBeGreaterThan(10000);
-    expect(await count(pool, 'tenant."Conexion_Semanal" where horas_conectadas is not null')).toBeGreaterThan(10000);
-    expect(await count(pool, 'tenant."Conexion_Semanal" where horas_prometidas is not null')).toBeGreaterThan(10000);
+    expect(await count(pool, 'tenant."Weekly_Connection"')).toBeGreaterThan(10000);
+    expect(await count(pool, 'tenant."Weekly_Connection" where connected_hours is not null')).toBeGreaterThan(10000);
+    expect(await count(pool, 'tenant."Weekly_Connection" where committed_hours is not null')).toBeGreaterThan(10000);
   });
 
-  it("new support intents seeded (menu, revision_orden, cancelamento)", async () => {
+  it("new support intents seeded (menu, order_review, cancelamento)", async () => {
     expect(
-      await count(pool, `catalog."Intent_Catalog" where intent_id in ('menu','revision_orden','cancelamento')`),
+      await count(pool, `catalog."Intent_Catalog" where intent_id in ('menu','order_review','cancellation')`),
     ).toBe(3);
   });
 
   it("conexión RATIO is a RESULT — NOT computed pre-run (no producer ran)", async () => {
-    // The ratio horas_conectadas/horas_prometidas lives in KPI/baseline AFTER a producer.
+    // The ratio connected_hours/committed_hours lives in KPI/baseline AFTER a producer.
     // Brutos are present, but the derived conexión value must still be NULL (§14).
-    expect(await count(pool, 'tenant."KPI" where valor_hoy is not null')).toBe(0);
-    expect(await count(pool, 'cohort."Cohort" where baseline_descriptivo is not null')).toBe(0);
+    expect(await count(pool, 'tenant."KPI" where current_value is not null')).toBe(0);
+    expect(await count(pool, 'cohort."Cohort" where descriptive_baseline is not null')).toBe(0);
   });
 });

@@ -5,21 +5,21 @@ import { query } from "../db/pool.js";
 
 interface EventRow {
   evento_id: string;
-  restaurante_id: string;
+  restaurant_id: string;
   cohort_id: string;
   cohort_rule_version: string;
-  operador_id: string | null;
+  operator_id: string | null;
 }
 
-// F-5.2 — handoff confirm. tenant_id + operador come from the SERVER session (tenantProcedure),
+// F-5.2 — handoff confirm. tenant_id + operator come from the SERVER session (tenantProcedure),
 // never the body. Cross-pool ⇒ the SQL guard aborts; we log it and surface FORBIDDEN.
 export const handoffRouter = router({
   confirm: tenantProcedure.input(handoffInput).mutation(async ({ ctx, input }) => {
     try {
       const rows = await query<EventRow>(
-        `select evento_id, restaurante_id, cohort_id, cohort_rule_version, operador_id
+        `select evento_id, restaurant_id, cohort_id, cohort_rule_version, operator_id
          from cohort.fn_handoff($1, $2, $3, $4, $5, $6)`,
-        [input.restaurante_id, input.cohort_id, input.subgrupo_id ?? null, input.semana, ctx.userId, ctx.tenantId],
+        [input.restaurant_id, input.cohort_id, input.subgroup_id ?? null, input.week, ctx.userId, ctx.tenantId],
       );
       return rows[0];
     } catch (e) {
@@ -28,7 +28,7 @@ export const handoffRouter = router({
         // security log on blocked cross-pool (04 §3 R6) — append-only.
         await query(
           `insert into gov."Security_Log"(tenant_id, kind, detail) values ($1,'cross_pool',$2)`,
-          [ctx.tenantId, JSON.stringify({ restaurante_id: input.restaurante_id })],
+          [ctx.tenantId, JSON.stringify({ restaurant_id: input.restaurant_id })],
         );
         throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool handoff blocked" });
       }

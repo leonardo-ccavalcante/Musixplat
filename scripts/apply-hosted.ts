@@ -17,8 +17,8 @@ async function main(): Promise<void> {
   await pool.query(readFileSync("supabase/seed.sql", "utf8"));
   console.warn("applied seed (brutos only)");
 
-  await runP01({ semana: "2026-05-25", refDate: "2026-06-17" });
-  await runP01({ semana: "2026-06-15", refDate: "2026-06-17", prevSemana: "2026-05-25" });
+  await runP01({ week: "2026-05-25", refDate: "2026-06-17" });
+  await runP01({ week: "2026-06-15", refDate: "2026-06-17", prevSemana: "2026-05-25" });
   console.warn("P01 done (2026-05-25, 2026-06-15)");
   await pool.end();
 }

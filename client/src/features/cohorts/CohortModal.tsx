@@ -21,12 +21,12 @@ export function CohortModal({ cell, onClose }: { cell: CohortCell | null; onClos
             <dd className="text-mxm-content">{cell.tier_base}</dd>
             <dt className="text-mxm-content-tertiary">Tenure</dt>
             <dd className="text-mxm-content">{cell.tenure_bucket}</dd>
-            <dt className="text-mxm-content-tertiary">n_cuentas</dt>
-            <dd className="tabnum text-mxm-content">{cell.n_cuentas ?? "—"}</dd>
+            <dt className="text-mxm-content-tertiary">n_accounts</dt>
+            <dd className="tabnum text-mxm-content">{cell.n_accounts ?? "—"}</dd>
           </dl>
           <div>
             <h3 className="mb-1 text-xs font-semibold text-mxm-content-secondary">
-              Cuentas (orden por gap)
+              Cuentas (order por gap)
             </h3>
             {drill.isLoading ? (
               <LoadingState />

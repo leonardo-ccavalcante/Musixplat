@@ -5,8 +5,8 @@ import { pool } from "../server/db/pool.js";
 // real, computed numbers. Deterministic reference date. NOT a seed — results are produced here.
 async function main(): Promise<void> {
   const refDate = "2026-06-17";
-  await runP01({ semana: "2026-05-25", refDate });
-  await runP01({ semana: "2026-06-15", refDate, prevSemana: "2026-05-25" });
+  await runP01({ week: "2026-05-25", refDate });
+  await runP01({ week: "2026-06-15", refDate, prevSemana: "2026-05-25" });
   console.warn("P01 done (2026-05-25, 2026-06-15)");
   await pool.end();
 }

@@ -8,7 +8,7 @@ describe("groundingGate — 05A:A.2.2 (4 deterministic checks, fail-closed BR-A1
   it("all 4 checks pass ⇒ verificado, no failures", () => {
     const r = groundingGate(ok, TTL);
     expect(r.verified).toBe(true);
-    expect(r.estado).toBe("verificado");
+    expect(r.status).toBe("verificado");
     expect(r.failed).toEqual([]);
   });
 
@@ -24,7 +24,7 @@ describe("groundingGate — 05A:A.2.2 (4 deterministic checks, fail-closed BR-A1
   ])("fail-closed on a single failed check: %s", (which, input) => {
     const r = groundingGate(input, TTL);
     expect(r.verified).toBe(false);
-    expect(r.estado).toBe("no_verificable");
+    expect(r.status).toBe("no_verificable");
     expect(r.failed).toContain(which);
   });
 
@@ -64,6 +64,6 @@ describe("groundingGate — 05A:A.2.2 (4 deterministic checks, fail-closed BR-A1
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = groundingGate(c as any, TTL);
     expect(r.verified).toBe(false);
-    expect(r.estado).toBe("no_verificable");
+    expect(r.status).toBe("no_verificable");
   });
 });

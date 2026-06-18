@@ -2,13 +2,13 @@ import { describe, it, expect } from "vitest";
 import { queuePriority } from "../queue_priority.js";
 
 // Piece 05A:A.4.7 — queue priority from spike signal. (04 §3)
-// umbral=10 is the caller-supplied threshold (read by-name from Config_Perillas upstream).
+// umbral=10 is the caller-supplied threshold (read by-name from Config_Knobs upstream).
 const UMBRAL = 10;
 
 describe("queuePriority — 05A:A.4.7 (deterministic, fail-closed, tier-isolated)", () => {
   // --- boolean spike path ---
-  it("spike:true ⇒ ALTA", () => {
-    expect(queuePriority({ spike: true }).prioridad_cola).toBe("ALTA");
+  it("spike:true ⇒ HIGH", () => {
+    expect(queuePriority({ spike: true }).prioridad_cola).toBe("HIGH");
   });
 
   it("spike:false ⇒ NORMAL", () => {
@@ -16,12 +16,12 @@ describe("queuePriority — 05A:A.4.7 (deterministic, fail-closed, tier-isolated
   });
 
   // --- numeric intensity path ---
-  it("intensidad above umbral ⇒ ALTA", () => {
-    expect(queuePriority({ intensidad: 11 }, UMBRAL).prioridad_cola).toBe("ALTA");
+  it("intensidad above umbral ⇒ HIGH", () => {
+    expect(queuePriority({ intensidad: 11 }, UMBRAL).prioridad_cola).toBe("HIGH");
   });
 
-  it("intensidad exactly at umbral ⇒ ALTA (boundary inclusive)", () => {
-    expect(queuePriority({ intensidad: 10 }, UMBRAL).prioridad_cola).toBe("ALTA");
+  it("intensidad exactly at umbral ⇒ HIGH (boundary inclusive)", () => {
+    expect(queuePriority({ intensidad: 10 }, UMBRAL).prioridad_cola).toBe("HIGH");
   });
 
   it("intensidad below umbral ⇒ NORMAL", () => {
@@ -53,12 +53,12 @@ describe("queuePriority — 05A:A.4.7 (deterministic, fail-closed, tier-isolated
     expect(queuePriority({ intensidad: 99 }, NaN).prioridad_cola).toBe("NORMAL");
   });
 
-  // --- CRITICAL isolation invariant: output must NEVER carry tier/nivel ---
-  it("output has NO 'nivel', 'tier', or 'nivel_efectivo' key (tier isolation, §3 invariant)", () => {
+  // --- CRITICAL isolation invariant: output must NEVER carry tier/level ---
+  it("output has NO 'level', 'tier', or 'level_efectivo' key (tier isolation, §3 invariant)", () => {
     const keys = Object.keys(queuePriority({ spike: true }));
-    expect(keys).not.toContain("nivel");
+    expect(keys).not.toContain("level");
     expect(keys).not.toContain("tier");
-    expect(keys).not.toContain("nivel_efectivo");
+    expect(keys).not.toContain("level_efectivo");
     expect(keys).toEqual(["prioridad_cola"]);
   });
 
