@@ -30,19 +30,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install ESLint
-        run: |
-          npm install eslint@8.10.0
-          npm install @microsoft/eslint-formatter-sarif@3.1.0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Install the project (eslint@9 + the flat-config plugins it imports: typescript-eslint, @eslint/js,
+      # globals) + the SARIF formatter. The previous starter step hardcoded `npm install eslint@8.10.0`,
+      # which ERESOLVE-conflicted with typescript-eslint@8.x (needs eslint >=8.57/9) and never installed
+      # the flat-config plugins.
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm add -D @microsoft/eslint-formatter-sarif@3.1.0
+
+      # eslint@9 flat config (eslint.config.js, auto-discovered). No --ext / --config .eslintrc.js
+      # (eslint-8 only; this repo has no .eslintrc and removed --ext in eslint 9).
       - name: Run ESLint
         env:
           SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
-        run: npx eslint .
-          --config .eslintrc.js
-          --ext .js,.jsx,.ts,.tsx
-          --format @microsoft/eslint-formatter-sarif
-          --output-file eslint-results.sarif
+        run: pnpm exec eslint . --format @microsoft/eslint-formatter-sarif --output-file eslint-results.sarif
         continue-on-error: true
 
       - name: Upload analysis results to GitHub
