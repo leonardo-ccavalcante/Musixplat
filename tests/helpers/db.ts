@@ -32,12 +32,12 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
       truncate
         cohort."Prioritized_NBA_Event", cohort."Cohort_Membership_Snapshot",
         cohort."Subgroup", cohort."Cohort",
-        gov."ROI_Operator", gov."min_calculation",
+        gov."ROI_Operator", gov."min_calculation", gov."NBA_Proposal",
         tenant."Affected", tenant."Diagnosed_Problem", tenant."Knowledge_Case",
         tenant."Usage_Event", tenant."Weekly_Connection", tenant."Conversation_Episode", tenant."KPI",
         tenant."Order", tenant."Restaurant",
         gov."User",
-        catalog."Named_Query", catalog."Intent_Catalog",
+        catalog."Named_Query", catalog."Intent_Catalog", catalog."NBA_Catalogo",
         catalog."Cohort_Rule_Version", catalog."Config_Knobs"
       restart identity cascade;
     `);
