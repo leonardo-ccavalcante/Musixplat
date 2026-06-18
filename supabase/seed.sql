@@ -1,48 +1,62 @@
 -- ============================================================================
--- SEED — BRUTOS ONLY (04 §6, §14). The seed populates ONLY raw business inputs +
--- catalog/config. Every RESULT (percentil, gap, baselines, n_cuentas, delta_status,
--- valor_hoy, ratio 1:10, ...) stays NULL/empty until its producer runs. The §14
--- anti-fake gate (pnpm test:antifake) fails the build if this rule is broken.
--- Fase-1 manual seed (R001 + ~99 pool), generated deterministically in SQL — NOT the
--- multi-instance generator (§12, Fase 2). Same input ⇒ same seed (reproducible).
+-- SEED — BRUTOS ONLY (04 §6, §14). Populates ONLY raw business inputs + catalog/config.
+-- Every RESULT (percentil, gap, baselines, n_cuentas, delta_status, valor_hoy, conexión RATIO,
+-- upside, ...) stays NULL/empty until its producer runs. pnpm test:antifake fails if broken.
+--
+-- MODEL v2 (Leo ratified 2026-06-18): 5000 restaurantes; cohort axes = tipo_comida × zona × tier;
+-- operational signals (conexión horas, cancelado_por, desconto, qualidade foto/descrição) GENERATED
+-- DETERMINISTICALLY with the real correlations Leo described:
+--   qualidade↑ → vendas↑ · conexão↑ → recebe + ordens · cancel↑ penaliza · cada zona tem demanda própria
+--   (→ permite detectar "bom restaurante, zona fraca" = problema de demanda, não de oferta).
+-- Same input ⇒ same seed (reproducible). det_int lives in migration 20260617000006.
 -- ============================================================================
 
--- public.det_int (deterministic generation helper) is created in migration 20260617000006.
-
--- ── Catalog: knobs BY NAME (CLAUDE.md §3.8). Values ratified by Leo 2026-06-17. ──
+-- ── Catalog: knobs BY NAME (CLAUDE.md §3.8). Values ratified by Leo. ──
 insert into catalog."Config_Perillas"(key, valor, provenance, owner) values
-  ('k_anon_threshold',         '5',  '[V]', 'leo'),   -- ratified
-  ('n_min_threshold',          '20', '[V]', 'leo'),   -- 04 §3.4
-  ('tenure_border_1_months',   '3',  '[V]', 'leo'),   -- 0-3m | 3-6m
-  ('tenure_border_2_months',   '6',  '[V]', 'leo'),   -- 3-6m | 6-12m
-  ('tenure_border_3_months',   '12', '[V]', 'leo'),   -- 6-12m | 12m+
+  ('k_anon_threshold',         '5',  '[V]', 'leo'),
+  ('n_min_threshold',          '20', '[V]', 'leo'),
+  ('tenure_border_1_months',   '3',  '[V]', 'leo'),
+  ('tenure_border_2_months',   '6',  '[V]', 'leo'),
+  ('tenure_border_3_months',   '12', '[V]', 'leo'),
   ('TTL_baseline_days',        '7',  '[C]', 'leo'),
   ('D_dias_verde',             '14', '[C]', 'leo'),
   ('cohort_rule_version_vigente', 'v1', '[V]', 'leo'),
-  ('p90_percentil_corte',      '90', '[C]', 'leo'),   -- P90+ band for baseline_descriptivo
-  ('at_risk_percentil_max',    '25', '[C]', 'leo');   -- delta below this + dropping ⇒ at_risk (F-2.2)
+  ('p90_percentil_corte',      '90', '[C]', 'leo'),
+  ('at_risk_percentil_max',    '25', '[C]', 'leo'),
+  -- MODEL v2 composite-ranking weights (Leo ratified 2026-06-18) — read BY NAME, never literals.
+  ('peso_score_ordens',        '0.40', '[V]', 'leo'),
+  ('peso_score_conexion',      '0.30', '[V]', 'leo'),
+  ('peso_score_qualidade',     '0.20', '[V]', 'leo'),
+  ('peso_score_cancel',        '0.10', '[V]', 'leo'),
+  -- MODEL v2 upside weights (Leo ratified 2026-06-18) — factor impact on orders ([C] projection).
+  ('peso_upside_conexion',     '0.40', '[C]', 'leo'),
+  ('peso_upside_qualidade',    '0.25', '[C]', 'leo'),
+  ('peso_upside_cancel',       '0.20', '[C]', 'leo'),
+  ('peso_upside_preco',        '0.15', '[C]', 'leo');
 
--- ── 05B Diagnóstico knobs (CIERRE [C] table). Values are [C] placeholders TO DEFINE+DEFEND;
---    every 05B threshold is read BY NAME, never a literal (CLAUDE.md §3.8). ──
+-- ── 05B Diagnóstico knobs ([C] placeholders, read BY NAME). ──
 insert into catalog."Config_Perillas"(key, valor, provenance, owner) values
-  ('umbral_clasificacion',      '0.60', '[C]', 'leo'),  -- min confidence tipo/área before B.2 proceeds
-  ('piso_confianza_path',       '0.50', '[C]', 'leo'),  -- min confidence PATH A before acting (B.3)
-  ('cap_profundidad_arbol',     '5',    '[C]', 'leo'),  -- max issue-tree levels before degrade (B.3)
-  ('tolerancia_doublecheck',    '0.05', '[C]', 'leo'),  -- impact double-check band (B.7, BR-B10)
-  ('tolerancia_reconciliacion', '0',    '[C]', 'leo'),  -- pattern↔score divergence before fail-closed (B-block-1)
-  ('ventana_silenciosos',       '30',   '[C]', 'leo');  -- caza-silenciosos sweep window in days (B.5, B-block-2)
+  ('umbral_clasificacion',      '0.60', '[C]', 'leo'),
+  ('piso_confianza_path',       '0.50', '[C]', 'leo'),
+  ('cap_profundidad_arbol',     '5',    '[C]', 'leo'),
+  ('tolerancia_doublecheck',    '0.05', '[C]', 'leo'),
+  ('tolerancia_reconciliacion', '0',    '[C]', 'leo'),
+  ('ventana_silenciosos',       '30',   '[C]', 'leo');
 
 -- ── Catalog: Cohort_Rule_Version (vigente v1 + prior v0 for anti-mezcla F-4.3 tests). ──
 insert into catalog."Cohort_Rule_Version"(version_id, fecha, que_cambio, efecto_en_baseline, provenance) values
   ('v0', date '2026-01-01', 'regla inicial de buckets', 'baseline v0', '[C]'),
   ('v1', date '2026-06-01', 'ajuste de bordes de tenure', 'rebaseline v1', '[V]');
 
--- ── Catalog: Intent_Catalog (cobrança anchors the fixture). ──
+-- ── Catalog: Intent_Catalog (v2: + menu, revision_orden, cancelamento per Leo). ──
 insert into catalog."Intent_Catalog"(intent_id, label, version) values
-  ('cobranca', 'Cobrança / pagos', 'v1'),
-  ('entrega',  'Entrega',          'v1'),
-  ('calidad',  'Calidad',          'v1'),
-  ('promo',    'Promociones',      'v1');
+  ('cobranca',       'Cobrança / pagos',     'v1'),
+  ('entrega',        'Entrega',              'v1'),
+  ('calidad',        'Calidad',              'v1'),
+  ('promo',          'Promociones',          'v1'),
+  ('menu',           'Problemas de menu',    'v1'),
+  ('revision_orden', 'Revisión de orden',    'v1'),
+  ('cancelamento',   'Cancelación de orden', 'v1');
 
 -- ── Catalog: Named_Query defs (deterministic SQL, never LLM, 04 §2). ──
 insert into catalog."Named_Query"(def_version, formula, periodicidad, group_by, source_ref, unit) values
@@ -62,65 +76,94 @@ insert into gov."Usuario"(usuario_id, tenant_id, nivel_org, rol) values
   ('U-OP-001', 'POOL-001', 'equipo', 'agent_manager_senior'),
   ('U-OP-002', 'POOL-002', 'equipo', 'agent_manager_senior');
 
--- ── tenant.Restaurante: R001 ancla + 99 pool. ~5% managed/95% long_tail; ~10% in POOL-002. ──
--- fecha_alta spread across 0-23 months so all tenure buckets fill. tenure_actual stays NULL
--- (RESULT — computed by F-1.1 relative to the run's reference date).
-insert into tenant."Restaurante"(restaurante_id, tenant_id, tier_base, segmento, fecha_alta, atributos_vivos)
-values ('R001', 'POOL-001', 'long_tail', 'long_tail', date '2025-09-01',
-        jsonb_build_object('fuso', 'America/Sao_Paulo', 'ventana', 'noche'));
-
-insert into tenant."Restaurante"(restaurante_id, tenant_id, tier_base, segmento, fecha_alta, atributos_vivos)
-select rid,
-       case when public.det_int(rid, 7, 100) < 10 then 'POOL-002' else 'POOL-001' end,
-       tb, sg, date '2026-06-17' - (public.det_int(rid, 11, 24) || ' months')::interval,
+-- ── tenant.Restaurante: 5000. Cohort axes = tipo_comida × zona × tier. ~5% managed/95% long_tail;
+--    ~10% POOL-002. fecha_alta spread 0-23m. tenure_actual stays NULL (RESULT, F-1.1). ──
+insert into tenant."Restaurante"(restaurante_id, tenant_id, tier_base, segmento, fecha_alta,
+                                 zona, tipo_comida, horas_prometidas_semana, atributos_vivos)
+select s.rid,
+       case when public.det_int(s.rid, 7, 100) < 10 then 'POOL-002' else 'POOL-001' end,
+       s.tier, s.seg,
+       date '2026-06-17' - (public.det_int(s.rid, 11, 24) || ' months')::interval,
+       s.zona, s.tipo,
+       (40 + public.det_int(s.rid, 8, 41))::numeric(6,2),         -- 40..80 committed hours/week
        jsonb_build_object('fuso', 'America/Sao_Paulo', 'ventana', 'noche')
 from (
-  select 'R' || lpad(g::text, 3, '0') as rid,
-         m.tier_base as tb, m.segmento as sg
-  from generate_series(2, 100) g
-  cross join lateral (
-    select case
-             when public.det_int('R' || lpad(g::text, 3, '0'), 3, 100) < 3 then 'managed_brand'::public.tier_base
-             when public.det_int('R' || lpad(g::text, 3, '0'), 3, 100) < 5 then 'managed_midmarket'::public.tier_base
-             else 'long_tail'::public.tier_base
-           end as tier_base,
-           case
-             when public.det_int('R' || lpad(g::text, 3, '0'), 3, 100) < 5 then 'managed'::public.segmento
-             else 'long_tail'::public.segmento
-           end as segmento
-  ) m
-) src;
+  select rid,
+         (array['centro','norte','sul','leste','oeste','sudeste','noroeste','litoral'])[1 + public.det_int(rid, 5, 8)] as zona,
+         (array['pizza','sushi','burger','brasileira','saudavel','doces'])[1 + public.det_int(rid, 6, 6)] as tipo,
+         case when public.det_int(rid, 3, 1000) < 30 then 'managed_brand'::public.tier_base
+              when public.det_int(rid, 3, 1000) < 50 then 'managed_midmarket'::public.tier_base
+              else 'long_tail'::public.tier_base end as tier,
+         case when public.det_int(rid, 3, 1000) < 50 then 'managed'::public.segmento
+              else 'long_tail'::public.segmento end as seg
+  from (select 'R' || lpad(g::text, 4, '0') as rid from generate_series(1, 5000) g) ids
+) s;
 
--- ── tenant.Orden: 50-300 orders/restaurante; 2-8% fallido (per-restaurante), some pendiente. ──
--- valor_neto is GENERATED (not seeded). The "47/R$X" cascade DERIVES from these brutos.
-insert into tenant."Orden"(restaurante_id, fecha, valor_bruto, fee, status_pago, zona, tipo_comida, canal, provenance)
+-- ── tenant.Orden: volume CORRELATED with conexão/qualidade/zona-demanda, penalizado por cancel.
+--    status_pago: 'ok'=entregada · 'fallido'=cancelada (cancelado_por restaurante|usuario) · 'pendiente'.
+--    foto/descrição ~ Bernoulli(qualidade). desconto em ~25% das ordens. valor_neto é GENERATED. ──
+insert into tenant."Orden"(restaurante_id, fecha, valor_bruto, fee, status_pago, cancelado_por,
+                           descuento_pct, tiene_foto, tiene_descripcion, zona, tipo_comida, canal, provenance)
 select r.restaurante_id,
        date '2026-06-17' - public.det_int(r.restaurante_id || ':' || g, 21, 90),
-       vb.v,
-       round(vb.v * 0.20, 2),
-       case
-         when public.det_int(r.restaurante_id || ':' || g, 22, 100) < r.pct_fallido then 'fallido'::public.status_pago
-         when public.det_int(r.restaurante_id || ':' || g, 23, 100) < 4 then 'pendiente'::public.status_pago
-         else 'ok'::public.status_pago
-       end,
-       'centro', 'pizza', 'app', '[V]'
+       vb.v, round(vb.v * 0.20, 2),
+       st.status, st.canc,
+       case when public.det_int(r.restaurante_id || ':' || g, 28, 100) < 25
+              then (10 + public.det_int(r.restaurante_id || ':' || g, 29, 31))::numeric(5,2)
+            else 0 end,                                                          -- desconto 10..40% em ~25%
+       public.det_int(r.restaurante_id || ':' || g, 26, 100) < r.q,             -- tiene_foto ~ P(qualidade)
+       public.det_int(r.restaurante_id || ':' || g, 27, 100) < r.q,             -- tiene_descripcion ~ P(qualidade)
+       r.zona, r.tipo_comida, 'app', '[V]'
 from (
-  select restaurante_id,
-         50 + public.det_int(restaurante_id, 31, 251) as n_orders,        -- 50..300
-         2 + public.det_int(restaurante_id, 32, 7)    as pct_fallido       -- 2..8 %
-  from tenant."Restaurante"
+  select rest.restaurante_id, rest.zona, rest.tipo_comida,
+         public.det_int(rest.restaurante_id, 51, 101) as q,                     -- qualidade 0..100
+         public.det_int(rest.restaurante_id, 53, 101) as cancel,               -- cancel propensity 0..100
+         (8 + round(                                                            -- n_orders ~ 8..78
+              ( 0.35 * public.det_int(rest.restaurante_id, 52, 101)             -- conexão
+              + 0.25 * (40 + public.det_int(rest.zona, 71, 51))                 -- demanda da zona
+              + 0.20 * public.det_int(rest.restaurante_id, 51, 101)             -- qualidade
+              + 0.20 * (100 - public.det_int(rest.restaurante_id, 53, 101))     -- (menos cancel)
+              ) * 0.7
+           ))::int as n_orders,
+         case rest.tier_base when 'managed_brand' then 40 when 'managed_midmarket' then 20 else 0 end as tier_bonus
+  from tenant."Restaurante" rest
 ) r
 cross join lateral generate_series(1, r.n_orders) g
-cross join lateral (select (20 + public.det_int(r.restaurante_id || ':' || g, 24, 80))::numeric(12,2) as v) vb;
+cross join lateral (select (20 + r.tier_bonus + public.det_int(r.restaurante_id || ':' || g, 24, 80))::numeric(12,2) as v) vb
+cross join lateral (
+  select
+    case when public.det_int(r.restaurante_id || ':' || g, 22, 100) < round(r.cancel * 0.4)
+           then 'fallido'::public.status_pago
+         when public.det_int(r.restaurante_id || ':' || g, 22, 100) < round(r.cancel * 0.4) + 4
+           then 'pendiente'::public.status_pago
+         else 'ok'::public.status_pago end as status,
+    case when public.det_int(r.restaurante_id || ':' || g, 22, 100) < round(r.cancel * 0.4)
+           then (case when public.det_int(r.restaurante_id || ':' || g, 25, 100) < 65
+                      then 'restaurante' else 'usuario' end)::public.cancelado_por
+         else null end as canc
+) st;
 
--- ── tenant.Conversa_Episodio: raw tickets for ~35% of restaurantes (panels F-3.3/F-3.4/F-5.4). ──
--- intent is bruto; estado conservative 'abierta'; capa_metricas RESULT → NULL.
+-- ── tenant.Conexion_Semanal: 13 semanas/restaurante. conexão real = conectadas/prometidas.
+--    horas_conectadas = prometidas × propensão-conexão × ruído-semanal, capado em prometidas. ──
+insert into tenant."Conexion_Semanal"(restaurante_id, semana, horas_conectadas, horas_prometidas)
+select r.restaurante_id,
+       (date_trunc('week', date '2026-06-17')::date - (w * 7)),
+       least(r.hp,
+             round(r.hp
+                   * (public.det_int(r.restaurante_id, 52, 101)::numeric / 100)            -- propensão conexão
+                   * ((70 + public.det_int(r.restaurante_id || ':' || w, 61, 31))::numeric / 100), -- ruído 0.70..1.00
+                   2)),
+       r.hp
+from (select restaurante_id, horas_prometidas_semana as hp from tenant."Restaurante") r
+cross join generate_series(0, 12) w;
+
+-- ── tenant.Conversa_Episodio: tickets for ~35% of restaurantes (7 intents v2). capa_metricas RESULT→NULL. ──
 insert into tenant."Conversa_Episodio"(episodio_id, conversa_id, tenant_id, restaurante_id, intent, capa_transcripcion)
 select r.restaurante_id || ':C' || c,
        r.restaurante_id || ':conv' || c,
        r.tenant_id,
        r.restaurante_id,
-       (array['cobranca','entrega','calidad','promo'])[1 + public.det_int(r.restaurante_id || ':' || c, 41, 4)],
+       (array['cobranca','entrega','calidad','promo','menu','revision_orden','cancelamento'])[1 + public.det_int(r.restaurante_id || ':' || c, 41, 7)],
        jsonb_build_object('raw', 'redacted transcript ' || c)
 from tenant."Restaurante" r
 cross join lateral generate_series(1, 1 + public.det_int(r.restaurante_id, 42, 5)) c

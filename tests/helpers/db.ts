@@ -25,7 +25,7 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
       cohort."Subgrupo", cohort."Cohort",
       gov."ROI_Operador", gov."min_calculo",
       tenant."Afetado", tenant."Problema_Diagnosticado", tenant."Knowledge_Case",
-      tenant."Evento_Uso", tenant."Conversa_Episodio", tenant."KPI",
+      tenant."Evento_Uso", tenant."Conexion_Semanal", tenant."Conversa_Episodio", tenant."KPI",
       tenant."Orden", tenant."Restaurante",
       gov."Usuario",
       catalog."Named_Query", catalog."Intent_Catalog",
