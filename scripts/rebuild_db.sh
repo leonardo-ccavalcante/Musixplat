@@ -11,7 +11,7 @@ until docker exec "$C" pg_isready -U postgres >/dev/null 2>&1; do sleep 2; done
 start=$SECONDS
 {
   cat scripts/db_reset_preamble.sql
-  cat supabase/migrations/20260617*.sql
+  cat supabase/migrations/*.sql
   cat supabase/seed.sql
 } | docker exec -i "$C" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q
 echo "REBUILD+SEED ok in $((SECONDS - start))s"
