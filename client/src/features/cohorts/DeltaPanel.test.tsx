@@ -5,11 +5,11 @@ import type { DeltaRow } from "@shared/contracts";
 
 const row = (id: string, delta: DeltaRow["delta_status"], gap: number): DeltaRow => ({
   evento_id: id,
-  restaurante_id: id,
+  restaurant_id: id,
   cohort_id: "c1",
   delta_status: delta,
-  percentil_en_cohort: 50,
-  gap_hasta_top: gap,
+  percentile_in_cohort: 50,
+  gap_to_top: gap,
 });
 
 describe("F-2.3 DeltaPanel", () => {
@@ -17,9 +17,9 @@ describe("F-2.3 DeltaPanel", () => {
     render(
       <DeltaPanel
         rows={[
-          row("R-up", "melhorou_percentil", 1),
+          row("R-up", "melhorou_percentile", 1),
           row("R-risk1", "at_risk", 5),
-          row("R-down", "baixou_percentil", 9),
+          row("R-down", "baixou_percentile", 9),
           row("R-risk2", "at_risk", 20),
         ]}
       />,
@@ -37,7 +37,7 @@ describe("F-2.3 DeltaPanel", () => {
   });
 
   it("passes NULL through as — (never a fabricated number)", () => {
-    render(<DeltaPanel rows={[{ ...row("R1", "novo", 0), percentil_en_cohort: null, gap_hasta_top: null }]} />);
+    render(<DeltaPanel rows={[{ ...row("R1", "new", 0), percentile_in_cohort: null, gap_to_top: null }]} />);
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -8,12 +8,12 @@
 // Output: 8-char lowercase hex string (e.g. "a3f2b1c0").
 //
 // Fail-closed rule (§3.7 / CLAUDE.md §3): missing/empty required field ⇒ {idempotency_key:null}.
-// pedido contents intentionally excluded from the key — only (conversaId, nbaId, policyVersion)
+// pedido contents intentionally excluded from the key — only (conversationId, nbaId, policyVersion)
 // determine de-dup identity; re-delivering the same logical request with updated pedido still
 // deduplicates correctly at the P2 handoff.
 
 export interface ExecRequestInput {
-  conversaId: string;
+  conversationId: string;
   nbaId: string;
   policyVersion: string;
   pedido: Record<string, unknown>;
@@ -38,7 +38,7 @@ function fnv1a32(s: string): string {
 /**
  * Assemble the execution-request object for handoff to P2.
  *
- * Determinism guarantee: same {conversaId, nbaId, policyVersion} ⇒ same idempotency_key,
+ * Determinism guarantee: same {conversationId, nbaId, policyVersion} ⇒ same idempotency_key,
  * regardless of pedido contents or call order. Any required field absent or empty ⇒
  * {idempotency_key: null, pedido_ejecucion: {}} (fail-closed; caller must not dispatch).
  */
@@ -47,13 +47,13 @@ export function buildExecRequest(i: ExecRequestInput | null | undefined): ExecRe
 
   if (!i) return NULL_RESULT;
 
-  const { conversaId, nbaId, policyVersion, pedido } = i;
+  const { conversationId, nbaId, policyVersion, pedido } = i;
 
   // Fail-closed: all three key fields must be non-empty strings.
-  if (!conversaId || !nbaId || !policyVersion) return NULL_RESULT;
+  if (!conversationId || !nbaId || !policyVersion) return NULL_RESULT;
 
   // Canonical delimiter chosen to be outside normal UUID/semver char set.
-  const canonical = `${conversaId}|${nbaId}|${policyVersion}`;
+  const canonical = `${conversationId}|${nbaId}|${policyVersion}`;
   const idempotency_key = fnv1a32(canonical);
 
   // Seal policy_version into the execution request so downstream can never mix versions.

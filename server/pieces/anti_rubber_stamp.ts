@@ -1,6 +1,6 @@
 // Piece 05A:A.7.4b — anti-rubber-stamp: 4-eyes independence + rejection->0 alarm. Pure, fail-closed.
 // Invariants: 4-eyes independence (04 §3.3); rubber-stamp alarm (rejection→0); threshold-by-name
-// (`pisoRejection` supplied by caller from Config_Perillas — never a literal, §3.8);
+// (`pisoRejection` supplied by caller from Config_Knobs — never a literal, §3.8);
 // fail-closed (§3.7); deterministic (§2/§14). No LLM.
 
 export interface ApprovalEvent {
@@ -21,7 +21,7 @@ const FAIL_CLOSED: RubberStampResult = { valid: false, alarm: false, reason: "fa
  * Validate a governance approval for 4-eyes independence and rubber-stamp risk.
  *
  * `pisoRejection` is the minimum acceptable rejection-rate for a confirmer, read by
- * NAME from Config_Perillas by the caller. This function never embeds a literal.
+ * NAME from Config_Knobs by the caller. This function never embeds a literal.
  *
  * [ASSUMPTION] rejectionRate === pisoRejection triggers alarm (≤ piso ⇒ rubber_stamp).
  * A rate exactly at the floor is indistinguishable from collapse; strict '>' is the safe

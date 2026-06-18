@@ -1,8 +1,8 @@
 // Piece 05A:A.4.7 — Compute prioridad_cola from a demand-spike signal.
-// CRITICAL: NEVER touches autonomy tier / nivel_efectivo — priority and tier are isolated concerns.
+// CRITICAL: NEVER touches autonomy tier / level_efectivo — priority and tier are isolated concerns.
 // Fail-closed: missing or garbage input ⇒ 'NORMAL' (non-disruptive conservative default, §3.7).
 // Threshold (`umbral`) is always supplied by the caller, which reads it by-name from
-// Config_Perillas; this function embeds no literal threshold (CLAUDE.md §3.8).
+// Config_Knobs; this function embeds no literal threshold (CLAUDE.md §3.8).
 // Deterministic, no LLM. (04 §3)
 
 export interface SpikeSignal {
@@ -11,16 +11,16 @@ export interface SpikeSignal {
 }
 
 export interface QueuePriority {
-  prioridad_cola: "ALTA" | "NORMAL";
+  prioridad_cola: "HIGH" | "NORMAL";
 }
 
 /**
  * Returns queue priority from a spike signal.
- * - Boolean path: spike:true ⇒ ALTA; spike:false ⇒ NORMAL.
- * - Numeric path: intensidad >= umbral ⇒ ALTA (umbral MUST be a finite positive number;
+ * - Boolean path: spike:true ⇒ HIGH; spike:false ⇒ NORMAL.
+ * - Numeric path: intensidad >= umbral ⇒ HIGH (umbral MUST be a finite positive number;
  *   if absent or invalid, falls through to NORMAL — fail-closed).
  * - Any missing / garbage input ⇒ NORMAL (fail-closed).
- * Output: { prioridad_cola } ONLY — no nivel/tier fields, ever.
+ * Output: { prioridad_cola } ONLY — no level/tier fields, ever.
  */
 export function queuePriority(
   signal: SpikeSignal | null | undefined,
@@ -31,7 +31,7 @@ export function queuePriority(
 
   // Boolean spike takes precedence when explicitly provided.
   if (typeof signal.spike === "boolean") {
-    return { prioridad_cola: signal.spike ? "ALTA" : "NORMAL" };
+    return { prioridad_cola: signal.spike ? "HIGH" : "NORMAL" };
   }
 
   // Numeric intensity path — capture the narrowed values so TS proves them non-null
@@ -44,7 +44,7 @@ export function queuePriority(
       : null;
 
   if (umbralNum !== null && intensidadNum !== null) {
-    return { prioridad_cola: intensidadNum >= umbralNum ? "ALTA" : "NORMAL" };
+    return { prioridad_cola: intensidadNum >= umbralNum ? "HIGH" : "NORMAL" };
   }
 
   // Fallthrough: no usable signal ⇒ conservative default (fail-closed).

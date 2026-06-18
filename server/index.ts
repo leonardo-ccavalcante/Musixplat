@@ -13,20 +13,20 @@ app.use(express.json());
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
-// Dev login: mints a server-signed session cookie for a real Usuario row (tenant_id from DB,
+// Dev login: mints a server-signed session cookie for a real User row (tenant_id from DB,
 // never from the client). Stands in for Manus OAuth locally. Disabled in production.
 app.post("/auth/dev-login", async (req, res) => {
   if (env.NODE_ENV === "production") return res.status(404).end();
-  const usuarioId = String(req.body?.usuario_id ?? "");
-  const rows = await query<{ usuario_id: string; tenant_id: string; nivel_org: string }>(
-    `select usuario_id, tenant_id, nivel_org from gov."Usuario" where usuario_id = $1`,
+  const usuarioId = String(req.body?.user_id ?? "");
+  const rows = await query<{ user_id: string; tenant_id: string; org_level: string }>(
+    `select user_id, tenant_id, org_level from gov."User" where user_id = $1`,
     [usuarioId],
   );
   const u = rows[0];
-  if (!u) return res.status(401).json({ error: "unknown usuario_id" });
-  const token = signSession({ usuario_id: u.usuario_id, tenant_id: u.tenant_id, nivel_org: u.nivel_org });
+  if (!u) return res.status(401).json({ error: "unknown user_id" });
+  const token = signSession({ user_id: u.user_id, tenant_id: u.tenant_id, org_level: u.org_level });
   res.setHeader("Set-Cookie", `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`);
-  res.json({ ok: true, usuario_id: u.usuario_id });
+  res.json({ ok: true, user_id: u.user_id });
 });
 
 app.use(

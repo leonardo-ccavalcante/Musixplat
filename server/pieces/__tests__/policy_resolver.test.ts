@@ -10,8 +10,8 @@ const baseRow: PolicyRow = {
   policy_id: "p1",
   tier_id: "tier_gold",
   policy_version: "v2",
-  teto_tier: "ALTA",
-  permitido_hoy: { max_descuento: 30 },
+  teto_tier: "HIGH",
+  permitido_hoy: { max_discount: 30 },
 };
 
 describe("resolvePolicy — 05A:A.2.3", () => {
@@ -20,8 +20,8 @@ describe("resolvePolicy — 05A:A.2.3", () => {
     expect(result.sealed).toBe(true);
     expect(result.reason).toBe("ok");
     expect(result.policy_version).toBe("v2");
-    expect(result.tetoTier).toBe("ALTA");
-    expect(result.permitidoHoy).toEqual({ max_descuento: 30 });
+    expect(result.tetoTier).toBe("HIGH");
+    expect(result.permitidoHoy).toEqual({ max_discount: 30 });
   });
 
   it("candidates exist but ALL stale version ⇒ sealed=false, reason=stale", () => {

@@ -13,6 +13,6 @@ export function createContext({ req }: trpcExpress.CreateExpressContextOptions):
   return {
     session,
     tenantId: session?.tenant_id ?? null,
-    userId: session?.usuario_id ?? null,
+    userId: session?.user_id ?? null,
   };
 }

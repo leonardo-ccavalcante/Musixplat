@@ -6,7 +6,7 @@ const cell = (status: CohortCell["status"], id = status): CohortCell => ({
   cohort_id: id,
   tenure_bucket: "0-3m",
   tier_base: "long_tail",
-  n_cuentas: 10,
+  n_accounts: 10,
   status,
 });
 

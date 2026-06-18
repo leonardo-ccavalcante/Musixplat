@@ -5,8 +5,8 @@ import { runP01 } from "../../server/jobs/p01";
 import { appRouter } from "../../server/routers/_app";
 import type { Context } from "../../server/_core/context";
 
-// F-5.2 — handoff via the tRPC caller: server-side tenant, exactly-one event, Evento_Uso append,
-// idempotency, cross-pool block. Payload round-trips against 02:1A {cohort_id, restaurante_id}.
+// F-5.2 — handoff via the tRPC caller: server-side tenant, exactly-one event, Usage_Event append,
+// idempotency, cross-pool block. Payload round-trips against 02:1A {cohort_id, restaurant_id}.
 
 const W1 = "2026-05-25";
 const REF = "2026-06-17";
@@ -16,7 +16,7 @@ let cohortId: string;
 
 function caller(tenantId: string, userId: string) {
   const ctx: Context = {
-    session: { usuario_id: userId, tenant_id: tenantId, nivel_org: "equipo" },
+    session: { user_id: userId, tenant_id: tenantId, org_level: "team" },
     tenantId,
     userId,
   };
@@ -26,10 +26,10 @@ function caller(tenantId: string, userId: string) {
 beforeAll(async () => {
   pool = makePool();
   await resetDb(pool);
-  await runP01({ semana: W1, refDate: REF });
+  await runP01({ week: W1, refDate: REF });
   const r = await rows<{ cohort_id: string }>(
     pool,
-    `select cohort_id from cohort."Pertenencia_Cohort_Snapshot" where restaurante_id='R001' and semana=$1`,
+    `select cohort_id from cohort."Cohort_Membership_Snapshot" where restaurant_id='R001' and week=$1`,
     [W1],
   );
   cohortId = r[0]!.cohort_id;
@@ -40,37 +40,37 @@ afterAll(async () => {
 });
 
 describe("F-5.2 handoff", () => {
-  it("emits exactly one Evento_Priorizado_NBA + appends Evento_Uso (tenant server-side)", async () => {
+  it("emits exactly one Prioritized_NBA_Event + appends Usage_Event (tenant server-side)", async () => {
     const ev = await caller("POOL-001", "U-OP-001").handoff.confirm({
-      restaurante_id: "R001",
+      restaurant_id: "R001",
       cohort_id: cohortId,
-      semana: W1,
+      week: W1,
     });
-    expect(ev?.operador_id).toBe("U-OP-001");
+    expect(ev?.operator_id).toBe("U-OP-001");
     // payload round-trip vs 02:1A: both keys present
     expect(ev?.cohort_id).toBe(cohortId);
-    expect(ev?.restaurante_id).toBe("R001");
+    expect(ev?.restaurant_id).toBe("R001");
 
     expect(
-      await count(pool, `cohort."Evento_Priorizado_NBA" where restaurante_id='R001' and semana='${W1}'`),
+      await count(pool, `cohort."Prioritized_NBA_Event" where restaurant_id='R001' and week='${W1}'`),
     ).toBe(1);
     expect(
-      await count(pool, `tenant."Evento_Uso" where restaurante_id='R001' and tipo_evento='handoff'`),
+      await count(pool, `tenant."Usage_Event" where restaurant_id='R001' and event_type='handoff'`),
     ).toBe(1);
   });
 
   it("is idempotent on double-click — still exactly one event", async () => {
-    await caller("POOL-001", "U-OP-001").handoff.confirm({ restaurante_id: "R001", cohort_id: cohortId, semana: W1 });
-    await caller("POOL-001", "U-OP-001").handoff.confirm({ restaurante_id: "R001", cohort_id: cohortId, semana: W1 });
+    await caller("POOL-001", "U-OP-001").handoff.confirm({ restaurant_id: "R001", cohort_id: cohortId, week: W1 });
+    await caller("POOL-001", "U-OP-001").handoff.confirm({ restaurant_id: "R001", cohort_id: cohortId, week: W1 });
     expect(
-      await count(pool, `cohort."Evento_Priorizado_NBA" where restaurante_id='R001' and semana='${W1}'`),
+      await count(pool, `cohort."Prioritized_NBA_Event" where restaurant_id='R001' and week='${W1}'`),
     ).toBe(1);
   });
 
   it("blocks cross-pool handoff (FORBIDDEN) + writes a security log", async () => {
     const before = await count(pool, `gov."Security_Log" where kind='cross_pool'`);
     await expect(
-      caller("POOL-002", "U-OP-002").handoff.confirm({ restaurante_id: "R001", cohort_id: cohortId, semana: W1 }),
+      caller("POOL-002", "U-OP-002").handoff.confirm({ restaurant_id: "R001", cohort_id: cohortId, week: W1 }),
     ).rejects.toThrow(/cross-pool/);
     expect(await count(pool, `gov."Security_Log" where kind='cross_pool'`)).toBe(before + 1);
   });
@@ -78,7 +78,7 @@ describe("F-5.2 handoff", () => {
   it("rejects with no session (fail-closed tenant guard)", async () => {
     const anon = appRouter.createCaller({ session: null, tenantId: null, userId: null });
     await expect(
-      anon.handoff.confirm({ restaurante_id: "R001", cohort_id: cohortId, semana: W1 }),
+      anon.handoff.confirm({ restaurant_id: "R001", cohort_id: cohortId, week: W1 }),
     ).rejects.toThrow();
   });
 });

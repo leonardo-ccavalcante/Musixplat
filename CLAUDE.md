@@ -6,7 +6,7 @@ AI-first Customer-Ops platform (Uber Eats domain). This file is the **single sou
 
 - **Default comms mode = `/caveman`** (ultra-compressed; drop filler, keep full technical accuracy). Applies to agent chatter, commits, PR bodies — never to code, tests, or this file.
 - Anti-bloat rule (applies to edits of this file): for each line ask *"if I remove it, will the agent make a mistake?"* — if no, cut it. Bloated guides get ignored.
-- Domain vocab is native, never translated: `Restaurante`, `Orden`, `Evento_Uso`, `Cohort`.
+- **Code & data are ENGLISH** (identifiers, columns, enum values, UI strings, seed data). Flipped 2026-06-18 per Leo. The Spanish source specs (`04 §`) are the *conceptual* reference; translate their domain terms to English in code: `Restaurante`→`Restaurant`, `Orden`→`Order`, `Evento_Uso`→`Usage_Event`, `Config_Perillas`→`Config_Knobs`, `zona`→`zone`, `tipo_comida`→`cuisine`, `status_pago`→`payment_status`, etc. Canonical glossary = `scripts/rename_to_english.py`.
 - Section `04 §N` means `specs/spec_ready/04_arquitectura_de_datos.md` section N. The data model there is authoritative; this file does not restate it, it points to it.
 
 ## §1 — Stack & repo map · resolves every `[STACK-TUNE]`
@@ -65,7 +65,7 @@ The heart. Every piece obeys these; each maps to a test.
 7. **Fail-closed (mother rule, §7).** Any failure / missing input degrades to conservative state or to human — never to an optimistic default.
 8. **Config_Perillas by NAME (§3.4).** Every threshold read by name: `k_anon_threshold`, `n_min_threshold`, tenure-bucket borders, `D`, `TTL_baseline`, `umbral_antifrac`, `retencion_PII`, `costo_por_respuesta`. Never a hard-coded literal.
 9. **Phantom denylist (§4).** Do NOT `CREATE TABLE` for `UPSIDE`, `MOVIMIENTO_LOG`, `TRANSICION_DE_COHORT`, `SIMULACION`, `PERFIL_COHORT`, `PerformanceFeed`, etc. They are views / jsonb / derived fields / sandbox.
-10. **Provenance per field; `nivel_autonomia` is an ordered ENUM** (`'BAJA','MEDIA','ALTA'`, never varchar — alphabetical breaks `least()`). No provenance ⇒ no render/export.
+10. **Provenance per field; `autonomy_level` is an ordered ENUM** (`'LOW','MEDIUM','HIGH'`, never varchar — declaration order, not alphabetical, drives `least()` fail-closed to LOW). No provenance ⇒ no render/export.
 
 ## §4 — Quality per unit (Block D)
 

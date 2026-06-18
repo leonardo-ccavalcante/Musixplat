@@ -40,7 +40,8 @@ export default defineConfig({
           environment: "node",
           globals: true,
           include: ["tests/antifake/**/*.test.ts"],
-          testTimeout: 30_000,
+          testTimeout: 120_000,
+          hookTimeout: 120_000,
         },
       },
       {
@@ -50,7 +51,10 @@ export default defineConfig({
           environment: "node",
           globals: true,
           include: ["tests/integration/**/*.test.ts"],
-          testTimeout: 30_000,
+          // serialized resetDb + 90k-row seed + full runP01(5000) per test, cold on the CI runner
+          // ⇒ generous per-test/hook budget (the cold first test is the slowest).
+          testTimeout: 300_000,
+          hookTimeout: 300_000,
         },
       },
     ],

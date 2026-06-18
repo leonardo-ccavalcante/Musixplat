@@ -24,7 +24,7 @@ describe("lazyFetchPath — 05B:US-B2.3.1 (deterministic, fail-closed, single-so
     const tree = makeTree();
     const active = lazyFetchPath(tree, 2);
 
-    expect(active.fonte_consultada).toBe("tenant.Evento_Uso"); // producto hypothesis
+    expect(active.fonte_consultada).toBe("tenant.Usage_Event"); // producto hypothesis
     // every OTHER path in the original tree is untouched.
     for (const p of tree.paths) {
       expect(p.fonte_consultada).toBeNull();
@@ -37,12 +37,12 @@ describe("lazyFetchPath — 05B:US-B2.3.1 (deterministic, fail-closed, single-so
     expect(tree.paths.find((p) => p.path_id === 1)?.fonte_consultada).toBeNull();
   });
 
-  it("maps a finanzas hypothesis to tenant.Orden", () => {
-    expect(lazyFetchPath(makeTree(), 1).fonte_consultada).toBe("tenant.Orden");
+  it("maps a finanzas hypothesis to tenant.Order", () => {
+    expect(lazyFetchPath(makeTree(), 1).fonte_consultada).toBe("tenant.Order");
   });
 
-  it("defaults an un-typed hypothesis to tenant.Conversa_Episodio", () => {
-    expect(lazyFetchPath(makeTree(), 3).fonte_consultada).toBe("tenant.Conversa_Episodio");
+  it("defaults an un-typed hypothesis to tenant.Conversation_Episode", () => {
+    expect(lazyFetchPath(makeTree(), 3).fonte_consultada).toBe("tenant.Conversation_Episode");
   });
 
   it("throws on an unknown path_id (fail-closed, never fetch a fabricated path)", () => {
@@ -51,10 +51,10 @@ describe("lazyFetchPath — 05B:US-B2.3.1 (deterministic, fail-closed, single-so
 });
 
 describe("resolveFonte — deterministic hypothesis→source map (BR-B2)", () => {
-  it("finanzas → Orden, producto → Evento_Uso, default → Conversa_Episodio", () => {
-    expect(resolveFonte("pago no procesado")).toBe("tenant.Orden");
-    expect(resolveFonte("feature sin uso")).toBe("tenant.Evento_Uso");
-    expect(resolveFonte("algo ambiguo")).toBe("tenant.Conversa_Episodio");
+  it("finanzas → Order, producto → Usage_Event, default → Conversation_Episode", () => {
+    expect(resolveFonte("pago no procesado")).toBe("tenant.Order");
+    expect(resolveFonte("feature sin uso")).toBe("tenant.Usage_Event");
+    expect(resolveFonte("algo ambiguo")).toBe("tenant.Conversation_Episode");
   });
 });
 

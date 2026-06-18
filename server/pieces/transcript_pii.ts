@@ -10,7 +10,7 @@ export interface TranscriptPIIResult {
   retainUntilDays: number | null;
 }
 
-/** Validate the caller-supplied retention window (read by-name from Config_Perillas). */
+/** Validate the caller-supplied retention window (read by-name from Config_Knobs). */
 function validRetention(days: number): number | null {
   if (!Number.isFinite(days) || days <= 0) return null;
   return days;

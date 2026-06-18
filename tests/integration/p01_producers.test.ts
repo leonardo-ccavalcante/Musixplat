@@ -30,41 +30,41 @@ async function inTx(fn: (c: pg.PoolClient) => Promise<void>): Promise<void> {
 }
 
 describe("F-1.1 assignment + F-1.2 ranking", () => {
-  it("links every active restaurante, stamps version, computes tenure/percentil from brutos", async () => {
+  it("links every active restaurant, stamps version, computes tenure/percentile from brutos", async () => {
     await resetDb(pool);
     // pre-run: results NULL (anti-fake within the flow)
-    expect(await count(pool, 'cohort."Pertenencia_Cohort_Snapshot"')).toBe(0);
-    await runP01({ semana: W1, refDate: REF });
+    expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(0);
+    await runP01({ week: W1, refDate: REF });
 
-    expect(await count(pool, 'tenant."Restaurante" where tenure_actual is null')).toBe(0);
-    expect(await count(pool, 'cohort."Pertenencia_Cohort_Snapshot"')).toBe(100);
+    expect(await count(pool, 'tenant."Restaurant" where tenure_months is null')).toBe(0);
+    expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(5000);
     // every membership stamped with the vigente version
     expect(
-      await count(pool, `cohort."Pertenencia_Cohort_Snapshot" where cohort_rule_version <> 'v1'`),
+      await count(pool, `cohort."Cohort_Membership_Snapshot" where cohort_rule_version <> 'v1'`),
     ).toBe(0);
-    // percentil computed (non-null) for accounts in viable cells
+    // percentile computed (non-null) for accounts in viable cells
     expect(
-      await count(pool, "cohort.\"Pertenencia_Cohort_Snapshot\" where percentil_en_cohort is not null"),
+      await count(pool, "cohort.\"Cohort_Membership_Snapshot\" where percentile_in_cohort is not null"),
     ).toBeGreaterThan(0);
-    // n_cuentas computed per cell
-    expect(await count(pool, 'cohort."Cohort" where n_cuentas is not null')).toBeGreaterThan(0);
+    // n_accounts computed per cell
+    expect(await count(pool, 'cohort."Cohort" where n_accounts is not null')).toBeGreaterThan(0);
   });
 
-  it("is deterministic — two fresh runs give identical percentil/gap", async () => {
+  it("is deterministic — two fresh runs give identical percentile/gap", async () => {
     await resetDb(pool);
-    await runP01({ semana: W1, refDate: REF });
-    const a = await rows<{ restaurante_id: string; p: string; g: string }>(
+    await runP01({ week: W1, refDate: REF });
+    const a = await rows<{ restaurant_id: string; p: string; g: string }>(
       pool,
-      `select restaurante_id, coalesce(percentil_en_cohort::text,'-') p, coalesce(gap_hasta_top::text,'-') g
-       from cohort."Pertenencia_Cohort_Snapshot" where semana = $1 order by restaurante_id`,
+      `select restaurant_id, coalesce(percentile_in_cohort::text,'-') p, coalesce(gap_to_top::text,'-') g
+       from cohort."Cohort_Membership_Snapshot" where week = $1 order by restaurant_id`,
       [W1],
     );
     await resetDb(pool);
-    await runP01({ semana: W1, refDate: REF });
-    const b = await rows<{ restaurante_id: string; p: string; g: string }>(
+    await runP01({ week: W1, refDate: REF });
+    const b = await rows<{ restaurant_id: string; p: string; g: string }>(
       pool,
-      `select restaurante_id, coalesce(percentil_en_cohort::text,'-') p, coalesce(gap_hasta_top::text,'-') g
-       from cohort."Pertenencia_Cohort_Snapshot" where semana = $1 order by restaurante_id`,
+      `select restaurant_id, coalesce(percentile_in_cohort::text,'-') p, coalesce(gap_to_top::text,'-') g
+       from cohort."Cohort_Membership_Snapshot" where week = $1 order by restaurant_id`,
       [W1],
     );
     expect(b).toEqual(a);
@@ -72,10 +72,10 @@ describe("F-1.1 assignment + F-1.2 ranking", () => {
 
   it("F-5.3 — re-running the same week does not duplicate (UNIQUE)", async () => {
     await resetDb(pool);
-    await runP01({ semana: W1, refDate: REF });
-    const before = await count(pool, `cohort."Pertenencia_Cohort_Snapshot" where semana = '${W1}'`);
-    await runP01({ semana: W1, refDate: REF });
-    const after = await count(pool, `cohort."Pertenencia_Cohort_Snapshot" where semana = '${W1}'`);
+    await runP01({ week: W1, refDate: REF });
+    const before = await count(pool, `cohort."Cohort_Membership_Snapshot" where week = '${W1}'`);
+    await runP01({ week: W1, refDate: REF });
+    const after = await count(pool, `cohort."Cohort_Membership_Snapshot" where week = '${W1}'`);
     expect(after).toBe(before);
   });
 });
@@ -90,15 +90,15 @@ describe("F-1.3 n_min gate (significance) — boundary, SEPARATE fixture from k-
     ] as const) {
       await inTx(async (c) => {
         await c.query(
-          `insert into cohort."Cohort"(cohort_id, tenure_bucket, tier_base, cohort_rule_version, n_cuentas)
+          `insert into cohort."Cohort"(cohort_id, tenure_bucket, tier_base, cohort_rule_version, n_accounts)
            values ('t_nmin','0-3m','long_tail','v1',$1)`,
           [n],
         );
         await c.query("select cohort.fn_gate_n_min($1)", [W1]);
-        const r = await c.query<{ colapsada: boolean }>(
-          `select colapsada from cohort."Cohort" where cohort_id='t_nmin'`,
+        const r = await c.query<{ collapsed: boolean }>(
+          `select collapsed from cohort."Cohort" where cohort_id='t_nmin'`,
         );
-        expect(r.rows[0]?.colapsada).toBe(expected);
+        expect(r.rows[0]?.collapsed).toBe(expected);
       });
     }
   });
@@ -114,13 +114,13 @@ describe("F-1.3b k-anon gate (re-identification) — boundary, SEPARATE fixture 
     ] as const) {
       await inTx(async (c) => {
         await c.query(
-          `insert into cohort."Cohort"(cohort_id, tenure_bucket, tier_base, cohort_rule_version, n_cuentas)
+          `insert into cohort."Cohort"(cohort_id, tenure_bucket, tier_base, cohort_rule_version, n_accounts)
            values ('t_kanon','0-3m','long_tail','v1',$1)`,
           [n],
         );
         await c.query("select cohort.fn_gate_k_anon()");
         const r = await c.query<{ s: boolean }>(
-          `select supresion_k_aplicada s from cohort."Cohort" where cohort_id='t_kanon'`,
+          `select k_suppression_applied s from cohort."Cohort" where cohort_id='t_kanon'`,
         );
         expect(r.rows[0]?.s).toBe(expected);
       });
@@ -133,7 +133,7 @@ describe("F-1.3b k-anon gate (re-identification) — boundary, SEPARATE fixture 
       );
       await c.query("select cohort.fn_gate_k_anon()");
       const r = await c.query<{ s: boolean }>(
-        `select supresion_k_aplicada s from cohort."Cohort" where cohort_id='t_kanon_null'`,
+        `select k_suppression_applied s from cohort."Cohort" where cohort_id='t_kanon_null'`,
       );
       expect(r.rows[0]?.s).toBe(true);
     });
@@ -143,19 +143,19 @@ describe("F-1.3b k-anon gate (re-identification) — boundary, SEPARATE fixture 
 describe("F-2.2 diff + F-4.3 anti-mezcla", () => {
   it("produces delta_status from the allowed enum across two weeks (same version only)", async () => {
     await resetDb(pool);
-    await runP01({ semana: W1, refDate: REF });
-    await runP01({ semana: W2, refDate: REF, prevSemana: W1 });
-    const events = await count(pool, `cohort."Evento_Priorizado_NBA" where semana='${W2}'`);
+    await runP01({ week: W1, refDate: REF });
+    await runP01({ week: W2, refDate: REF, prevSemana: W1 });
+    const events = await count(pool, `cohort."Prioritized_NBA_Event" where week='${W2}'`);
     expect(events).toBeGreaterThan(0);
     // every event carries a valid delta_status and the vigente version
     expect(
       await count(
         pool,
-        `cohort."Evento_Priorizado_NBA" where semana='${W2}' and (delta_status is null or cohort_rule_version<>'v1')`,
+        `cohort."Prioritized_NBA_Event" where week='${W2}' and (delta_status is null or cohort_rule_version<>'v1')`,
       ),
     ).toBe(0);
-    // F-2.6 movement log appended (append-only Evento_Uso)
-    expect(await count(pool, `tenant."Evento_Uso" where tipo_evento='movimiento'`)).toBeGreaterThan(0);
+    // F-2.6 movement log appended (append-only Usage_Event)
+    expect(await count(pool, `tenant."Usage_Event" where event_type='movement'`)).toBeGreaterThan(0);
   });
 
   it("F-4.3 guard: same version passes, mixed versions raise (fail-closed)", async () => {

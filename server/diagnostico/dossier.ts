@@ -15,7 +15,7 @@ export interface DossierGateResult {
 // The 11 derived dossier fields exposed by tenant.v_dossier_handoff (04 §3.4, §4).
 const FIELDS = [
   "f1_tipo_raiz", "f2_evidencia", "f3_quien", "f4_onde_concentra", "f5_cuanto",
-  "f6_recurrencia", "f7_casos_similares", "f8_hipotese_auditable", "f9_ruta_sugerida",
+  "f6_recurrence", "f7_casos_similares", "f8_hipotese_auditable", "f9_ruta_sugerida",
   "f10_dados_crudos", "f11_provenance",
 ] as const;
 type Field = (typeof FIELDS)[number];
@@ -65,10 +65,10 @@ export async function emitDossier(problemaId: string): Promise<DossierGateResult
 
   const dossier = Object.fromEntries(FIELDS.map((f) => [f, row[f]])) as Record<string, unknown>;
   // EC-B6 / BR-B7 — scan the dossier's PII surface; residual PII ⇒ 'pii' gap (fail-closed).
-  // f6_recurrencia is excluded: it holds only counts + system timestamps (no user PII), and an
+  // f6_recurrence is excluded: it holds only counts + system timestamps (no user PII), and an
   // ISO date's YYYYMMDD always survives the residual-digit net (guards.ts), so scanning it would
   // self-block every complete dossier — defeating BR-B17/B18 (gate INCOMPLETE work, not complete).
-  const piiSurface = Object.fromEntries(FIELDS.filter((f) => f !== "f6_recurrencia").map((f) => [f, row[f]]));
+  const piiSurface = Object.fromEntries(FIELDS.filter((f) => f !== "f6_recurrence").map((f) => [f, row[f]]));
   if (scanBorderPII(JSON.stringify(piiSurface)).blocked) gaps.push("pii");
 
   // BR-B17/B18 — emit only a complete, provenanced, PII-safe dossier; otherwise hand off nothing.

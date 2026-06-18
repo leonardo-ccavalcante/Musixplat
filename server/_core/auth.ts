@@ -4,9 +4,9 @@ import { env } from "./env.js";
 // Session payload. tenant_id (pool) is the RLS frontier — it is minted server-side into the
 // signed cookie and NEVER read from a request body (anti-spoofing, 04 §7 / CLAUDE.md §3.4).
 export interface Session {
-  usuario_id: string;
+  user_id: string;
   tenant_id: string;
-  nivel_org: string;
+  org_level: string;
 }
 
 const COOKIE = "mxm_session";

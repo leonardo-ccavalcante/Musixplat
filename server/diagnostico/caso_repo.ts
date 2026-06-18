@@ -1,6 +1,6 @@
 // EPIC-B6 repositorio (CRUD determinista, no LLM). Piece:
 //   US-B6.2.1   — upsertCasoRepo: write/increment the replicable case (CASO_REPO jsonb on
-//                 Problema_Diagnosticado, §4 not a table) + frecuencia + ultima_vez_ts.
+//                 Diagnosed_Problem, §4 not a table) + frecuencia + ultima_vez_ts.
 // BR-B15: turns an inconstant case into a replicable one. PII redacted before persist (BR-B7).
 import { query } from "../db/pool.js";
 import { redactPII } from "../pieces/pii.js";
@@ -49,7 +49,7 @@ function redactCaso(caso: CasoRepoInput): CasoRepoInput {
 
 /**
  * US-B6.2.1 (04 §3 / §14, BR-B15, BR-B7) — persist a new replicable case or increment the
- * frecuencia of an existing one. caso_repo is a jsonb sub-object on Problema_Diagnosticado
+ * frecuencia of an existing one. caso_repo is a jsonb sub-object on Diagnosed_Problem
  * (§4: NOT a table). PII is redacted first (BR-B7); the write fails closed if residual PII
  * survives. The branch + the returned frecuencia come from a single atomic UPDATE so the
  * count is read from the DB (RETURNING), never recomputed in TS (§14: frecuencia is a
@@ -63,16 +63,16 @@ export async function upsertCasoRepo(
 ): Promise<CasoRepoResult> {
   const safe = redactCaso(caso);
   const rows = await query<{ frecuencia: number; created: boolean }>(
-    `update tenant."Problema_Diagnosticado" p
+    `update tenant."Diagnosed_Problem" p
         set caso_repo = $2::jsonb,
             frecuencia = case when p.caso_repo is null then p.frecuencia else p.frecuencia + 1 end,
             ultima_vez_ts = now()
-       from (select caso_repo as prev from tenant."Problema_Diagnosticado" where problema_id = $1) s
+       from (select caso_repo as prev from tenant."Diagnosed_Problem" where problema_id = $1) s
       where p.problema_id = $1
       returning p.frecuencia as frecuencia, (s.prev is null) as created`,
     [problemaId, JSON.stringify(safe)],
   );
   const row = rows[0];
-  if (!row) throw new Error(`US-B6.2.1: no Problema_Diagnosticado for ${problemaId}`);
+  if (!row) throw new Error(`US-B6.2.1: no Diagnosed_Problem for ${problemaId}`);
   return { frecuencia: row.frecuencia, created: row.created };
 }

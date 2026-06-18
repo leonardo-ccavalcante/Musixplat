@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { antiRubberStamp } from "../anti_rubber_stamp.js";
 
-// pisoRejection is read by-name from Config_Perillas by the caller; we supply it here.
+// pisoRejection is read by-name from Config_Knobs by the caller; we supply it here.
 const PISO = 0.05;
 
 describe("antiRubberStamp — 05A:A.7.4b (4-eyes independence + rejection→0 alarm, fail-closed §7)", () => {

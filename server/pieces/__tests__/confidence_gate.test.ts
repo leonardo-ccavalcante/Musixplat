@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { confidenceGate } from "../confidence_gate.js";
 
-// piso is supplied by the caller who reads 'piso_confianza' BY NAME from Config_Perillas.
+// piso is supplied by the caller who reads 'piso_confianza' BY NAME from Config_Knobs.
 // This test uses a concrete value to drive the gate; no literal is embedded in the impl.
 const PISO = 0.5;
 

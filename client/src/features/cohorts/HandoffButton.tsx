@@ -4,15 +4,15 @@ import { trpc } from "@/lib/trpc";
 // F-5.2 UI — handoff confirm. busy/disabled during the write (anti double-fire), aria-busy,
 // success/error states. tenant_id is resolved server-side; never sent from here.
 export function HandoffButton({
-  restaurante_id,
+  restaurant_id,
   cohort_id,
-  subgrupo_id,
-  semana,
+  subgroup_id,
+  week,
 }: {
-  restaurante_id: string;
+  restaurant_id: string;
   cohort_id: string;
-  subgrupo_id?: string | null;
-  semana: string;
+  subgroup_id?: string | null;
+  week: string;
 }) {
   const m = trpc.handoff.confirm.useMutation();
   return (
@@ -21,7 +21,7 @@ export function HandoffButton({
         variant="primary"
         disabled={m.isPending || m.isSuccess}
         aria-busy={m.isPending}
-        onClick={() => m.mutate({ restaurante_id, cohort_id, subgrupo_id: subgrupo_id ?? null, semana })}
+        onClick={() => m.mutate({ restaurant_id, cohort_id, subgroup_id: subgroup_id ?? null, week })}
       >
         {m.isPending ? "Enviando…" : m.isSuccess ? "Enviado ✓" : "Handoff a NBA"}
       </Button>

@@ -15,14 +15,14 @@ export interface IssueTree {
 }
 
 /** The three deterministic fontes a hypothesis can resolve to (single-source, BR-B2). */
-export type Fonte = "tenant.Orden" | "tenant.Evento_Uso" | "tenant.Conversa_Episodio";
+export type Fonte = "tenant.Order" | "tenant.Usage_Event" | "tenant.Conversation_Episode";
 
 // Hypothesis-type → fonte map. Keyed by a substring scanned in the hipotese text so the
 // resolution is deterministic and auditable (no LLM, no ranking). Order = priority: the
-// first matching family wins; anything unmatched falls back to the conversa source.
+// first matching family wins; anything unmatched falls back to the conversation source.
 const FONTE_BY_FAMILY: ReadonlyArray<readonly [RegExp, Fonte]> = [
-  [/financ|finanz|cobr|pago|reembols|saldo|orden/i, "tenant.Orden"],
-  [/produc|uso|feature|adop|evento_uso/i, "tenant.Evento_Uso"],
+  [/financ|finanz|cobr|pago|reembols|saldo|order/i, "tenant.Order"],
+  [/produc|uso|feature|adop|evento_uso/i, "tenant.Usage_Event"],
 ];
 
 /** US-B2.3.1 — resolve the single source for one hypothesis (deterministic, default conservative). */
@@ -30,7 +30,7 @@ export function resolveFonte(hipotese: string): Fonte {
   for (const [pattern, fonte] of FONTE_BY_FAMILY) {
     if (pattern.test(hipotese)) return fonte;
   }
-  return "tenant.Conversa_Episodio"; // default — never barre todas las fuentes (BR-B2).
+  return "tenant.Conversation_Episode"; // default — never barre todas las fuentes (BR-B2).
 }
 
 /**

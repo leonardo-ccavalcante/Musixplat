@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { hardGroundingGate } from "../grounding_gate.js";
 import type { GroundingChecks } from "../grounding.js";
 
-const TTL = 60_000; // supplied by caller (Config_Perillas TTL_baseline); never hardcoded in impl
+const TTL = 60_000; // supplied by caller (Config_Knobs TTL_baseline); never hardcoded in impl
 
 const validChecks: GroundingChecks = {
   freshnessMs: 1_000,
@@ -13,11 +13,11 @@ const validChecks: GroundingChecks = {
 };
 
 describe("hardGroundingGate — 05A:A.4.2", () => {
-  it("all checks pass ⇒ pass=true, eje=null, estado=verificado", () => {
+  it("all checks pass ⇒ pass=true, eje=null, status=verificado", () => {
     const result = hardGroundingGate(validChecks, TTL);
     expect(result.pass).toBe(true);
     expect(result.eje).toBeNull();
-    expect(result.estado).toBe("verificado");
+    expect(result.status).toBe("verificado");
   });
 
   it("stale freshness ⇒ pass=false, eje='grounding' (fail-closed)", () => {
@@ -78,9 +78,9 @@ describe("hardGroundingGate — 05A:A.4.2", () => {
     expect(r1).toEqual(r2);
   });
 
-  it("estado propagated from groundingGate (no_verificable on fail)", () => {
+  it("status propagated from groundingGate (no_verificable on fail)", () => {
     const checks: GroundingChecks = { ...validChecks, tenantMatches: false };
     const result = hardGroundingGate(checks, TTL);
-    expect(result.estado).toBe("no_verificable");
+    expect(result.status).toBe("no_verificable");
   });
 });

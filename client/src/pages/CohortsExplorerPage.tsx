@@ -27,7 +27,7 @@ export function CohortsExplorerPage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ usuario_id: "U-OP-001" }),
+          body: JSON.stringify({ user_id: "U-OP-001" }),
         });
         if (!r.ok) throw new Error(String(r.status));
         if (!cancelled) setReady(true);

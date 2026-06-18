@@ -3,7 +3,7 @@
 // this function SELECTS — it never invents a policy or emits a number. (04 §7)
 // Deterministic; no LLM; zero `any`.
 
-export type Nivel = "BAJA" | "MEDIA" | "ALTA";
+export type Nivel = "LOW" | "MEDIUM" | "HIGH";
 
 export interface PolicyRow {
   policy_id: string;

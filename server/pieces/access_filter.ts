@@ -1,7 +1,7 @@
 // Piece 05A:A.2.1 — hard access filter: pool match + k-anon (N>=k). Deny-by-default, fail-closed.
 // RLS single-pool: cross-pool ⇒ abort + reason='cross_pool' (caller must emit security log).
 // k-anon: output may only surface when cell count N >= k_anon_threshold (NOT n_min — separate gate).
-// k supplied by caller, read by-name from Config_Perillas (never a literal). (04 §7, CLAUDE.md §3.2/§3.4/§3.7/§3.8)
+// k supplied by caller, read by-name from Config_Knobs (never a literal). (04 §7, CLAUDE.md §3.2/§3.4/§3.7/§3.8)
 
 export interface AccessQuery {
   /** tenantMatches: resolved server-side — never from client body (anti-spoofing, §3.4) */
@@ -32,7 +32,7 @@ function isValidCount(v: unknown): v is number {
  *   4. tenantMatches===true AND n >= k ⇒ ok
  *
  * @param q   - AccessQuery with server-resolved tenantMatches and Named_Query count n
- * @param k   - k_anon_threshold, read by-name from Config_Perillas by the caller (§3.8)
+ * @param k   - k_anon_threshold, read by-name from Config_Knobs by the caller (§3.8)
  */
 export function accessFilter(
   q: AccessQuery | null | undefined,

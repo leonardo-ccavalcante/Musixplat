@@ -1,9 +1,9 @@
-// Piece 05A:A.4.1 — normalize the 3 min() arms; missing/invalid arm ⇒ BAJA (most conservative).
-// Feeds A.4.6's least() motor (gov.compute_nivel_efectivo) — does NOT compute min, only sanitizes.
-// Fail-closed (CLAUDE.md §3.7): null | undefined | non-enum string ⇒ BAJA.
+// Piece 05A:A.4.1 — normalize the 3 min() arms; missing/invalid arm ⇒ LOW (most conservative).
+// Feeds A.4.6's least() motor (gov.compute_level_efectivo) — does NOT compute min, only sanitizes.
+// Fail-closed (CLAUDE.md §3.7): null | undefined | non-enum string ⇒ LOW.
 // Deterministic, no LLM, no I/O. (04 §7)
 
-export type Nivel = "BAJA" | "MEDIA" | "ALTA";
+export type Nivel = "LOW" | "MEDIUM" | "HIGH";
 
 export interface Arms {
   pedidoNBA: unknown;
@@ -17,17 +17,17 @@ export interface NormalizedArms {
   tetoTier: Nivel;
 }
 
-const VALID: ReadonlySet<string> = new Set<Nivel>(["BAJA", "MEDIA", "ALTA"]);
-const CONSERVATIVE: Nivel = "BAJA";
+const VALID: ReadonlySet<string> = new Set<Nivel>(["LOW", "MEDIUM", "HIGH"]);
+const CONSERVATIVE: Nivel = "LOW";
 
-/** Coerce an unknown value to a valid Nivel; anything that is not a member of the enum ⇒ BAJA. */
+/** Coerce an unknown value to a valid Nivel; anything that is not a member of the enum ⇒ LOW. */
 function coerce(v: unknown): Nivel {
   return typeof v === "string" && VALID.has(v) ? (v as Nivel) : CONSERVATIVE;
 }
 
 /**
  * Normalize the 3 autonomy arms into a guaranteed-valid NormalizedArms triple.
- * A null/undefined/invalid input object or any invalid arm ⇒ BAJA for that arm (fail-closed).
+ * A null/undefined/invalid input object or any invalid arm ⇒ LOW for that arm (fail-closed).
  * Never mutates the input.
  */
 export function normalizeArms(a: Arms | null | undefined): NormalizedArms {
