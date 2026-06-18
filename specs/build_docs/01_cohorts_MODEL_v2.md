@@ -43,14 +43,15 @@ Não há atributo de cadastro sobrando → subgrupo = **tercil do `score`** dent
 ### A.5 — Topo-vs-base = dois pares
 `P90 ↔ P10` **e** `P75 ↔ P25`. Mostro n de cada banda (k-anon/n_min podem suprimir banda fina).
 
-### A.6 — Upside = modelo de lift de ordens (ponderado)
-*"se a base fechasse os gaps até o topo, quantas ordens a mais?"*
+### A.6 — Upside = lift de ordens, atribuído por ponderação FIXA (ratificado; impl chunk-4)
+*"se a base (<P90) operasse como o topo (P90+), quantas ordens a mais?"*
 ```
-Δordens_base = n_base · Σ_f  w_f · (topo_f − base_f)
-   f ∈ {conexão, preço, qualidade, cancelamento}      (médias do grupo)
-   w_f = peso do fator no nº de ordens   ← [C] D-B abaixo
+lift_orders   = n_base · (top_orders − base_orders)          [oportunidade total, em ORDENS]
+atribuição[f] = w_f · lift_orders                            f ∈ {conexão .40, qualidade .25, cancel .20, preço .15}
 ```
-unidade = **nº ordens** (→ R$ via ticket médio). Sempre `[C]` (projeção, nunca [V]).
+- A ponderação é **fixa** (ratificada D-B): "x% do lift é devido à conexão" — não é gap causal por-cohort, é a crença geral do impacto de cada fator. `Σ w_f = 1.0` (alocação total; fail-closed: exceção se ≠ 1).
+- unidade = **nº ordens** (→ R$ via ticket médio). SEMPRE `[C]` (projeção, nunca [V]).
+- k-anon: só calcula se as bandas **topo (P90+) e base cada uma ≥ k** (anti re-identificação, §3.2).
 
 ### A.7 — at_risk = caiu de percentil; raiz = ordens
 `at_risk` = caiu de percentil (ou < umbral). **Causa-raiz = ordens↓** (também cancel↑, qualidade↓,

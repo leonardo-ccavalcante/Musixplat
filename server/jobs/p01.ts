@@ -19,7 +19,7 @@ export async function runP01(opts: P01Options): Promise<void> {
     await c.query("select cohort.fn_gate_k_anon($1)", [week]); // F-1.3b (per-week membership k_anon_ok)
     await c.query("select cohort.fn_descriptive_baseline($1)", [week]); // F-1.4
     await c.query("select cohort.fn_baseline_kpi($1)", [week]); // F-1.8
-    await c.query("select cohort.fn_upside()"); // F-1.7
+    await c.query("select cohort.fn_upside($1)", [week]); // F-1.7 (weighted, per week)
     if (prevSemana) {
       await c.query("select cohort.fn_diff_delta($1, $2)", [week, prevSemana]); // F-2.2
     }
