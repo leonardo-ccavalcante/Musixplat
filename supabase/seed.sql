@@ -43,6 +43,17 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('tolerance_reconciliation', '0',    '[C]', 'leo'),
   ('window_silent',       '30',   '[C]', 'leo');
 
+-- ── 02 NBA action-threshold knobs ([C] placeholders — the human-approved ranges that gate autonomy,
+--    read BY NAME §3.8. "value está en el mecanismo": Leo ratifies the numbers in the cockpit). ──
+insert into catalog."Config_Knobs"(key, value, provenance, owner) values
+  ('nba_connection_min_ratio',     '0.80', '[C]', 'leo'),  -- A1: connection below this ⇒ propose reconnect
+  ('nba_price_premium_max_pctile', '0.75', '[C]', 'leo'),  -- A2: price above this cohort percentile ⇒ review price
+  ('nba_promo_budget_max',         '0',    '[C]', 'leo'),  -- A3: auto-promo budget = 0 ⇒ nothing auto (BR-2/§3.3, human releases money)
+  ('nba_menu_quality_min',         '0.50', '[C]', 'leo'),  -- A4: menu quality below this ⇒ improve menu
+  ('nba_zone_demand_drop_max',     '0.20', '[C]', 'leo'),  -- A5: zone demand drop beyond this ⇒ local demand (not the restaurant's fault)
+  ('nba_cancel_rate_max',          '0.10', '[C]', 'leo'),  -- A6: restaurant-side cancel rate above this ⇒ ops fix
+  ('nba_fraud_pattern_max',        '0.05', '[C]', 'leo');  -- A7: customer-side cancel rate above this ⇒ fraud/risk review (money)
+
 -- ── Catalog: Cohort_Rule_Version (current v1 + prior v0 for anti-mix F-4.3 tests). ──
 insert into catalog."Cohort_Rule_Version"(version_id, effective_date, what_changed, baseline_effect, provenance) values
   ('v0', date '2026-01-01', 'initial bucket rule', 'baseline v0', '[C]'),
@@ -57,6 +68,19 @@ insert into catalog."Intent_Catalog"(intent_id, label, version) values
   ('menu',         'Menu issues',        'v1'),
   ('order_review', 'Order review',       'v1'),
   ('cancellation', 'Order cancellation', 'v1');
+
+-- ── Catalog: NBA_Catalogo (closed A1-A8 + no-act; the Autonomy Cockpit's action set, 02 §1A). Reference
+--    data, NOT a §14 result. financial_class='direct' (A3,A7) = money gate (BR-2/§3.3). Knobs BY NAME. ──
+insert into catalog."NBA_Catalogo"
+  (code, label, funnel_stage, financial_class, root_cause_signal, threshold_knob, default_nba_request, action_hint) values
+  ('A1','Increase connection',      'availability',  'none',    'connection_ratio',       'nba_connection_min_ratio',     'LOW','nudge to connect committed hours'),
+  ('A2','Review price vs peers',    'attractiveness','indirect','price_pctile_in_cohort', 'nba_price_premium_max_pctile', 'LOW','price recommendation (propose only)'),
+  ('A3','Propose promo/bonus',      'attractiveness','direct',  'price_pctile_in_cohort', 'nba_promo_budget_max',         'LOW','AI proposes promo; human releases the money (BR-2/§3.3)'),
+  ('A4','Improve menu',             'attractiveness','none',    'menu_quality',           'nba_menu_quality_min',         'LOW','menu quality checklist (photo + description)'),
+  ('A5','Stimulate local demand',   'demand',        'indirect','zone_demand_trend',      'nba_zone_demand_drop_max',     'LOW','signal to local growth/marketing (not the restaurant''s fault)'),
+  ('A6','Resolve cancellation ops', 'fulfillment',   'none',    'cancel_by_restaurant',   'nba_cancel_rate_max',          'LOW','operations ticket for the cancel cause'),
+  ('A7','Investigate fraud/risk',   'integrity',     'direct',  'cancel_by_customer',     'nba_fraud_pattern_max',        'LOW','escalate to human risk/fraud review (money at stake)'),
+  ('A8','Observation (no action)',  'fallback',      'none',    null,                     null,                           'LOW','fail-closed: no attributable cause — do not invent one');
 
 -- ── Catalog: Named_Query defs (deterministic SQL, never LLM, 04 §2). ──
 insert into catalog."Named_Query"(def_version, formula, periodicity, group_by, source_ref, unit) values
