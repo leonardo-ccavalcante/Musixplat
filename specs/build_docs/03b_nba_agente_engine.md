@@ -1,9 +1,18 @@
 # 03b:NBA-AGENTE — which-test selection (problem-solving + SAT), Knowledge_Case trace, value-edit modal · [target: AGENTE + design-only CÓDIGO]
 
-> DESIGN-ONLY this session. The CÓDIGO substrate it consumes — `cohort.fn_nba_test` / `fn_nba_test_all`
-> (mig `20260618170000_nba_test.sql`) — SHIPS this session, green. This doc is the reviewable step-by-step
-> Leo steers BEFORE the engine + modal are implemented (next sessions). Anchors: `03_nba_deterministic_test.md`
-> (the slice spec), `01_nba_issue_tree.md` (A1-A8 funnel), CLAUDE.md §2/§3.6/§3.7/§8/§14.
+> **IMPLEMENTED 2026-06-18 — aligned to the authoritative `breakdown_N8N.md` 02:1A contract (§8).**
+> Shipped: the substrate `cohort.fn_nba_test`/`fn_nba_test_all` (mig `20260618170000`), the tRPC `nba.test`/
+> `nba.testAll` (tenant-gated), the engine `server/agente/nba_engine.ts` (`proposeNba`) behind the
+> `ReasoningProvider` seam (`server/agente/reasoning.ts`, deterministic provider now), and the 02:1B NBA
+> autonomy gate `sealMinCalculationNBA` (`server/conversation/min.ts`, reusing `gov.compute_effective_level`).
+> **CONTRACT CORRECTION (vs earlier drafts of this doc + slice-3 doc 03):** per `breakdown_N8N.md:63-69`,
+> `02:1A` writes **only `NBA_Proposal`** and fires **02:1B** — it does **NOT** write `Knowledge_Case`. The
+> `Knowledge_Case` learning loop is the **05B diagnosis flow** (separate, EPIC-B1). The NBA flow's own
+> learning is `02:US-1.1.1-d` (ROI-driven `impacto_estimado`, post-action). So the engine has **no KC trace
+> and no prior-blend** — ranking is pure relative-gap (deterministic); the LLM provider plugs into the seam
+> later for genuine /problem-solving + /sat (the NUMBER stays `fn_nba_test`). `lever_class`/`routing_destination`
+> are left NULL (piece `02:BR-13`). Anchors: `03_nba_deterministic_test.md`, `01_nba_issue_tree.md`, CLAUDE.md
+> §2/§3.6/§3.7/§8/§14.
 
 > **PART OF — `specs/spec_ready/02_NBA Playbooks best actions screen.md` (Cockpit de Gobernanza de Autonomía).**
 
@@ -31,13 +40,17 @@ The AI does NOT call a fixed test. It analyzes WHICH function to call, calls the
 then interprets WITHIN range. §8 golden rule: the AGENTE reasons/selects/interprets **text**; the NUMBER is
 always `fn_nba_test`, never fabricated.
 
-1. **/problem-solving (McKinsey) — structure + rank.** Build the MECE funnel issue-tree
-   (`01_nba_issue_tree.md`) for the underperformance; produce **up to 3 hypotheses, RANKED by probability**
-   along availability → attractiveness → demand → fulfillment → integrity. **HARD CAP = 3** (cost control:
-   no unbounded hypothesis generation / token burn).
-2. **Sequential elimination, carry-forward (≤3 rounds).** Test the highest-probability hypothesis first via
+1. **/problem-solving — structure + rank.** The MECE funnel issue-tree IS the catalog (A1-A8,
+   `01_nba_issue_tree.md`). **As built (`deterministicReasoning`):** call `fn_nba_test_all(R, week)` ONCE →
+   rank the out-of-range dimensions (`verdict` ∈ below/above) by **relative gap** `|gap|/|standard|` (fair
+   across scales — connection 0-1 vs price 0-100), tie → `action_code` asc; take the **top 3** (HARD CAP 3,
+   cost discipline). **No `Knowledge_Case` prior / no blend** — KC is the 05B diagnosis flow, not the NBA
+   engine (see the contract-correction note above). **LLM provider (later, SAME seam):** does genuine
+   /problem-solving structuring and may weigh history — still calling `fn_nba_test` for every number (§8).
+2. **Sequential elimination, carry-forward (≤3 rounds).** Test the highest-ranked hypothesis first via
    `fn_nba_test(R, action_code, week)`:
-   - verdict CONFIRMS (`below`/`above` matching the action's `verdict_sense`) ⇒ that is the lever; proceed.
+   - verdict CONFIRMS (any `below`/`above` matching the action's `verdict_sense` — no magnitude gate) ⇒ that
+     is the lever; proceed.
    - verdict DISCONFIRMS (`ok`) ⇒ record in `discarded_branches`, move to the 2nd, then 3rd. **Never re-test
      a discarded branch.**
    - `no_data` ⇒ cannot test this branch; record + move on.
@@ -59,9 +72,15 @@ The substrate computes the verdict and surfaces the flags; the ENGINE enforces t
   is a within-cohort percentile, statistically hollow when the cell is tiny). The own-data signals
   (A1 connection, A4 quality, A6/A7 cancel) do not carry this fragility.
 
-## Functionality — the learning loop (Knowledge_Case trace ↔ eval)
+## Functionality — the learning loop (Knowledge_Case trace ↔ eval) — 05B FLOW, NOT the NBA engine
 
-**TRACE (mandatory).** Persist every investigation to `tenant."Knowledge_Case"`
+> ⚠️ **CORRECTION (2026-06-18):** this learning loop is the **05B diagnosis flow**, NOT `02:1A`. The
+> as-built NBA engine does **not** write `Knowledge_Case` (the `02:1A` contract is `NBA_Proposal` + fire
+> `02:1B`). The mapping below documents how the **05B** diagnosis engine (its own slice) uses KC, and how a
+> future NBA→learning bridge *could* shape a trace **if** we deliberately add the cross-flow (its own
+> decision). The NBA flow's native learning is `02:US-1.1.1-d` (ROI `impacto_estimado`, post-action).
+
+**TRACE (05B diagnosis engine).** Persist every investigation to `tenant."Knowledge_Case"`
 (mig `20260617000014_05b_diagnostico.sql`) — real columns, no invention:
 
 | engine output | Knowledge_Case column | provenance |
@@ -128,8 +147,14 @@ session — contract only, so the next session adds `server/routers/nba.ts` (or 
 
 - **Shipped (this session):** `fn_nba_test` + `fn_nba_test_all` + the catalog contract + the seed fixes +
   17 integration tests green + antifake/pgTAP/typecheck/lint green; perf = Index Scan, <3ms/call.
-- **Next sessions:** the AGENTE engine (the named-step orchestration + prompts), the value-edit modal, and
-  the `min()` autonomy gate `02:1B` (`nivel_efectivo = min(nba_request, released_evals, tier_cap)` —
-  `gov."min_calculation"` was hardened with `episode_id`/XOR in mig `20260618163314`).
-- Open `[I]`: runtime of `02:1A` (n8n vs TS) — fixes whether the engine reaches the substrate via SQL or a
-  tRPC `nba.test` wrapper; the modal needs the tRPC config endpoints either way.
+- **Engine decisions (ratified 2026-06-18 with Leo):** ranking = a DETERMINISTIC blend of data-driven gap
+  (`fn_nba_test_all`, present) + `Knowledge_Case` priors (history) — `score = nba_rank_weight_gap·gap_norm +
+  nba_rank_weight_prior·prior`, gap dominates; `outcome='resolved'` = PRE-action (a hypothesis confirmed + an
+  NBA proposed — the post-action KPI move is the separate EPIC-3 ROI eval); CONFIRM = any below/above (no
+  magnitude gate); **runtime = TS module** (`server/agente/nba_engine.ts`, named steps
+  `rankHypotheses`/`testHypothesis`/`satGate`/`trace`) calling the substrate via a tRPC `nba.test` wrapper.
+- **Next sessions:** implement the TS engine (named-step orchestration + the /problem-solving + /sat prompt)
+  + tRPC `nba.test` + the value-edit modal + the `min()` autonomy gate `02:1B` (`nivel_efectivo =
+  min(nba_request, released_evals, tier_cap)` — `gov."min_calculation"` hardened with `episode_id`/XOR in mig
+  `20260618163314`).
+- **New knobs to seed when the engine lands:** `nba_rank_weight_gap`, `nba_rank_weight_prior`.

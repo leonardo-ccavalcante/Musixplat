@@ -19,12 +19,15 @@ afterAll(async () => {
 });
 
 describe("§14 anti-fake — results are NULL/empty pre-run", () => {
-  it("producer-output tables are EMPTY (cells/memberships/events/ROI)", async () => {
+  it("producer-output tables are EMPTY (cells/memberships/events/ROI/NBA/min)", async () => {
     expect(await count(pool, 'cohort."Cohort"')).toBe(0);
     expect(await count(pool, 'cohort."Subgroup"')).toBe(0);
     expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(0);
     expect(await count(pool, 'cohort."Prioritized_NBA_Event"')).toBe(0);
     expect(await count(pool, 'gov."ROI_Operator"')).toBe(0);
+    // 02:1A/02:1B producers — the engine writes these at runtime, never seeded (§14).
+    expect(await count(pool, 'gov."NBA_Proposal"')).toBe(0);
+    expect(await count(pool, 'gov."min_calculation"')).toBe(0);
   });
 
   it("05B: diagnosis tables are EMPTY pre-run (Problem/Affected/Knowledge_Case)", async () => {
