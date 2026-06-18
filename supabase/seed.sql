@@ -73,14 +73,35 @@ insert into catalog."Intent_Catalog"(intent_id, label, version) values
 --    data, NOT a §14 result. financial_class='direct' (A3,A7) = money gate (BR-2/§3.3). Knobs BY NAME. ──
 insert into catalog."NBA_Catalogo"
   (code, label, funnel_stage, financial_class, root_cause_signal, threshold_knob, default_nba_request, action_hint) values
-  ('A1','Increase connection',      'availability',  'none',    'connection_ratio',       'nba_connection_min_ratio',     'LOW','nudge to connect committed hours'),
+  ('A1','Increase connection',      'availability',  'none',    'm_connection',           'nba_connection_min_ratio',     'LOW','nudge to connect committed hours'),
   ('A2','Review price vs peers',    'attractiveness','indirect','price_pctile_in_cohort', 'nba_price_premium_max_pctile', 'LOW','price recommendation (propose only)'),
   ('A3','Propose promo/bonus',      'attractiveness','direct',  'price_pctile_in_cohort', 'nba_promo_budget_max',         'LOW','AI proposes promo; human releases the money (BR-2/§3.3)'),
-  ('A4','Improve menu',             'attractiveness','none',    'menu_quality',           'nba_menu_quality_min',         'LOW','menu quality checklist (photo + description)'),
+  ('A4','Improve menu',             'attractiveness','none',    'm_quality',              'nba_menu_quality_min',         'LOW','menu quality checklist (photo + description)'),
   ('A5','Stimulate local demand',   'demand',        'indirect','zone_demand_trend',      'nba_zone_demand_drop_max',     'LOW','signal to local growth/marketing (not the restaurant''s fault)'),
   ('A6','Resolve cancellation ops', 'fulfillment',   'none',    'cancel_by_restaurant',   'nba_cancel_rate_max',          'LOW','operations ticket for the cancel cause'),
   ('A7','Investigate fraud/risk',   'integrity',     'direct',  'cancel_by_customer',     'nba_fraud_pattern_max',        'LOW','escalate to human risk/fraud review (money at stake)'),
   ('A8','Observation (no action)',  'fallback',      'none',    null,                     null,                           'LOW','fail-closed: no attributable cause — do not invent one');
+
+-- 03:NBA-TEST contract metadata for fn_nba_test (mig 20260618170000). standard_knob = the MEASUREMENT
+-- standard; for A3 it is the price knob (its threshold_knob nba_promo_budget_max=0 is a MONEY gate, not
+-- a measurement line — A3 reuses A2's price diagnosis). signal_scale normalizes (price_pctile 0-100 vs
+-- a 0-1 knob). standard_negate (A5): the problem is a DROP >= knob ⇒ compare vs -(knob). A8 stays NULL
+-- (no signal/knob) ⇒ fn_nba_test returns no_data.
+update catalog."NBA_Catalogo" c set
+  standard_knob   = v.standard_knob,
+  verdict_sense   = v.verdict_sense,
+  signal_scale    = v.signal_scale,
+  standard_negate = v.standard_negate
+from (values
+  ('A1','nba_connection_min_ratio',     'below', 1::numeric,   false),
+  ('A2','nba_price_premium_max_pctile', 'above', 100::numeric, false),
+  ('A3','nba_price_premium_max_pctile', 'above', 100::numeric, false),
+  ('A4','nba_menu_quality_min',         'below', 1::numeric,   false),
+  ('A5','nba_zone_demand_drop_max',     'below', 1::numeric,   true),
+  ('A6','nba_cancel_rate_max',          'above', 1::numeric,   false),
+  ('A7','nba_fraud_pattern_max',        'above', 1::numeric,   false)
+) as v(code, standard_knob, verdict_sense, signal_scale, standard_negate)
+where c.code = v.code;
 
 -- ── Catalog: Named_Query defs (deterministic SQL, never LLM, 04 §2). ──
 insert into catalog."Named_Query"(def_version, formula, periodicity, group_by, source_ref, unit) values
