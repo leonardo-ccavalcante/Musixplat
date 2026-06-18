@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // 05B Diagnosis — shared tRPC io + domain types (Zod v3, CLAUDE.md §1). Domain vocab native.
-// Piece-specific types live inside each server/diagnostico/* module; this file holds only the
+// Piece-specific types live inside each server/diagnosis/* module; this file holds only the
 // cross-cutting enums + the orchestrator input/row shapes that the router and many pieces share.
 
 // Criticality: ordered (critical > moderate > low). critical ⇒ "now" (BR-B11). String-backed, but the

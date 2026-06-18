@@ -6,7 +6,7 @@ import {
   assertBoundary,
   scanBorderPII,
   guardInjection,
-} from "../../server/diagnostico/guards";
+} from "../../server/diagnosis/guards";
 
 // 05B transversal hard-nos — EC-B5 (single-tenant abort + Security_Log), US-B3.3.1 (boundary),
 // EC-B6 (border PII scan, fail-closed), EC-B10 (injection = DATA never instruction). 04 §3/§7.

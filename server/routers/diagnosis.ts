@@ -9,7 +9,7 @@ import { reportProblemInput, type ReportProblemResult } from "../../shared/contr
 // "one case = one PROBLEM") via the partial unique index — a repeat trigger increments frequency
 // instead of duplicating (BR-B5/BR-B8). frequency is a computed count, never a seeded number.
 
-export const diagnosticoRouter = router({
+export const diagnosisRouter = router({
   reportProblem: tenantProcedure
     .input(reportProblemInput)
     .mutation(async ({ ctx, input }): Promise<ReportProblemResult> => {
@@ -26,7 +26,7 @@ export const diagnosticoRouter = router({
           `insert into gov."Security_Log"(tenant_id, kind, detail) values ($1, 'cross_pool', $2)`,
           [ctx.tenantId, JSON.stringify({ piece: "05B:US-B1.1.1", restaurantId: input.restaurantId })],
         );
-        throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool diagnostico blocked" });
+        throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool diagnosis blocked" });
       }
 
       // B.1.3 — create-or-increment. Partial unique (tenant_id, restaurant_id) WHERE open.

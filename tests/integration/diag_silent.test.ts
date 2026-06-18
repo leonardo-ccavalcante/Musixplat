@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { makePool, resetDb, count, rows } from "../helpers/db";
-import { huntSilent, reconcileAffected } from "../../server/diagnostico/silenciosos";
+import { huntSilent, reconcileAffected } from "../../server/diagnosis/silent";
 
 // 05B:B.5.2b (silent-hunter) + US-B1.3.1 (reconcile). ⭐ the uau. The anti-join
 // (Order failed ∖ Conversation-complainants) lives in SQL (tenant.fn_hunt_silent); TS only

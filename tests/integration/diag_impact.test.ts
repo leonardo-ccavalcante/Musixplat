@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { makePool, resetDb, rows } from "../helpers/db";
-import { computeRevenueLost, writeLedger } from "../../server/diagnostico/impacto";
+import { computeRevenueLost, writeLedger } from "../../server/diagnosis/impact";
 
 // 05B:US-B5.1.1 + US-B5.3.1 — impact scorer + ledger. Math lives in SQL
 // (tenant.fn_impact_revenue_lost); TS orchestrates. Anti-fake §14: revenue_lost / cost_to_resolve /
 // value_gained are NULL pre-run; churn_risk fail-closed to NULL (no pre-churn producer wired).
-// Modeled on diagnostico_spine.test.ts. Uses dedicated fixture restaurants (R-DIAG-*) with
+// Modeled on diagnosis_spine.test.ts. Uses dedicated fixture restaurants (R-DIAG-*) with
 // CONTROLLED Order rows so the expected sum(net_value failed) is exact, independent of the
 // seed's deterministic per-restaurant noise. fn sums over the Affected set only.
 

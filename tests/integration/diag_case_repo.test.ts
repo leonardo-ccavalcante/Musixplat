@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { makePool, resetDb, rows } from "../helpers/db";
-import { upsertCaseRepo } from "../../server/diagnostico/caso_repo";
+import { upsertCaseRepo } from "../../server/diagnosis/case_repo";
 
 // 05B:US-B6.2.1 — upsertCaseRepo (BR-B15 replicable case, BR-B7 PII redaction, §14 anti-fake).
 // Unit-of-record test against the local DB: a Problem is inserted directly (its RESULT columns
 // stay NULL — case_repo NULL pre-run), then the producer fills/increments. PII in client_id
-// must be redacted in the stored jsonb. Modeled on diagnostico_spine.test.ts.
+// must be redacted in the stored jsonb. Modeled on diagnosis_spine.test.ts.
 
 let pool: pg.Pool;
 let problemId: string;

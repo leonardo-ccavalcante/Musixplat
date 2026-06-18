@@ -3,10 +3,10 @@ import type pg from "pg";
 import { makePool, resetDb, rows } from "../helpers/db";
 import { appRouter } from "../../server/routers/_app";
 import type { Context } from "../../server/_core/context";
-import { emitDossier } from "../../server/diagnostico/dossier";
+import { emitDossier } from "../../server/diagnosis/dossier";
 
 // 05B:US-B6.3.1 — emitDossier gate over tenant.v_dossier_handoff (BR-B17/B18 fail-closed,
-// BR-B7 PII sanitized). Mirrors diagnostico_spine.test.ts: bare Problem (RESULT cols null) ⇒ no
+// BR-B7 PII sanitized). Mirrors diagnosis_spine.test.ts: bare Problem (RESULT cols null) ⇒ no
 // emit + gaps; once all 11 sources are filled + an Affected exists ⇒ emit with an 11-field dossier.
 
 function caller(tenantId: string, userId: string) {
@@ -37,7 +37,7 @@ afterAll(async () => {
 
 describe("05B:US-B6.3.1 — emitDossier completeness + provenance gate", () => {
   it("bare Problem (RESULT fields null) ⇒ emitted=false, gaps list the empty fields (fail-closed)", async () => {
-    const created = await caller("POOL-001", "U-OP-001").diagnostico.reportProblem({
+    const created = await caller("POOL-001", "U-OP-001").diagnosis.reportProblem({
       restaurantId: "R001",
       criticality: "critical",
     });
