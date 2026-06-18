@@ -21,6 +21,7 @@ export async function runP01(opts: P01Options): Promise<void> {
     // batch resilient to a fresh load (CI, the demo generator, a first deploy) — not a config knob.
     await c.query("analyze");
     await c.query("select cohort.fn_rank_cohort($1)", [week]); // F-1.2
+    await c.query("select cohort.fn_nba_signals($1)", [week]); // 02:NBA-SIG — funnel signals for node 1A (needs m_* from rank)
     await c.query("select cohort.fn_gate_n_min($1)", [week]); // F-1.3
     await c.query("select cohort.fn_gate_k_anon($1)", [week]); // F-1.3b (per-week membership k_anon_ok)
     await c.query("select cohort.fn_descriptive_baseline($1)", [week]); // F-1.4
