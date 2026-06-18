@@ -103,6 +103,29 @@ describe("05B Knowledge_Case — two-polarity learning store (BR-B16, §14 prove
     ).rejects.toThrow();
   });
 
+  it("invariant (fail-closed): outcome='escalated' shares the not_resolved clause — needs a reason", async () => {
+    // escalated WITHOUT a reason is rejected (guards against a future edit dropping 'escalated' from
+    // the polarity clause and silently letting a why-less escalation through)…
+    await expect(
+      pool.query(
+        `insert into tenant."Knowledge_Case" (tenant_id, tipo_area, outcome)
+           values ('POOL-001','finanzas','escalated')`,
+      ),
+    ).rejects.toThrow();
+    // …and the inverse: escalated WITH a reason is accepted (the branch is live, not dead).
+    await pool.query(
+      `insert into tenant."Knowledge_Case"
+         (tenant_id, tipo_area, outcome, not_resolved_reason, provenance_by_field)
+       values ('POOL-001','finanzas','escalated','handed to human ops',
+               '{"outcome":"[I]","not_resolved_reason":"[C]"}'::jsonb)`,
+    );
+    const r = await rows<{ outcome: string }>(
+      pool,
+      `select outcome from tenant."Knowledge_Case" where outcome='escalated'`,
+    );
+    expect(r[0]?.outcome).toBe("escalated");
+  });
+
   it("domain (fail-closed): a bogus outcome value is rejected", async () => {
     await expect(
       pool.query(
