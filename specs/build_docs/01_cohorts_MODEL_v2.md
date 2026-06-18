@@ -34,7 +34,8 @@ Não há atributo de cadastro sobrando → subgrupo = **tercil do `score`** dent
 |---|---|---|
 | **Volume** | Σordens · ticket médio = Σvalor/Σordens · GMV | Orden |
 | **Conexão** | Σh_online / Σh_prometida | Restaurante+telemetria |
-| **Cumprimento** | %entregue=Σentregue/Σtotal · taxa_cancel_rest=canc_rest/Σtotal · taxa_cancel_user=canc_user/Σtotal · share_cancel_rest=canc_rest/canc_total · share_cancel_user=canc_user/canc_total | Orden |
+| **Cumprimento** | %entregue=Σentregue/Σtotal · taxa_cancel_rest=canc_rest/Σ**concluídas**(ok+failed) · taxa_cancel_user=canc_user/Σ**concluídas** · share_cancel_rest=canc_rest/canc_total · share_cancel_user=canc_user/canc_total | Orden |
+> nota (ratificado no build chunk-3): taxas de cancelamento usam o denominador **concluídas (ok+failed)**, excluindo `pending` (ordem em curso ainda não concluída). `pending` no denominador subestimaria a taxa. |
 | **Qualidade** | %foto=Σfoto/Σtotal · %descrição=Σdesc/Σtotal | Orden |
 | (+tickets) | Σconversas / janela (sinal Support) | Conversa |
 ➡️ `cross_sell` **dropado** (não está no teu modelo). `conexión` agora é **real** (horas).

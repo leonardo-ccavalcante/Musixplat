@@ -159,12 +159,13 @@ from (select restaurant_id, committed_hours_week as hp from tenant."Restaurant")
 cross join generate_series(0, 8) w;
 
 -- ── tenant.Conversation_Episode: tickets for ~35% of restaurants (7 intents v2). metrics_layer RESULT→NULL. ──
-insert into tenant."Conversation_Episode"(episode_id, conversation_id, tenant_id, restaurant_id, intent, transcript_layer)
+insert into tenant."Conversation_Episode"(episode_id, conversation_id, tenant_id, restaurant_id, intent, ts, transcript_layer)
 select r.restaurant_id || ':C' || c,
        r.restaurant_id || ':conv' || c,
        r.tenant_id,
        r.restaurant_id,
        (array['billing','delivery','quality','promo','menu','order_review','cancellation'])[1 + public.det_int(r.restaurant_id || ':' || c, 41, 7)],
+       (date '2026-06-17' - public.det_int(r.restaurant_id || ':' || c, 44, 60))::timestamptz,  -- spread last 60d (windowable)
        jsonb_build_object('raw', 'redacted transcript ' || c)
 from tenant."Restaurant" r
 cross join lateral generate_series(1, 1 + public.det_int(r.restaurant_id, 42, 5)) c
