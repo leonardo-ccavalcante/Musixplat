@@ -9,7 +9,7 @@ export function EmptyState({ children }: { children: ReactNode }) {
   );
 }
 
-export function LoadingState({ label = "Cargando…" }: { label?: string }) {
+export function LoadingState({ label = "Loading…" }: { label?: string }) {
   return (
     <p role="status" aria-live="polite" className="py-6 text-center text-sm text-mxm-content-secondary">
       {label}
@@ -17,7 +17,7 @@ export function LoadingState({ label = "Cargando…" }: { label?: string }) {
   );
 }
 
-export function ErrorState({ label = "Error al cargar" }: { label?: string }) {
+export function ErrorState({ label = "Failed to load" }: { label?: string }) {
   return (
     <p role="alert" className="py-6 text-center text-sm text-mxm-red">
       {label}

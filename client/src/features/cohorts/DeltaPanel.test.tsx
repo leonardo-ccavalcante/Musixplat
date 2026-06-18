@@ -11,6 +11,7 @@ const row = (id: string, delta: DeltaRow["delta_status"], gap: number): DeltaRow
   delta_status: delta,
   percentile_in_cohort: 50,
   gap_to_top: gap,
+  percentile_delta: null,
 });
 
 describe("F-2.3 DeltaPanel", () => {
@@ -34,11 +35,33 @@ describe("F-2.3 DeltaPanel", () => {
 
   it("shows an explicit empty state (never green-fake) when there are no deltas", () => {
     render(<DeltaPanel rows={[]} />);
-    expect(screen.getByText(/Sin deltas/i)).toBeInTheDocument();
+    expect(screen.getByText(/No deltas/i)).toBeInTheDocument();
   });
 
   it("passes NULL through as — (never a fabricated number)", () => {
     render(<DeltaPanel rows={[{ ...row("R1", "new", 0), percentile_in_cohort: null, gap_to_top: null }]} />);
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders the why-it-moved cause (F-2.4) in the Why column", () => {
+    render(
+      <DeltaPanel
+        rows={[
+          {
+            ...row("R-why", "percentile_down", 4),
+            percentile_delta: {
+              sentido: "down",
+              magnitud: 5,
+              ventana_dias: 7,
+              n_min_ok: true,
+              orders_delta: -3,
+              root_cause: "orders",
+              prov: "[V]",
+            },
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/fewer sales/i)).toBeInTheDocument();
   });
 });

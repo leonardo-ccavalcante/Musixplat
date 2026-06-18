@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 
 type SimSummary = { total: number; subgroup_moves: number; percentile_changes: number };
 
-// EPIC-6 / F-6.1 — "correr ahora" triggers an ephemeral, read-only re-segmentation simulation.
+// EPIC-6 / F-6.1 — "run now" triggers an ephemeral, read-only re-segmentation simulation.
 // no-commit: the server never persists or hands off (F-6.3). Button is busy/disabled during the
 // run (anti double-fire), aria-busy; result is labelled as a non-persisted simulation.
 export function SandboxPanel() {
@@ -22,9 +22,9 @@ export function SandboxPanel() {
       ]
     : [];
   return (
-    <Card ariaLabel="Sandbox de re-segmentación">
+    <Card ariaLabel="Re-segmentation sandbox">
       <div className="mb-2 flex items-center justify-between">
-        <CardTitle>Simulación de re-segmentación</CardTitle>
+        <CardTitle>Re-segmentation simulation</CardTitle>
         <Button
           variant="ghost"
           disabled={busy}
@@ -34,21 +34,21 @@ export function SandboxPanel() {
             void sim.refetch();
           }}
         >
-          {busy ? "Corriendo…" : "Correr ahora"}
+          {busy ? "Running…" : "Run now"}
         </Button>
       </div>
       {!run ? (
-        <EmptyState>Efímero — no persiste, no hace handoff.</EmptyState>
+        <EmptyState>Ephemeral — does not persist, does not hand off.</EmptyState>
       ) : busy ? (
-        <EmptyState>Simulando…</EmptyState>
+        <EmptyState>Simulating…</EmptyState>
       ) : sim.isError ? (
-        <EmptyState>Simulación no disponible.</EmptyState>
+        <EmptyState>Simulation unavailable.</EmptyState>
       ) : rows.length === 0 ? (
-        <EmptyState>{sim.data?.label ?? "Sin snapshot comprometido."}</EmptyState>
+        <EmptyState>{sim.data?.label ?? "No committed snapshot."}</EmptyState>
       ) : (
         <>
           <p className="mb-1 text-xs text-mxm-amber" role="status">
-            Simulación (no persiste) · committed = {String(sim.data?.committed ?? false)}
+            Simulation (does not persist) · committed = {String(sim.data?.committed ?? false)}
           </p>
           <table className="w-full text-sm">
             <thead>

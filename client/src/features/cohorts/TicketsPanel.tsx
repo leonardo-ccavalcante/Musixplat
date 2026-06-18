@@ -3,14 +3,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 
 export type IntentCount = { cohort_id: string; intent: string; n: number };
 
-// F-3.3 / F-3.4 — raw ticket distribution intent × cohort. Read-only crude count, NO causa
+// F-3.3 / F-3.4 — raw ticket distribution intent × cohort. Read-only crude count, NO cause
 // classification, NO intake/close. k-anon suppression already applied server-side.
 export function TicketsPanel({ counts }: { counts: IntentCount[] }) {
   return (
-    <Card ariaLabel="Distribución de tickets">
+    <Card ariaLabel="Ticket distribution">
       <CardTitle>Tickets (intent × cohort)</CardTitle>
       {counts.length === 0 ? (
-        <EmptyState>Sin tickets en celdas visibles.</EmptyState>
+        <EmptyState>No tickets in visible cells.</EmptyState>
       ) : (
         <table className="w-full text-sm">
           <thead>
@@ -18,7 +18,7 @@ export function TicketsPanel({ counts }: { counts: IntentCount[] }) {
               <th scope="col">Cohort</th>
               <th scope="col">Intent</th>
               <th scope="col" className="text-right">
-                Conteo
+                Count
               </th>
             </tr>
           </thead>

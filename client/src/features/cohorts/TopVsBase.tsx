@@ -16,36 +16,36 @@ export type Baseline = { topo_vs_base?: { p90_vs_p10?: TopoVsBasePair } } | null
 export function TopVsBase({ baseline, suppressed }: { baseline: Baseline; suppressed?: boolean }) {
   if (suppressed) {
     return (
-      <Card ariaLabel="Comparación topo vs base">
-        <CardTitle>Topo vs Base</CardTitle>
-        <EmptyState>Celda suprimida por k-anonimidad.</EmptyState>
+      <Card ariaLabel="Top-vs-base comparison">
+        <CardTitle>Top vs Base</CardTitle>
+        <EmptyState>Cell suppressed by k-anonymity.</EmptyState>
       </Card>
     );
   }
   const pair = baseline?.topo_vs_base?.p90_vs_p10;
   if (!pair) {
     return (
-      <Card ariaLabel="Comparación topo vs base">
-        <CardTitle>Topo vs Base</CardTitle>
-        <EmptyState>Sin baseline calculado.</EmptyState>
+      <Card ariaLabel="Top-vs-base comparison">
+        <CardTitle>Top vs Base</CardTitle>
+        <EmptyState>No baseline computed.</EmptyState>
       </Card>
     );
   }
   const dims: Array<{ key: keyof TopoVsBasePair; label: string }> = [
-    { key: "n_top", label: "Cuentas top" },
-    { key: "n_base", label: "Cuentas base" },
+    { key: "n_top", label: "Top accounts" },
+    { key: "n_base", label: "Base accounts" },
     { key: "d_orders", label: "Delta orders" },
     { key: "d_connection", label: "Delta connection" },
     { key: "d_quality", label: "Delta quality" },
     { key: "d_cancel", label: "Delta cancel" },
   ];
   return (
-    <Card ariaLabel="Comparación topo vs base">
-      <CardTitle>Topo vs Base</CardTitle>
+    <Card ariaLabel="Top-vs-base comparison">
+      <CardTitle>Top vs Base</CardTitle>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-mxm-content-tertiary">
-            <th scope="col">Dimensión</th>
+            <th scope="col">Dimension</th>
             <th scope="col" className="text-right">
               P90 vs P10
             </th>

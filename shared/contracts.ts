@@ -45,6 +45,24 @@ export const eventoPriorizadoNba = z.object({
 });
 export type EventoPriorizadoNba = z.infer<typeof eventoPriorizadoNba>;
 
+// F-2.2 / F-2.4 — feature-attribution carried on a delta: WHY a restaurant moved (root_cause +
+// orders_delta), not only THAT it moved. Produced by fn_diff_delta; prov is [V] (measured), never
+// fabricated. new/churn rows carry {sentido:"new"}; normal rows carry magnitud + root_cause.
+export const rootCause = z.enum(["orders", "cancel", "connection", "quality", "none"]);
+export type RootCause = z.infer<typeof rootCause>;
+export const percentileDelta = z
+  .object({
+    sentido: z.enum(["up", "down", "equal", "new"]),
+    magnitud: z.number().optional(),
+    ventana_dias: z.number().optional(),
+    n_min_ok: z.boolean().nullable().optional(),
+    orders_delta: z.number().optional(),
+    root_cause: rootCause.optional(),
+    prov: z.string().optional(),
+  })
+  .nullable();
+export type PercentileDelta = z.infer<typeof percentileDelta>;
+
 // Delta panel row (F-2.3) — read-only projection of Prioritized_NBA_Event.
 export const deltaRow = z.object({
   evento_id: z.string(),
@@ -54,5 +72,49 @@ export const deltaRow = z.object({
   delta_status: deltaStatus.nullable(),
   percentile_in_cohort: z.number().nullable(),
   gap_to_top: z.number().nullable(),
+  percentile_delta: percentileDelta, // F-2.4 why-it-moved (root_cause)
 });
 export type DeltaRow = z.infer<typeof deltaRow>;
+
+// Provenance per field — [V] measured · [I] inferred · [C] projection/config. Never render/export
+// a field without it (CLAUDE.md §3.10). Loose string: the DB stamps the bracketed code in the JSONB.
+export type ProvTag = "[V]" | "[I]" | "[C]" | string;
+
+// descriptive_baseline render projections (read-only, returned whole by cohorts.compare). Loose/
+// optional: the JSONB is rendered DEFENSIVELY per field — a missing family degrades to empty, never
+// throws, never fabricates. Mirrors fn_baseline_kpi (F-1.8) + fn_upside (F-1.7) + fn_topo_json (F-1.6).
+export type CohortKpis = {
+  volume?: { total_orders?: number | null; avg_orders?: number | null; avg_ticket?: number | null; gmv?: number | null; prov?: ProvTag };
+  connection?: { ratio?: number | null; prov?: ProvTag };
+  fulfillment?: { delivery_rate?: number | null; cancel_rate_restaurant?: number | null; cancel_rate_customer?: number | null; prov?: ProvTag };
+  quality?: { pct_photo?: number | null; pct_description?: number | null; prov?: ProvTag };
+  tickets?: { avg_tickets?: number | null; prov?: ProvTag };
+};
+export type CohortUpside = {
+  lift_orders?: number | null;
+  attribution?: { connection?: number | null; quality?: number | null; cancel?: number | null; price?: number | null } | null;
+  unit?: string | null;
+  prov?: ProvTag; // always [C] — projection, never ascends to [V]
+};
+export type DescriptiveBaseline = {
+  kpis?: CohortKpis;
+  upside?: CohortUpside;
+  topo_vs_base?: { p90_vs_p10?: Record<string, number | null>; p75_vs_p25?: Record<string, number | null> };
+  bands?: Record<string, Record<string, number | null>>;
+  prov?: ProvTag;
+} | null;
+
+// Cohort cell (cohorts.list output, F-2.1) — semaphore status + freshness/staleness (BR-12).
+// stale is computed SERVER-side via fn_is_stale (TTL knob BY NAME); fail-closed (unknown ⇒ stale).
+export const cohortStatus = z.enum(["pending", "suppressed", "collapsed", "ok"]);
+export type CohortStatus = z.infer<typeof cohortStatus>;
+export type CohortCell = {
+  cohort_id: string;
+  cuisine: string | null;
+  zone: string | null;
+  tier_base: string;
+  n_accounts: number | null;
+  status: CohortStatus;
+  freshness_ts: string | null;
+  stale: boolean | null;
+};

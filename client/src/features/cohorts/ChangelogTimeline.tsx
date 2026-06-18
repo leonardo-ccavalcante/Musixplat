@@ -12,10 +12,10 @@ export type RuleVersion = {
 // F-4.2 — ML changelog timeline (read-only, ordered by effective_date). Semantic list, navigable.
 export function ChangelogTimeline({ versions }: { versions: RuleVersion[] }) {
   return (
-    <Card ariaLabel="Changelog de versiones de regla">
+    <Card ariaLabel="Rule version changelog">
       <CardTitle>Changelog ML (cohort_rule_version)</CardTitle>
       {versions.length === 0 ? (
-        <EmptyState>Sin versiones de regla.</EmptyState>
+        <EmptyState>No rule versions.</EmptyState>
       ) : (
         <ol className="space-y-2">
           {versions.map((v) => (

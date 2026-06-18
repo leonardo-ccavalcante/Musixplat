@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
-import { SemaforoCohort, type CohortCell } from "@/features/cohorts/SemaforoCohort";
+import { CohortMatrix } from "@/features/cohorts/CohortMatrix";
 import { DeltaPanel } from "@/features/cohorts/DeltaPanel";
 import { TopVsBase, type Baseline } from "@/features/cohorts/TopVsBase";
 import { MoneyPanel, type MoneySummary } from "@/features/cohorts/MoneyPanel";
@@ -9,7 +9,7 @@ import { TicketsPanel, type IntentCount } from "@/features/cohorts/TicketsPanel"
 import { ChangelogTimeline, type RuleVersion } from "@/features/cohorts/ChangelogTimeline";
 import { SandboxPanel } from "@/features/cohorts/SandboxPanel";
 import { CohortModal } from "@/features/cohorts/CohortModal";
-import type { DeltaRow } from "@shared/contracts";
+import type { DeltaRow, CohortCell } from "@shared/contracts";
 
 // Screen 01 — Cohorts Explorer. Composes the slice-01 panels over P01 results (read-only),
 // the F-5.2 handoff (in the drill modal), and the EPIC-6 sandbox.
@@ -57,12 +57,12 @@ export function CohortsExplorerPage() {
       <header className="mb-6">
         <h1 className="text-xl font-semibold text-mxm-content">Cohorts Explorer</h1>
         <p className="text-sm text-mxm-content-secondary">
-          Comparación topo-vs-base, deltas priorizados y handoff a NBA.
+          Top-vs-base comparison, prioritized deltas, and handoff to NBA.
         </p>
       </header>
 
       {!ready ? (
-        <LoadingState label="Iniciando sesión…" />
+        <LoadingState label="Signing in…" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="lg:col-span-2">
@@ -71,7 +71,7 @@ export function CohortsExplorerPage() {
             ) : cells.isError ? (
               <ErrorState />
             ) : (
-              <SemaforoCohort cells={(cells.data ?? []) as CohortCell[]} onOpen={setSelected} />
+              <CohortMatrix cells={(cells.data ?? []) as CohortCell[]} onOpen={setSelected} />
             )}
           </div>
 

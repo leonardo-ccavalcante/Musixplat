@@ -68,5 +68,16 @@ describe("cohort read routes — tenant-scoped latest week + current deltas", ()
     expect(deltas).toHaveLength(1);
     expect(deltas[0]?.week).toBe("2026-06-22");
     expect(deltas[0]?.delta_status).toBe("at_risk");
+
+    // Read-only polish exposes (additive — no P02 handoff contract change):
+    // deltas carries percentile_delta (F-2.4 why-it-moved); list carries freshness_ts + stale (BR-12).
+    expect(deltas[0]).toHaveProperty("percentile_delta");
+
+    const list = await caller("POOL-002", "U-OP-002").cohorts.list();
+    const cread = list.find((c) => c.cohort_id === "c_read");
+    expect(cread).toBeDefined();
+    expect(cread).toHaveProperty("freshness_ts");
+    expect(typeof cread!.stale).toBe("boolean");
+    expect(cread!.stale).toBe(true); // freshness_ts NULL ⇒ fn_is_stale fail-closed ⇒ stale
   });
 });

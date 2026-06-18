@@ -23,7 +23,7 @@ export function HandoffButton({
         aria-busy={m.isPending}
         onClick={() => m.mutate({ restaurant_id, cohort_id, subgroup_id: subgroup_id ?? null, week })}
       >
-        {m.isPending ? "Enviando…" : m.isSuccess ? "Enviado ✓" : "Handoff a NBA"}
+        {m.isPending ? "Sending…" : m.isSuccess ? "Sent ✓" : "Handoff to NBA"}
       </Button>
       {m.isError && (
         <span role="alert" className="text-xs text-mxm-red">

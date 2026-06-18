@@ -42,6 +42,8 @@ type CohortRow = {
   cohort_rule_version: string;
   descriptive_baseline: unknown;
   opportunity_value: number | null;
+  freshness_ts: string | null;
+  stale: boolean | null;
 };
 
 // Semaphore status (F-2.1): redundant text/icon carrier, never color-only.
@@ -57,8 +59,11 @@ export const cohortsRouter = router({
   list: tenantProcedure.query(async ({ ctx }) => {
     const v = await current();
     const rows = await query<CohortRow>(
+      // freshness_ts + stale exposed read-only (BR-12). stale computed server-side via fn_is_stale
+      // (reads TTL_baseline_days BY NAME, §3.8) — fail-closed: NULL freshness ⇒ stale.
       `select cohort_id, cuisine, zone, tier_base, n_accounts, collapsed, k_suppression_applied,
-              cohort_rule_version, descriptive_baseline, opportunity_value::float8 as opportunity_value
+              cohort_rule_version, descriptive_baseline, opportunity_value::float8 as opportunity_value,
+              freshness_ts::text as freshness_ts, cohort.fn_is_stale(freshness_ts, now()) as stale
        from cohort."Cohort" where cohort_rule_version=$1 order by tier_base, cuisine, zone`,
       [v],
     );
@@ -86,8 +91,11 @@ export const cohortsRouter = router({
     const s = await latestWeek(v, ctx.tenantId);
     if (!s) return [];
     const rows = await query(
+      // percentile_delta exposed read-only (F-2.4 feature-attribution: why it moved). Additive —
+      // does NOT touch the P02 handoff payload (fn_handoff / eventoPriorizadoNba unchanged).
       `select e.evento_id, e.restaurant_id, e.cohort_id, e.week::text as week, e.delta_status,
-              e.percentile_in_cohort::float8 as percentile_in_cohort, e.gap_to_top::float8 as gap_to_top
+              e.percentile_in_cohort::float8 as percentile_in_cohort, e.gap_to_top::float8 as gap_to_top,
+              e.percentile_delta
        from cohort."Prioritized_NBA_Event" e
        join tenant."Restaurant" r on r.restaurant_id=e.restaurant_id and r.tenant_id=$1
        where e.cohort_rule_version=$2 and e.week=$3

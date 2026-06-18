@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { DeltaRow } from "@shared/contracts";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { AttributionDetail } from "./AttributionDetail";
 
 // F-2.3 — reusable ordered delta panel: at_risk on top (deterministic), then gap desc. Render/sort
 // only — never recomputes deltas (produced by F-2.2). Order exposed semantically (aria-sort),
@@ -21,24 +22,25 @@ export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
   );
 
   return (
-    <Card ariaLabel="Panel de delta priorizado">
-      <CardTitle>Deltas priorizados</CardTitle>
+    <Card ariaLabel="Prioritized delta panel">
+      <CardTitle>Prioritized deltas</CardTitle>
       {sorted.length === 0 ? (
-        <EmptyState>Sin deltas en este período.</EmptyState>
+        <EmptyState>No deltas this period.</EmptyState>
       ) : (
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-mxm-content-tertiary">
               <th scope="col">Restaurant</th>
               <th scope="col" aria-sort="ascending">
-                Estado
+                Status
               </th>
               <th scope="col" className="text-right">
-                Percentil
+                Percentile
               </th>
               <th scope="col" aria-sort="descending" className="text-right">
                 Gap
               </th>
+              <th scope="col">Why</th>
             </tr>
           </thead>
           <tbody>
@@ -57,6 +59,10 @@ export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
                   </td>
                   <td className="tabnum text-right">{r.percentile_in_cohort ?? "—"}</td>
                   <td className="tabnum text-right">{r.gap_to_top ?? "—"}</td>
+                  <td>
+                    {/* F-2.4 why-it-moved — NULL passes through as empty (never faked) */}
+                    <AttributionDetail delta={r.percentile_delta} />
+                  </td>
                 </tr>
               );
             })}
