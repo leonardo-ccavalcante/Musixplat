@@ -54,11 +54,11 @@ describe("queuePriority — 05A:A.4.7 (deterministic, fail-closed, tier-isolated
   });
 
   // --- CRITICAL isolation invariant: output must NEVER carry tier/level ---
-  it("output has NO 'level', 'tier', or 'level_efectivo' key (tier isolation, §3 invariant)", () => {
+  it("output has NO 'level', 'tier', or 'effective_level' key (tier isolation, §3 invariant)", () => {
     const keys = Object.keys(queuePriority({ spike: true }));
     expect(keys).not.toContain("level");
     expect(keys).not.toContain("tier");
-    expect(keys).not.toContain("level_efectivo");
+    expect(keys).not.toContain("effective_level");
     expect(keys).toEqual(["prioridad_cola"]);
   });
 

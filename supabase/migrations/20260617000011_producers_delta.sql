@@ -1,7 +1,7 @@
--- Delta / movement / counts / anti-mezcla (04 §3/§6/§14). Deterministic, version-stamped.
+-- Delta / movement / counts / anti-mix (04 §3/§6/§14). Deterministic, version-stamped.
 
 -- F-2.2 — diff snapshot_to vs snapshot_from ⇒ Prioritized_NBA_Event.delta_status. Only accounts
--- with a meaningful delta (or novo/churn) get an event. SAME version only (anti-mezcla); same
+-- with a meaningful delta (or new/churn) get an event. SAME version only (anti-mix); same
 -- tenant handled by the read guard. at_risk threshold BY NAME.
 create or replace function cohort.fn_diff_delta(p_week date, p_prev_week date)
 returns void language plpgsql as $$
@@ -53,7 +53,7 @@ end;
 $$;
 
 -- F-5.4 / F-3.4 — n_cohort_x_intent: deterministic count of raw tickets per cohort × intent.
--- Cohort dimension DERIVED via join to Pertenencia (producer output). k-anon respected: cells
+-- Cohort dimension DERIVED via join to Cohort_Membership_Snapshot (producer output). k-anon respected: cells
 -- with k_suppression_applied are excluded from the cross-tenant output.
 create or replace function cohort.fn_cohort_intent_count(p_week date)
 returns table(cohort_id text, intent text, n integer) language sql stable as $$
@@ -66,13 +66,13 @@ returns table(cohort_id text, intent text, n integer) language sql stable as $$
   group by p.cohort_id, ce.intent;
 $$;
 
--- F-4.3 — anti-mezcla guard. fail-closed: more than one distinct cohort_rule_version ⇒ raise
+-- F-4.3 — anti-mix guard. fail-closed: more than one distinct cohort_rule_version ⇒ raise
 -- (never render a mix, 04 §6 / EC-3). The TS read layer logs the blocked attempt to Security_Log.
 create or replace function cohort.fn_assert_single_version(p_versions text[])
 returns void language plpgsql immutable as $$
 begin
   if (select count(distinct v) from unnest(p_versions) v where v is not null) > 1 then
-    raise exception 'anti-mezcla: refusing to mix cohort_rule_version: %', p_versions
+    raise exception 'anti-mix: refusing to mix cohort_rule_version: %', p_versions
       using errcode = 'check_violation';
   end if;
 end;

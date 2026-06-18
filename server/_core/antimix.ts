@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { query } from "../db/pool.js";
 
-// F-4.3 — shared anti-mezcla guard (CLAUDE.md §3.5). fail-closed: a read that would mix
+// F-4.3 — shared anti-mix guard (CLAUDE.md §3.5). fail-closed: a read that would mix
 // baselines of different cohort_rule_version is blocked + logged. Reused by every selector,
 // never duplicated per screen.
 export async function assertSingleVersion(
@@ -14,6 +14,6 @@ export async function assertSingleVersion(
       tenantId,
       JSON.stringify({ versions: [...distinct] }),
     ]);
-    throw new TRPCError({ code: "CONFLICT", message: "anti-mezcla: mixed cohort_rule_version blocked" });
+    throw new TRPCError({ code: "CONFLICT", message: "anti-mix: mixed cohort_rule_version blocked" });
   }
 }

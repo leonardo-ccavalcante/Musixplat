@@ -3,9 +3,9 @@ import type pg from "pg";
 import { makePool, resetDb, count } from "../helpers/db";
 import { appRouter } from "../../server/routers/_app";
 import type { Context } from "../../server/_core/context";
-import { sellarMinCalculoConversation } from "../../server/conversation/min";
+import { sealMinCalculationConversation } from "../../server/conversation/min";
 
-// 05A spine — A.1.1 (recv + server-side tenant + idempotent create) and A.4.6 (min() motor,
+// 05A spine — A.1.1 (recv + server-side tenant + idempotent create) and A.4.6 (min() engine,
 // conversation path + anti-fake). Hits the local DB via the tRPC caller, mirroring handoff.test.ts.
 
 function caller(tenantId: string, userId: string) {
@@ -37,7 +37,7 @@ describe("05A:A.1.1 — recv + tenant server-side + create Conversation", () => 
       turnos: [],
     });
     expect(out.tenant_id).toBe("POOL-001");
-    expect(out.conversation_status).toBe("open"); // never seeded 'escalated'/'resuelto'
+    expect(out.conversation_status).toBe("open"); // never seeded 'escalated'/'resolved'
     expect(await count(pool, `tenant."Conversation_Episode" where conversation_id='cv-1'`)).toBe(1);
   });
 
@@ -56,19 +56,19 @@ describe("05A:A.1.1 — recv + tenant server-side + create Conversation", () => 
   });
 });
 
-describe("05A:A.4.6 — min() motor (conversation path) + anti-fake", () => {
-  it("anti-fake §14: min_calculation is empty before any motor call", async () => {
+describe("05A:A.4.6 — min() engine (conversation path) + anti-fake", () => {
+  it("anti-fake §14: min_calculation is empty before any engine call", async () => {
     expect(await count(pool, `gov."min_calculation"`)).toBe(0);
   });
 
-  it("seals level_efectivo = least(arms) for the conversation path", async () => {
-    const r = await sellarMinCalculoConversation({ conversationId: "cv-1", pedidoNBA: "HIGH", liberadoEvals: "MEDIUM", tetoTier: "HIGH" });
-    expect(r.levelEfectivo).toBe("MEDIUM");
+  it("seals effective_level = least(arms) for the conversation path", async () => {
+    const r = await sealMinCalculationConversation({ conversationId: "cv-1", nbaRequest: "HIGH", releasedEvals: "MEDIUM", tierCap: "HIGH" });
+    expect(r.effectiveLevel).toBe("MEDIUM");
     expect(await count(pool, `gov."min_calculation" where conversation_id='cv-1'`)).toBe(1);
   });
 
   it("a null/missing arm ⇒ LOW (fail-closed)", async () => {
-    const r = await sellarMinCalculoConversation({ conversationId: "cv-3", pedidoNBA: null, liberadoEvals: "HIGH", tetoTier: "HIGH" });
-    expect(r.levelEfectivo).toBe("LOW");
+    const r = await sealMinCalculationConversation({ conversationId: "cv-3", nbaRequest: null, releasedEvals: "HIGH", tierCap: "HIGH" });
+    expect(r.effectiveLevel).toBe("LOW");
   });
 });

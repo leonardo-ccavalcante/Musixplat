@@ -35,7 +35,7 @@ function isImageAdjunto(adjunto: { kind?: string; mime?: string }): boolean {
   return false;
 }
 
-/** Route a conversationtion turn to image-extraction (A.1.4) or injection-classifier (A.1.5).
+/** Route a conversation turn to image-extraction (A.1.4) or injection-classifier (A.1.5).
  *  Deterministic, no LLM. Missing/malformed input ⇒ A.1.5 (fail-closed). (04 §3) */
 export function routeIntake(turno: IntakeTurno | null | undefined): IntakeRoute {
   // Fail-closed: null/undefined input ⇒ no image ⇒ A.1.5

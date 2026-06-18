@@ -37,7 +37,7 @@ export const sandboxRouter = router({
         return { committed: false as const, label: "SIMULATION — no committed snapshot yet", week: null, overrides, simulated: null };
       }
 
-      // apertura — persists (outside the rollback), records what-if params
+      // open — persists (outside the rollback), records what-if params
       await query(
         `insert into tenant."Usage_Event"(restaurant_id, user_id, feature, event_type, payload)
          select restaurant_id, $2, 'cohorts', 'sandbox_open', $3::jsonb
@@ -76,7 +76,7 @@ export const sandboxRouter = router({
         return r.rows[0] ?? null;
       });
 
-      // cierre — persists
+      // close — persists
       await query(
         `insert into tenant."Usage_Event"(restaurant_id, user_id, feature, event_type, payload)
          select restaurant_id, $2, 'cohorts', 'sandbox_close', '{}'::jsonb

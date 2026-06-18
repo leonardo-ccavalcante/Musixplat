@@ -4,11 +4,11 @@ import { makePool, rows } from "../helpers/db";
 
 // 05B Knowledge_Case — the learning-loop store (BR-B16). It keeps BOTH polarities of a closed
 // case so the loop CONVERGES instead of oscillating:
-//   * POSITIVE (how it was solved): resolucao + caminho_usado — replicated next time.
+//   * POSITIVE (how it was solved): resolution + path_used — replicated next time.
 //   * NEGATIVE (why it did NOT): not_resolved_reason + discarded_branches — pruned next time so
 //     grounding stops re-proposing dead hypotheses.
 // Provenance split (anti-fake §14 + BR-B8): `outcome` is a MEASURED fact (resolved/not) ⇒ [V]/[I];
-// the narrative `not_resolved_reason` is AI text ⇒ [C], never a number, human-gated (revisado=false).
+// the narrative `not_resolved_reason` is AI text ⇒ [C], never a number, human-gated (reviewed=false).
 // The polarity invariant is enforced at the SCHEMA (fail-closed, §3.7): a case cannot claim resolved
 // without "how", nor unresolved/escalated without "why". `outcome` is NULL-able (§14: a KB row with no
 // producer-stamped outcome stays NULL, never assumed). No producer is wired this session — these
@@ -31,28 +31,28 @@ afterAll(async () => {
 });
 
 describe("05B Knowledge_Case — two-polarity learning store (BR-B16, §14 provenance split)", () => {
-  it("POSITIVE polarity: a resolved case stores HOW (resolucao) + outcome=[I] measured", async () => {
+  it("POSITIVE polarity: a resolved case stores HOW (resolution) + outcome=[I] measured", async () => {
     await pool.query(
       `insert into tenant."Knowledge_Case"
-         (tenant_id, tipo_area, padrao, outcome, resolucao, caminho_usado, provenance_by_field)
-       values ('POOL-001','finanzas','pago_fallido_silencioso','resolved',
-               'reintento de cobro + aviso al restaurant',
-               '["pago","reintento"]'::jsonb,
-               '{"outcome":"[I]","resolucao":"[C]"}'::jsonb)`,
+         (tenant_id, area_type, pattern, outcome, resolution, path_used, provenance_by_field)
+       values ('POOL-001','finance','silent_failed_payment','resolved',
+               'retry charge + notify restaurant',
+               '["payment","retry"]'::jsonb,
+               '{"outcome":"[I]","resolution":"[C]"}'::jsonb)`,
     );
     const r = await rows<{
       outcome: string;
-      resolucao: string;
+      resolution: string;
       not_resolved_reason: string | null;
       discarded_branches: unknown[];
       prov: Record<string, string>;
     }>(
       pool,
-      `select outcome, resolucao, not_resolved_reason, discarded_branches,
+      `select outcome, resolution, not_resolved_reason, discarded_branches,
               provenance_by_field as prov from tenant."Knowledge_Case"`,
     );
     expect(r[0]?.outcome).toBe("resolved");
-    expect(r[0]?.resolucao).toContain("reintento");
+    expect(r[0]?.resolution).toContain("retry");
     expect(r[0]?.not_resolved_reason).toBeNull(); // resolved ⇒ no "why not"
     expect(r[0]?.discarded_branches).toEqual([]); // default empty
     expect(r[0]?.prov.outcome).toBe("[I]"); // MEASURED fact
@@ -61,35 +61,35 @@ describe("05B Knowledge_Case — two-polarity learning store (BR-B16, §14 prove
   it("NEGATIVE polarity: a not_resolved case stores WHY + discarded_branches + reason=[C]", async () => {
     await pool.query(
       `insert into tenant."Knowledge_Case"
-         (tenant_id, tipo_area, padrao, outcome, not_resolved_reason, discarded_branches, provenance_by_field)
-       values ('POOL-001','finanzas','pago_fallido_silencioso','not_resolved',
-               'restaurant no respondio en la ventana',
-               '[{"branch":"fraude","falsified_by":"no chargeback","reason":"sin senal de fraude"}]'::jsonb,
+         (tenant_id, area_type, pattern, outcome, not_resolved_reason, discarded_branches, provenance_by_field)
+       values ('POOL-001','finance','silent_failed_payment','not_resolved',
+               'restaurant did not respond in the window',
+               '[{"branch":"fraud","falsified_by":"no chargeback","reason":"no fraud signal"}]'::jsonb,
                '{"outcome":"[I]","not_resolved_reason":"[C]"}'::jsonb)`,
     );
     const r = await rows<{
       outcome: string;
-      resolucao: string | null;
+      resolution: string | null;
       not_resolved_reason: string;
       discarded_branches: Array<{ branch: string; reason: string }>;
       prov: Record<string, string>;
     }>(
       pool,
-      `select outcome, resolucao, not_resolved_reason, discarded_branches,
+      `select outcome, resolution, not_resolved_reason, discarded_branches,
               provenance_by_field as prov from tenant."Knowledge_Case"`,
     );
     expect(r[0]?.outcome).toBe("not_resolved");
-    expect(r[0]?.resolucao).toBeNull(); // not resolved ⇒ no "how"
-    expect(r[0]?.not_resolved_reason).toContain("no respondio");
-    expect(r[0]?.discarded_branches[0]?.branch).toBe("fraude"); // the pruned hypothesis
+    expect(r[0]?.resolution).toBeNull(); // not resolved ⇒ no "how"
+    expect(r[0]?.not_resolved_reason).toContain("did not respond");
+    expect(r[0]?.discarded_branches[0]?.branch).toBe("fraud"); // the pruned hypothesis
     expect(r[0]?.prov.not_resolved_reason).toBe("[C]"); // AI narrative, never a number
   });
 
-  it("invariant (fail-closed): outcome='resolved' WITHOUT a resolucao is rejected", async () => {
+  it("invariant (fail-closed): outcome='resolved' WITHOUT a resolution is rejected", async () => {
     await expect(
       pool.query(
-        `insert into tenant."Knowledge_Case" (tenant_id, tipo_area, outcome)
-           values ('POOL-001','finanzas','resolved')`,
+        `insert into tenant."Knowledge_Case" (tenant_id, area_type, outcome)
+           values ('POOL-001','finance','resolved')`,
       ),
     ).rejects.toThrow();
   });
@@ -97,8 +97,8 @@ describe("05B Knowledge_Case — two-polarity learning store (BR-B16, §14 prove
   it("invariant (fail-closed): outcome='not_resolved' WITHOUT a not_resolved_reason is rejected", async () => {
     await expect(
       pool.query(
-        `insert into tenant."Knowledge_Case" (tenant_id, tipo_area, outcome)
-           values ('POOL-001','finanzas','not_resolved')`,
+        `insert into tenant."Knowledge_Case" (tenant_id, area_type, outcome)
+           values ('POOL-001','finance','not_resolved')`,
       ),
     ).rejects.toThrow();
   });
@@ -108,15 +108,15 @@ describe("05B Knowledge_Case — two-polarity learning store (BR-B16, §14 prove
     // the polarity clause and silently letting a why-less escalation through)…
     await expect(
       pool.query(
-        `insert into tenant."Knowledge_Case" (tenant_id, tipo_area, outcome)
-           values ('POOL-001','finanzas','escalated')`,
+        `insert into tenant."Knowledge_Case" (tenant_id, area_type, outcome)
+           values ('POOL-001','finance','escalated')`,
       ),
     ).rejects.toThrow();
     // …and the inverse: escalated WITH a reason is accepted (the branch is live, not dead).
     await pool.query(
       `insert into tenant."Knowledge_Case"
-         (tenant_id, tipo_area, outcome, not_resolved_reason, provenance_by_field)
-       values ('POOL-001','finanzas','escalated','handed to human ops',
+         (tenant_id, area_type, outcome, not_resolved_reason, provenance_by_field)
+       values ('POOL-001','finance','escalated','handed to human ops',
                '{"outcome":"[I]","not_resolved_reason":"[C]"}'::jsonb)`,
     );
     const r = await rows<{ outcome: string }>(
@@ -129,20 +129,20 @@ describe("05B Knowledge_Case — two-polarity learning store (BR-B16, §14 prove
   it("domain (fail-closed): a bogus outcome value is rejected", async () => {
     await expect(
       pool.query(
-        `insert into tenant."Knowledge_Case" (tenant_id, tipo_area, outcome, resolucao)
-           values ('POOL-001','finanzas','maybe','x')`,
+        `insert into tenant."Knowledge_Case" (tenant_id, area_type, outcome, resolution)
+           values ('POOL-001','finance','maybe','x')`,
       ),
     ).rejects.toThrow();
   });
 
   it("anti-fake §14: outcome is NULL-able pre-producer (a KB row with no measured outcome)", async () => {
     await pool.query(
-      `insert into tenant."Knowledge_Case" (tenant_id, tipo_area, padrao)
-         values ('POOL-001','finanzas','pago_fallido_silencioso')`,
+      `insert into tenant."Knowledge_Case" (tenant_id, area_type, pattern)
+         values ('POOL-001','finance','silent_failed_payment')`,
     );
     const r = await rows<{ outcome: string | null; reviewed_default: boolean }>(
       pool,
-      `select outcome, revisado as reviewed_default from tenant."Knowledge_Case"`,
+      `select outcome, reviewed as reviewed_default from tenant."Knowledge_Case"`,
     );
     expect(r[0]?.outcome).toBeNull(); // never assumed
     expect(r[0]?.reviewed_default).toBe(false); // BR-B16: human-gated by default

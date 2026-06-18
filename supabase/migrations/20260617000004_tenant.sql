@@ -24,7 +24,7 @@ create table tenant."Restaurant" (
 );
 create index restaurant_tenant_idx on tenant."Restaurant"(tenant_id);
 
--- Order: ALL orders/payments. Source of R$ + silenciosos. net_value is GENERATED arithmetic
+-- Order: ALL orders/payments. Source of R$ + silent ones. net_value is GENERATED arithmetic
 -- (its named producer is the column itself; 04 §14 "Aritmética de fila"), not a seeded result.
 create table tenant."Order" (
   order_id       bigint generated always as identity primary key,
@@ -45,7 +45,7 @@ create index order_failed_idx on tenant."Order"(restaurant_id) where payment_sta
 
 -- Usage_Event: platform-usage log, append-only.
 create table tenant."Usage_Event" (
-  evento_id      bigint generated always as identity primary key,
+  event_id       bigint generated always as identity primary key,
   restaurant_id text not null references tenant."Restaurant"(restaurant_id),
   user_id     text references gov."User"(user_id),
   feature        text not null,
@@ -54,7 +54,7 @@ create table tenant."Usage_Event" (
   payload        jsonb not null default '{}'::jsonb
 );
 create index usage_event_rest_ts_idx on tenant."Usage_Event"(restaurant_id, ts);
-create trigger evento_uso_append_only
+create trigger usage_event_append_only
   before update or delete on tenant."Usage_Event"
   for each row execute function public.tg_append_only();
 
@@ -87,7 +87,7 @@ create table tenant."KPI" (
   kpi_def_version  text not null references catalog."Named_Query"(def_version),
   target           numeric default null,        -- config [C]
   current_value        numeric default null,        -- RESULT §14 (NULL pre-run)
-  ultimo_calculo_ts timestamptz default null,
+  last_calculation_ts timestamptz default null,
   provenance       text not null default '[C]'
 );
 create index kpi_tenant_idx on tenant."KPI"(tenant_id, level);

@@ -1,8 +1,8 @@
--- Chunk 5 — F-2.2 v2 delta + at_risk (MODEL v2 §A.7, BR-21). Adds the consumible percentile_delta
--- {sentido, magnitud, ventana, n_min_ok, orders_delta, root_cause}. at_risk fires on a percentile
+-- Chunk 5 — F-2.2 v2 delta + at_risk (MODEL v2 §A.7, BR-21). Adds the consumable percentile_delta
+-- {sentido, magnitud, ventana_dias, n_min_ok, orders_delta, root_cause}. at_risk fires on a percentile
 -- DROP that is either below at_risk_max OR driven by falling orders (Leo: "cai de percentil PORQUE
 -- vende menos" — orders is the crux/root). churn = no orders in window. Deterministic, version-
--- stamped, same-version only (anti-mezcla). Uses the m_* metrics persisted on the membership.
+-- stamped, same-version only (anti-mix). Uses the m_* metrics persisted on the membership.
 
 alter table cohort."Prioritized_NBA_Event"
   add column if not exists percentile_delta jsonb;

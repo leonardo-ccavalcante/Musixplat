@@ -6,7 +6,7 @@ import { appRouter } from "../../server/routers/_app";
 import type { Context } from "../../server/_core/context";
 
 // EPIC-6 / F-6.2 / F-6.3 — sandbox is ephemeral + no-commit. The simulation NEVER writes real
-// Pertenencia/Prioritized_NBA_Event; only apertura/cierre are logged to Usage_Event.
+// Membership/Prioritized_NBA_Event; only open/close are logged to Usage_Event.
 
 const W1 = "2026-05-25";
 const REF = "2026-06-17";
@@ -64,7 +64,7 @@ describe("EPIC-6 sandbox real re-segmentation, no-commit", () => {
       `select restaurant_id rid, subgroup_id sg from cohort."Cohort_Membership_Snapshot" where week='${W1}' order by restaurant_id`,
     );
     expect(realAfter).toEqual(realBefore);
-    // observability: apertura + cierre persisted (outside the rollback).
+    // observability: open + close persisted (outside the rollback).
     expect(await count(pool, `tenant."Usage_Event" where event_type='sandbox_open'`)).toBeGreaterThan(0);
     expect(await count(pool, `tenant."Usage_Event" where event_type='sandbox_close'`)).toBeGreaterThan(0);
   }, 240_000);

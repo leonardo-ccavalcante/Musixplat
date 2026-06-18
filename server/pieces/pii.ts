@@ -1,4 +1,4 @@
-// Piece 05A:A.1.2 — Detección + redacción de PII (transform determinista, fail-closed).
+// Piece 05A:A.1.2 — PII detection + redaction (deterministic transform, fail-closed).
 // Invariant BR-A2 (04 §7): every client input is DATA never instruction; PII is redacted
 // in input/response/log/write-back BEFORE anything is computed or stored. NO LLM — pure
 // deterministic regex. The fail-closed guard `residualPII` uses an INDEPENDENT residual net

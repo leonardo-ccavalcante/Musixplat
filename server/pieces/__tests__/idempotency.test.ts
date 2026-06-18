@@ -29,7 +29,7 @@ describe("buildExecRequest — 05A:A.5.1 (pedido_ejecucion + deterministic idemp
     expect(a.idempotency_key).not.toBe(b.idempotency_key);
   });
 
-  it("changing policyVersion ⇒ different key (anti-mezcla §3.5)", () => {
+  it("changing policyVersion ⇒ different key (anti-mix §3.5)", () => {
     const a = buildExecRequest(base);
     const b = buildExecRequest({ ...base, policyVersion: "v2.0" });
     expect(a.idempotency_key).not.toBe(b.idempotency_key);
@@ -41,7 +41,7 @@ describe("buildExecRequest — 05A:A.5.1 (pedido_ejecucion + deterministic idemp
     expect(a.idempotency_key).not.toBe(b.idempotency_key);
   });
 
-  it("pedido_ejecucion contains the sealed policy_version (anti-mezcla §3.5)", () => {
+  it("pedido_ejecucion contains the sealed policy_version (anti-mix §3.5)", () => {
     const { pedido_ejecucion } = buildExecRequest(base);
     expect(pedido_ejecucion["policy_version"]).toBe(base.policyVersion);
   });

@@ -1,5 +1,5 @@
 -- MODEL v2 (Leo ratified 2026-06-18). Cohort redesign → comparable cells
--- (categoria × região × tamanho) + real operational signals. ADDITIVE (v1 already deployed);
+-- (category × region × size) + real operational signals. ADDITIVE (v1 already deployed);
 -- brutos only, every derived value stays a RESULT (§14). Idempotent (db reset re-runs all).
 --
 -- Chunk 1 of the v2 build = schema + signals + connection telemetry. The cohort-axis UNIQUE swap
@@ -13,7 +13,7 @@ do $$ begin
 end $$;
 
 -- Restaurant: location + cuisine + committed weekly hours.
--- zone/cuisine = cohort axes (compare sushi↔sushi, região↔região). committed_hours = conexión denominator.
+-- zone/cuisine = cohort axes (compare sushi↔sushi, region↔region). committed_hours = connection denominator.
 alter table tenant."Restaurant"
   add column if not exists zone                    text,
   add column if not exists cuisine             text,

@@ -32,25 +32,25 @@ describe("05B:US-B1.1.1 + B.1.3 — gate + dedup create-or-increment", () => {
     expect(await count(pool, `tenant."Diagnosed_Problem"`)).toBe(0);
   });
 
-  it("creates ONE open problema (tenant from session), then increments frecuencia on repeat", async () => {
-    const a = await caller("POOL-001", "U-OP-001").diagnostico.reportProblema({
+  it("creates ONE open problem (tenant from session), then increments frequency on repeat", async () => {
+    const a = await caller("POOL-001", "U-OP-001").diagnosis.reportProblem({
       restaurantId: "R001",
-      criticidad: "grave",
+      criticality: "critical",
     });
     expect(a.created).toBe(true);
-    expect(a.frecuencia).toBe(1);
-    expect(a.status).toBe("abierto");
+    expect(a.frequency).toBe(1);
+    expect(a.status).toBe("open");
 
-    const b = await caller("POOL-001", "U-OP-001").diagnostico.reportProblema({ restaurantId: "R001" });
+    const b = await caller("POOL-001", "U-OP-001").diagnosis.reportProblem({ restaurantId: "R001" });
     expect(b.created).toBe(false); // B.1.3: same case, no duplicate
-    expect(b.frecuencia).toBe(2); // frecuencia is a computed count
-    expect(b.problema_id).toBe(a.problema_id);
+    expect(b.frequency).toBe(2); // frequency is a computed count
+    expect(b.problem_id).toBe(a.problem_id);
     expect(await count(pool, `tenant."Diagnosed_Problem" where restaurant_id='R001'`)).toBe(1);
   });
 
   it("US-B1.1.1 fail-closed: unknown restaurant_id rejects (never creates)", async () => {
     await expect(
-      caller("POOL-001", "U-OP-001").diagnostico.reportProblema({ restaurantId: "R-NOPE" }),
+      caller("POOL-001", "U-OP-001").diagnosis.reportProblem({ restaurantId: "R-NOPE" }),
     ).rejects.toThrow();
     expect(await count(pool, `tenant."Diagnosed_Problem" where restaurant_id='R-NOPE'`)).toBe(0);
   });
@@ -58,13 +58,13 @@ describe("05B:US-B1.1.1 + B.1.3 — gate + dedup create-or-increment", () => {
   it("BR-B6 hard-no: cross-pool report aborts + writes a cross_pool Security_Log", async () => {
     const before = await count(pool, `gov."Security_Log" where kind='cross_pool'`);
     await expect(
-      caller("POOL-002", "U-OP-002").diagnostico.reportProblema({ restaurantId: "R001" }),
+      caller("POOL-002", "U-OP-002").diagnosis.reportProblem({ restaurantId: "R001" }),
     ).rejects.toThrow();
     expect(await count(pool, `gov."Security_Log" where kind='cross_pool'`)).toBe(before + 1);
   });
 
   it("fail-closed: no session ⇒ reject (tenantProcedure)", async () => {
     const anon = appRouter.createCaller({ session: null, tenantId: null, userId: null });
-    await expect(anon.diagnostico.reportProblema({ restaurantId: "R001" })).rejects.toThrow();
+    await expect(anon.diagnosis.reportProblem({ restaurantId: "R001" })).rejects.toThrow();
   });
 });

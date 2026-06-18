@@ -27,7 +27,7 @@ export const handoffInput = z.object({
 });
 export type HandoffInput = z.infer<typeof handoffInput>;
 
-// Prioritized_NBA_Event — the único mutante output (matches 02:1A consumer fields).
+// Prioritized_NBA_Event — the single mutating output (matches 02:1A consumer fields).
 export const eventoPriorizadoNba = z.object({
   evento_id: z.string(),
   restaurant_id: z.string(),
