@@ -121,6 +121,13 @@ insert into gov."User"(user_id, tenant_id, org_level, role) values
   ('U-OP-001', 'POOL-001', 'team', 'agent_manager_senior'),
   ('U-OP-002', 'POOL-002', 'team', 'agent_manager_senior');
 
+-- AI agent actors (one per pool): the NBA proposer. Distinct from the human operator so the
+-- Release_Batch 4-eyes CHECK (proposer_id <> operator_id) + Decision_Trace independence hold when a
+-- human releases an AI-proposed NBA (02:1C / BR-9 / BR-11). Config rows, not a §14 result.
+insert into gov."User"(user_id, tenant_id, org_level, role) values
+  ('U-AI-001', 'POOL-001', 'team', 'ai_agent'),
+  ('U-AI-002', 'POOL-002', 'team', 'ai_agent');
+
 -- ── tenant.Restaurant: 5000. Cohort axes = cuisine × zone × tier. ~5% managed/95% long_tail;
 --    ~10% POOL-002. signup_date spread 0-23m. tenure_months stays NULL (RESULT, F-1.1). ──
 insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date,

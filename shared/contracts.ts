@@ -163,3 +163,13 @@ export const nbaCockpitRow = z.object({
   cohort_rule_version: z.string(),
 });
 export type NbaCockpitRow = z.infer<typeof nbaCockpitRow>;
+
+// 02:1C / F-1.2 — human release/pause of a proposal. Carries NO tenant_id / operator_id (both resolved
+// server-side from the session, anti-spoofing). resulting_level is the human override — validated
+// server-side to be <= effective_level (override only DOWN, AUT-11 / BR-1).
+export const cockpitReleaseInput = z.object({
+  nba_id: z.string().min(1),
+  action: z.enum(["RELEASE", "PAUSE"]),
+  resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
+});
+export type CockpitReleaseInput = z.infer<typeof cockpitReleaseInput>;
