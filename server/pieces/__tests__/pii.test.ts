@@ -100,7 +100,7 @@ describe("redactPII — fail-closed against adversarial-review leak vectors", ()
     // Each number is broken by letters, so collapsing punctuation never merges them into an
     // 8+ run. (Adjacent numbers with only punctuation between WOULD merge — that is the
     // intended fail-closed over-flag, not tested here.)
-    const input = "piso 3, puerta 4, llego el ano 2024 sin problemas";
+    const input = "floor 3, puerta 4, llego el ano 2024 sin problemas";
     const { texto, residualPII } = redactPII(input);
     expect(residualPII).toBe(false);
     expect(texto).not.toContain("[REDACTED:");

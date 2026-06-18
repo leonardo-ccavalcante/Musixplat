@@ -1,6 +1,6 @@
 -- P01 deterministic producers (04 §6/§14). Math lives in SQL (CLAUDE.md §1); orchestration in
 -- TS (server/jobs/p01.ts). Every function reads thresholds BY NAME, stamps cohort_rule_version
--- per row, and computes RESULTS from brutos — never seeds a number. Determinism: same brutos +
+-- per row, and computes RESULTS from raw inputs — never seeds a number. Determinism: same raw inputs +
 -- same (week, ref_date) ⇒ identical output.
 
 -- Business metric (recurrence proxy) from Order, windowed on the week (28d) so consecutive
@@ -68,7 +68,7 @@ begin
 end;
 $$;
 
--- F-1.2 — ranking: percentile + gap_to_top per account; Cohort.n_accounts + atribucion baseline.
+-- F-1.2 — ranking: percentile + gap_to_top per account; Cohort.n_accounts + attribution baseline.
 create or replace function cohort.fn_rank_cohort(p_week date)
 returns void language plpgsql as $$
 declare v_version text := catalog.knob_text('cohort_rule_version_current');

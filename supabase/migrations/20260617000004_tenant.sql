@@ -24,7 +24,7 @@ create table tenant."Restaurant" (
 );
 create index restaurant_tenant_idx on tenant."Restaurant"(tenant_id);
 
--- Order: ALL orders/payments. Source of R$ + silenciosos. net_value is GENERATED arithmetic
+-- Order: ALL orders/payments. Source of R$ + silent (affected-no-ticket). net_value is GENERATED arithmetic
 -- (its named producer is the column itself; 04 §14 "Aritmética de fila"), not a seeded result.
 create table tenant."Order" (
   order_id       bigint generated always as identity primary key,
@@ -45,7 +45,7 @@ create index order_failed_idx on tenant."Order"(restaurant_id) where payment_sta
 
 -- Usage_Event: platform-usage log, append-only.
 create table tenant."Usage_Event" (
-  evento_id      bigint generated always as identity primary key,
+  event_id       bigint generated always as identity primary key,
   restaurant_id text not null references tenant."Restaurant"(restaurant_id),
   user_id     text references gov."User"(user_id),
   feature        text not null,
@@ -54,12 +54,12 @@ create table tenant."Usage_Event" (
   payload        jsonb not null default '{}'::jsonb
 );
 create index usage_event_rest_ts_idx on tenant."Usage_Event"(restaurant_id, ts);
-create trigger evento_uso_append_only
+create trigger usage_event_append_only
   before update or delete on tenant."Usage_Event"
   for each row execute function public.tg_append_only();
 
 -- Conversation_Episode (minimal): ticket signal for panels F-3.3/F-3.4/F-5.4. intent is bruto;
--- cohort dimension is DERIVED via join to Pertenencia (producer output), not stored on the
+-- cohort dimension is DERIVED via join to Membership (producer output), not stored on the
 -- bruto conversation — keeps §14 honest. conversation_status initial = conservative 'open' (never
 -- seeded 'escalated'); metrics_layer is a RESULT (NULL pre-run).
 create table tenant."Conversation_Episode" (

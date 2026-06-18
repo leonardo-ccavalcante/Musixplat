@@ -4,7 +4,7 @@ import { handoffInput } from "@shared/contracts";
 import { query } from "../db/pool.js";
 
 interface EventRow {
-  evento_id: string;
+  event_id: string;
   restaurant_id: string;
   cohort_id: string;
   cohort_rule_version: string;
@@ -17,7 +17,7 @@ export const handoffRouter = router({
   confirm: tenantProcedure.input(handoffInput).mutation(async ({ ctx, input }) => {
     try {
       const rows = await query<EventRow>(
-        `select evento_id, restaurant_id, cohort_id, cohort_rule_version, operator_id
+        `select event_id, restaurant_id, cohort_id, cohort_rule_version, operator_id
          from cohort.fn_handoff($1, $2, $3, $4, $5, $6)`,
         [input.restaurant_id, input.cohort_id, input.subgroup_id ?? null, input.week, ctx.userId, ctx.tenantId],
       );

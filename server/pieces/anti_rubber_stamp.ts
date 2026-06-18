@@ -23,7 +23,7 @@ const FAIL_CLOSED: RubberStampResult = { valid: false, alarm: false, reason: "fa
  * `pisoRejection` is the minimum acceptable rejection-rate for a confirmer, read by
  * NAME from Config_Knobs by the caller. This function never embeds a literal.
  *
- * [ASSUMPTION] rejectionRate === pisoRejection triggers alarm (≤ piso ⇒ rubber_stamp).
+ * [ASSUMPTION] rejectionRate === pisoRejection triggers alarm (≤ floor ⇒ rubber_stamp).
  * A rate exactly at the floor is indistinguishable from collapse; strict '>' is the safe
  * direction per §3.7 (fail-closed). Caller may adjust pisoRejection if marginal equality
  * should be treated as acceptable.
@@ -59,7 +59,7 @@ export function antiRubberStamp(
     return { valid: false, alarm: false, reason: "not_independent" };
   }
 
-  // Rubber-stamp alarm: rejectionRate <= piso ⇒ confirmer approves everything ⇒ flag it.
+  // Rubber-stamp alarm: rejectionRate <= floor ⇒ confirmer approves everything ⇒ flag it.
   // The approval is still structurally valid but must be escalated for human review.
   if (e.rejectionRate <= pisoRejection) {
     return { valid: true, alarm: true, reason: "rubber_stamp" };

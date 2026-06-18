@@ -14,13 +14,13 @@ export interface DossierGateResult {
 
 // The 11 derived dossier fields exposed by tenant.v_dossier_handoff (04 §3.4, §4).
 const FIELDS = [
-  "f1_tipo_raiz", "f2_evidencia", "f3_quien", "f4_onde_concentra", "f5_cuanto",
-  "f6_recurrence", "f7_casos_similares", "f8_hipotese_auditable", "f9_ruta_sugerida",
-  "f10_dados_crudos", "f11_provenance",
+  "f1_type_root", "f2_evidence", "f3_who", "f4_where_concentrated", "f5_how_much",
+  "f6_recurrence", "f7_similar_cases", "f8_auditable_hypothesis", "f9_suggested_route",
+  "f10_raw_data", "f11_provenance",
 ] as const;
 type Field = (typeof FIELDS)[number];
 
-type DossierRow = Record<Field, unknown> & { problema_id: string };
+type DossierRow = Record<Field, unknown> & { problem_id: string };
 
 const isNil = (v: unknown): boolean => v === null || v === undefined;
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -33,13 +33,13 @@ const arrayNonEmpty = (v: unknown): boolean => Array.isArray(v) && v.length > 0;
 function isGap(field: Field, value: unknown): boolean {
   switch (field) {
     // composite jsonb objects: GAP if null OR any inner value is null.
-    case "f1_tipo_raiz":
-    case "f5_cuanto":
-    case "f8_hipotese_auditable":
+    case "f1_type_root":
+    case "f5_how_much":
+    case "f8_auditable_hypothesis":
       return !objectComplete(value);
     // arrays: GAP if null OR empty [].
-    case "f3_quien":
-    case "f7_casos_similares":
+    case "f3_who":
+    case "f7_similar_cases":
       return !arrayNonEmpty(value);
     // provenance object: GAP if null OR empty {} (no provenance ⇒ no render/export, §3 R10).
     case "f11_provenance":
@@ -53,8 +53,8 @@ function isGap(field: Field, value: unknown): boolean {
 /** US-B6.3.1 — gate the dossier: emit only when all 11 fields are present with provenance. */
 export async function emitDossier(problemaId: string): Promise<DossierGateResult> {
   const rows = await query<DossierRow>(
-    `select problema_id, ${FIELDS.join(", ")}
-       from tenant.v_dossier_handoff where problema_id = $1`,
+    `select problem_id, ${FIELDS.join(", ")}
+       from tenant.v_dossier_handoff where problem_id = $1`,
     [problemaId],
   );
   const row = rows[0];

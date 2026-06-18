@@ -5,9 +5,9 @@ import { reportProblemaInput, type ReportProblemaResult } from "../../shared/con
 
 // 05B:US-B1.1.1 (gate tenant_id + restaurant_id) + 05B:B.1.3 (dedup create-or-increment).
 // 04 §3/§7. tenant resolved server-side (tenantProcedure, anti-spoofing); cross-pool ⇒ abort +
-// Security_Log (BR-B6 hard-no). At most ONE open problema per restaurant (anti doble-conteo,
-// "un caso = un PROBLEMA") via the partial unique index — a repeat trigger increments frecuencia
-// instead of duplicating (BR-B5/BR-B8). frecuencia is a computed count, never a seeded number.
+// Security_Log (BR-B6 hard-no). At most ONE open problem per restaurant (anti double-count,
+// "one case = one PROBLEM") via the partial unique index — a repeat trigger increments frequency
+// instead of duplicating (BR-B5/BR-B8). frequency is a computed count, never a seeded number.
 
 export const diagnosticoRouter = router({
   reportProblema: tenantProcedure
@@ -19,7 +19,7 @@ export const diagnosticoRouter = router({
         [input.restaurantId],
       );
       if (!owner[0]) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "restaurant_id desconocido (fail-closed)" });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "unknown restaurant_id (fail-closed)" });
       }
       if (owner[0].tenant_id !== ctx.tenantId) {
         await query(
@@ -29,25 +29,25 @@ export const diagnosticoRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool diagnostico blocked" });
       }
 
-      // B.1.3 — create-or-increment. Partial unique (tenant_id, restaurant_id) WHERE abierto.
-      // (xmax = 0) ⇒ this call inserted; otherwise it bumped an existing open problema.
+      // B.1.3 — create-or-increment. Partial unique (tenant_id, restaurant_id) WHERE open.
+      // (xmax = 0) ⇒ this call inserted; otherwise it bumped an existing open problem.
       const rows = await query<{
-        problema_id: string;
+        problem_id: string;
         status: string;
-        frecuencia: number;
+        frequency: number;
         created: boolean;
       }>(
         `insert into tenant."Diagnosed_Problem"
-           (tenant_id, restaurant_id, conversation_id, criticidad, status, frecuencia)
-         values ($1, $2, $3, $4, 'abierto', 1)
-         on conflict (tenant_id, restaurant_id) where status = 'abierto'
-           do update set frecuencia     = tenant."Diagnosed_Problem".frecuencia + 1,
-                         ultima_vez_ts  = now()
-         returning problema_id, status, frecuencia, (xmax = 0) as created`,
-        [ctx.tenantId, input.restaurantId, input.conversationId ?? null, input.criticidad ?? null],
+           (tenant_id, restaurant_id, conversation_id, criticality, status, frequency)
+         values ($1, $2, $3, $4, 'open', 1)
+         on conflict (tenant_id, restaurant_id) where status = 'open'
+           do update set frequency     = tenant."Diagnosed_Problem".frequency + 1,
+                         last_seen_ts  = now()
+         returning problem_id, status, frequency, (xmax = 0) as created`,
+        [ctx.tenantId, input.restaurantId, input.conversationId ?? null, input.criticality ?? null],
       );
       const r = rows[0];
       if (!r) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "report failed" });
-      return { problema_id: r.problema_id, status: r.status, frecuencia: r.frecuencia, created: r.created };
+      return { problem_id: r.problem_id, status: r.status, frequency: r.frequency, created: r.created };
     }),
 });

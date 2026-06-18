@@ -73,7 +73,7 @@ export const cohortsRouter = router({
   deltas: tenantProcedure.query(async ({ ctx }) => {
     const v = await vigente();
     const rows = await query(
-      `select e.evento_id, e.restaurant_id, e.cohort_id, e.delta_status,
+      `select e.event_id, e.restaurant_id, e.cohort_id, e.delta_status,
               e.percentile_in_cohort, e.gap_to_top
        from cohort."Prioritized_NBA_Event" e
        join tenant."Restaurant" r on r.restaurant_id=e.restaurant_id and r.tenant_id=$1

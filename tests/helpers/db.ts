@@ -15,7 +15,7 @@ export function makePool(): pg.Pool {
 
 const SEED_SQL = fileURLToPath(new URL("../../supabase/seed.sql", import.meta.url));
 
-// Pristine state = brutos only, NO producers. Truncate all data + re-exec seed.sql via pg
+// Pristine state = raw inputs only, NO producers. Truncate all data + re-exec seed.sql via pg
 // (health-independent: avoids the supabase CLI healthcheck flapping under load). The schema +
 // functions (det_int, etc.) persist — they are created by migrations on `supabase start`.
 export async function resetDb(pool: pg.Pool): Promise<void> {

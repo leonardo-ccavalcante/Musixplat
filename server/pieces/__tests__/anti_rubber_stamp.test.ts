@@ -5,7 +5,7 @@ import { antiRubberStamp } from "../anti_rubber_stamp.js";
 const PISO = 0.05;
 
 describe("antiRubberStamp — 05A:A.7.4b (4-eyes independence + rejection→0 alarm, fail-closed §7)", () => {
-  it("independent + rejectionRate > piso ⇒ {valid:true, alarm:false, reason:'ok'}", () => {
+  it("independent + rejectionRate > floor ⇒ {valid:true, alarm:false, reason:'ok'}", () => {
     const r = antiRubberStamp(
       { proponenteId: "user-A", confirmadorId: "user-B", rejectionRate: 0.2 },
       PISO
@@ -13,7 +13,7 @@ describe("antiRubberStamp — 05A:A.7.4b (4-eyes independence + rejection→0 al
     expect(r).toEqual({ valid: true, alarm: false, reason: "ok" });
   });
 
-  it("independent + rejectionRate === 0 (< piso) ⇒ {valid:true, alarm:true, reason:'rubber_stamp'}", () => {
+  it("independent + rejectionRate === 0 (< floor) ⇒ {valid:true, alarm:true, reason:'rubber_stamp'}", () => {
     const r = antiRubberStamp(
       { proponenteId: "user-A", confirmadorId: "user-B", rejectionRate: 0.0 },
       PISO
@@ -21,8 +21,8 @@ describe("antiRubberStamp — 05A:A.7.4b (4-eyes independence + rejection→0 al
     expect(r).toEqual({ valid: true, alarm: true, reason: "rubber_stamp" });
   });
 
-  it("independent + rejectionRate === piso ⇒ alarm (boundary: <= piso triggers alarm)", () => {
-    // [ASSUMPTION] rejectionRate == piso is treated as alarm (≤ piso ⇒ rubber_stamp). Rate at
+  it("independent + rejectionRate === floor ⇒ alarm (boundary: <= floor triggers alarm)", () => {
+    // [ASSUMPTION] rejectionRate == floor is treated as alarm (≤ floor ⇒ rubber_stamp). Rate at
     // the floor is indistinguishable from collapse; strict '>' is the safe direction (§3.7).
     const r = antiRubberStamp(
       { proponenteId: "user-A", confirmadorId: "user-B", rejectionRate: PISO },

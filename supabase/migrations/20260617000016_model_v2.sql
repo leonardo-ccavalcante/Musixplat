@@ -1,6 +1,6 @@
 -- MODEL v2 (Leo ratified 2026-06-18). Cohort redesign → comparable cells
--- (categoria × região × tamanho) + real operational signals. ADDITIVE (v1 already deployed);
--- brutos only, every derived value stays a RESULT (§14). Idempotent (db reset re-runs all).
+-- (category × region × size) + real operational signals. ADDITIVE (v1 already deployed);
+-- raw inputs only, every derived value stays a RESULT (§14). Idempotent (db reset re-runs all).
 --
 -- Chunk 1 of the v2 build = schema + signals + connection telemetry. The cohort-axis UNIQUE swap
 -- and producer rewrite land together in chunk 2 (kept atomic so v1 producers stay green here).
@@ -13,13 +13,13 @@ do $$ begin
 end $$;
 
 -- Restaurant: location + cuisine + committed weekly hours.
--- zone/cuisine = cohort axes (compare sushi↔sushi, região↔região). committed_hours = conexión denominator.
+-- zone/cuisine = cohort axes (compare sushi↔sushi, region↔region). committed_hours = connection denominator.
 alter table tenant."Restaurant"
   add column if not exists zone                    text,
   add column if not exists cuisine             text,
   add column if not exists committed_hours_week numeric(6,2);
 
--- Order operational signals (brutos). payment_status='failed' = cancelada; 'ok' = entregada.
+-- Order operational signals (raw inputs). payment_status='failed' = cancelled; 'ok' = delivered.
 -- cancelled_by set ONLY on a cancel. quality (foto/descrição) is per-order menu signal.
 alter table tenant."Order"
   add column if not exists cancelled_by     public.cancelled_by,
@@ -27,8 +27,8 @@ alter table tenant."Order"
   add column if not exists has_photo        boolean,
   add column if not exists has_description boolean;
 
--- Connection telemetry: weekly process table. RATIO (conexión = conectadas/prometidas) is a
--- RESULT computed producer-side, NEVER stored here. Both columns are brutos.
+-- Connection telemetry: weekly process table. RATIO (connection = connected/committed) is a
+-- RESULT computed producer-side, NEVER stored here. Both columns are raw inputs.
 create table if not exists tenant."Weekly_Connection" (
   connection_id      bigint generated always as identity primary key,
   restaurant_id   text not null references tenant."Restaurant"(restaurant_id),

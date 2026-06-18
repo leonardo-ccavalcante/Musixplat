@@ -2,12 +2,12 @@ import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 
 // EPIC-6 / F-6.1 / F-6.2 / F-6.3 — on-demand ephemeral re-segmentation.
-// NO-COMMIT by construction: the simulation is a pure read; it NEVER writes Pertenencia/Cohort/
-// Prioritized_NBA_Event and NEVER hands off. Only apertura/cierre are logged to Usage_Event
+// NO-COMMIT by construction: the simulation is a pure read; it NEVER writes Membership/Cohort/
+// Prioritized_NBA_Event and NEVER hands off. Only open/close are logged to Usage_Event
 // (append-only observability) without persisting the simulated result (04 §14 sandbox denylist).
-// Same gates as real (k-anon/n_min/anti-mezcla) apply to the read; here only the effect is blocked.
+// Same gates as real (k-anon/n_min/anti-mix) apply to the read; here only the effect is blocked.
 export const sandboxRouter = router({
-  // F-6.2 — simulated diff vs the vigente snapshot. border perturbation = +1 month (what-if),
+  // F-6.2 — simulated diff vs the current snapshot. border perturbation = +1 month (what-if),
   // computed read-only. Returns actual vs simulado counts per cell. Writes nothing real.
   run: tenantProcedure.query(async ({ ctx }) => {
     // apertura logged (no result persisted)

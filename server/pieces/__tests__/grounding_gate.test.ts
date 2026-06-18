@@ -13,63 +13,63 @@ const validChecks: GroundingChecks = {
 };
 
 describe("hardGroundingGate — 05A:A.4.2", () => {
-  it("all checks pass ⇒ pass=true, eje=null, status=verificado", () => {
+  it("all checks pass ⇒ pass=true, axis=null, status=verificado", () => {
     const result = hardGroundingGate(validChecks, TTL);
     expect(result.pass).toBe(true);
-    expect(result.eje).toBeNull();
+    expect(result.axis).toBeNull();
     expect(result.status).toBe("verificado");
   });
 
-  it("stale freshness ⇒ pass=false, eje='grounding' (fail-closed)", () => {
+  it("stale freshness ⇒ pass=false, axis='grounding' (fail-closed)", () => {
     const checks: GroundingChecks = { ...validChecks, freshnessMs: TTL + 1 };
     const result = hardGroundingGate(checks, TTL);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
-  it("source not responded ⇒ pass=false, eje='grounding'", () => {
+  it("source not responded ⇒ pass=false, axis='grounding'", () => {
     const checks: GroundingChecks = { ...validChecks, sourceResponded: false };
     const result = hardGroundingGate(checks, TTL);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
-  it("ambiguous payload ⇒ pass=false, eje='grounding'", () => {
+  it("ambiguous payload ⇒ pass=false, axis='grounding'", () => {
     const checks: GroundingChecks = { ...validChecks, unambiguous: false };
     const result = hardGroundingGate(checks, TTL);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
-  it("tenant mismatch ⇒ pass=false, eje='grounding'", () => {
+  it("tenant mismatch ⇒ pass=false, axis='grounding'", () => {
     const checks: GroundingChecks = { ...validChecks, tenantMatches: false };
     const result = hardGroundingGate(checks, TTL);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
-  it("null checks ⇒ pass=false, eje='grounding' (fail-closed §3.7)", () => {
+  it("null checks ⇒ pass=false, axis='grounding' (fail-closed §3.7)", () => {
     const result = hardGroundingGate(null, TTL);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
-  it("undefined checks ⇒ pass=false, eje='grounding' (fail-closed §3.7)", () => {
+  it("undefined checks ⇒ pass=false, axis='grounding' (fail-closed §3.7)", () => {
     const result = hardGroundingGate(undefined, TTL);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
-  it("invalid ttlMs (0) ⇒ pass=false, eje='grounding' (fail-closed)", () => {
+  it("invalid ttlMs (0) ⇒ pass=false, axis='grounding' (fail-closed)", () => {
     const result = hardGroundingGate(validChecks, 0);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
-  it("invalid ttlMs (NaN) ⇒ pass=false, eje='grounding' (fail-closed)", () => {
+  it("invalid ttlMs (NaN) ⇒ pass=false, axis='grounding' (fail-closed)", () => {
     const result = hardGroundingGate(validChecks, NaN);
     expect(result.pass).toBe(false);
-    expect(result.eje).toBe("grounding");
+    expect(result.axis).toBe("grounding");
   });
 
   it("deterministic: same inputs ⇒ same output", () => {

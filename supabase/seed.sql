@@ -1,12 +1,12 @@
 -- ============================================================================
--- SEED — BRUTOS ONLY (04 §6, §14). Populates ONLY raw business inputs + catalog/config.
--- Every RESULT (percentile, gap, baselines, n_accounts, delta_status, current_value, conexión RATIO,
+-- SEED — RAW INPUTS ONLY (04 §6, §14). Populates ONLY raw business inputs + catalog/config.
+-- Every RESULT (percentile, gap, baselines, n_accounts, delta_status, current_value, connection RATIO,
 -- upside, ...) stays NULL/empty until its producer runs. pnpm test:antifake fails if broken.
 --
 -- MODEL v2 (Leo ratified 2026-06-18): 5000 restaurants; cohort axes = cuisine × zone × tier;
--- operational signals (conexión horas, cancelled_by, desconto, qualidade foto/descrição) GENERATED
+-- operational signals (connection horas, cancelled_by, desconto, qualidade foto/descrição) GENERATED
 -- DETERMINISTICALLY with the real correlations Leo described:
---   qualidade↑ → vendas↑ · conexão↑ → recebe + orders · cancel↑ penaliza · cada zone tem demanda própria
+--   qualidade↑ → vendas↑ · connection↑ → recebe + orders · cancel↑ penaliza · cada zone tem demanda própria
 --   (→ permite detectar "bom restaurant, zone fraca" = problema de demanda, não de oferta).
 -- Same input ⇒ same seed (reproducible). det_int lives in migration 20260617000006.
 -- ============================================================================
@@ -19,7 +19,7 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('tenure_border_2_months',   '6',  '[V]', 'leo'),
   ('tenure_border_3_months',   '12', '[V]', 'leo'),
   ('TTL_baseline_days',        '7',  '[C]', 'leo'),
-  ('D_dias_verde',             '14', '[C]', 'leo'),
+  ('D_green_days',             '14', '[C]', 'leo'),
   ('cohort_rule_version_current', 'v1', '[V]', 'leo'),
   ('p90_percentile_cut',      '90', '[C]', 'leo'),
   ('at_risk_percentile_max',    '25', '[C]', 'leo'),
@@ -43,7 +43,7 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('tolerance_reconciliation', '0',    '[C]', 'leo'),
   ('window_silent',       '30',   '[C]', 'leo');
 
--- ── Catalog: Cohort_Rule_Version (vigente v1 + prior v0 for anti-mezcla F-4.3 tests). ──
+-- ── Catalog: Cohort_Rule_Version (current v1 + prior v0 for anti-mix F-4.3 tests). ──
 insert into catalog."Cohort_Rule_Version"(version_id, effective_date, what_changed, baseline_effect, provenance) values
   ('v0', date '2026-01-01', 'initial bucket rule', 'baseline v0', '[C]'),
   ('v1', date '2026-06-01', 'tenure border adjustment', 'rebaseline v1', '[V]');

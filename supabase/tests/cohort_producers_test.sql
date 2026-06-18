@@ -31,8 +31,8 @@ select cohort.fn_gate_n_min(date '2026-05-25', 'vtest');
 select is((select collapsed from cohort."Cohort" where cohort_id='cn19'), true, 'n_min: n<20 collapses');
 select is((select collapsed from cohort."Cohort" where cohort_id='cn20'), false, 'n_min: n>=20 ok');
 
--- F-4.3 anti-mezcla raises on mixed versions.
-select throws_ok($$ select cohort.fn_assert_single_version(array['v1','v0']) $$, '23514', null, 'anti-mezcla raises');
+-- F-4.3 anti-mix raises on mixed versions.
+select throws_ok($$ select cohort.fn_assert_single_version(array['v1','v0']) $$, '23514', null, 'anti-mix raises');
 
 select * from finish();
 rollback;

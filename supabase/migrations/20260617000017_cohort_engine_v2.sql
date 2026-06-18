@@ -3,7 +3,7 @@
 -- 0.40·orders + 0.30·connection + 0.20·quality + 0.10·(1−cancel), weights BY NAME (§3.8).
 -- Subgroup = tercile of the composite. n_min + k-anon are SEPARATE gates (separate fns, knobs,
 -- columns: n_min_ok vs k_anon_ok), applied per COHORT and per SUBGROUP (EC-13). Deterministic,
--- version-stamped, fail-closed; NOTHING fabricated (§14 — only complete-brutos restaurants rank).
+-- version-stamped, fail-closed; NOTHING fabricated (§14 — only complete-raw-input restaurants rank).
 
 -- ── Axis swap: tenure leaves the key; (cuisine,zone,tier,version) is the cell identity. ──
 alter table cohort."Cohort" alter column tenure_bucket drop not null;
@@ -56,9 +56,9 @@ begin
 end;
 $$;
 
--- ── F-1.2 v2 — COMPOSITE ranking. Component metrics (set-based, from brutos) → per-cohort
+-- ── F-1.2 v2 — COMPOSITE ranking. Component metrics (set-based, from raw inputs) → per-cohort
 --    percentiles → weighted composite → percentile_in_cohort + gap_to_top + tercile subgroup.
---    §14: ONLY restaurants with complete brutos (orders 90d AND connection 63d) are ranked —
+--    §14: ONLY restaurants with complete raw inputs (orders 90d AND connection 63d) are ranked —
 --    missing data ⇒ NULL percentile (fail-closed, suppressed by the gate), never a fabricated 0.
 --    cancel = failed/(ok+failed) (concluded orders only). cancel ranked DESC (less = better). ──
 create or replace function cohort.fn_rank_cohort(p_week date)
@@ -88,8 +88,8 @@ begin
     select p.snapshot_id, p.cohort_id,
            om.m_orders as mo, cm.m_conn as mc, om.m_quality as mq, coalesce(om.m_cancel, 0) as mx
     from cohort."Cohort_Membership_Snapshot" p
-    join om on om.restaurant_id = p.restaurant_id            -- requires order brutos (complete-data)
-    join cm on cm.restaurant_id = p.restaurant_id            -- requires connection brutos (complete-data)
+    join om on om.restaurant_id = p.restaurant_id            -- requires order raw inputs (complete-data)
+    join cm on cm.restaurant_id = p.restaurant_id            -- requires connection raw inputs (complete-data)
     where p.week = p_week and p.cohort_rule_version = v_version
   ), pct as (
     select snapshot_id, cohort_id,

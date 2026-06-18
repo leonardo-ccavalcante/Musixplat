@@ -1,5 +1,5 @@
 // Piece 05A:A.4.1 — normalize the 3 min() arms; missing/invalid arm ⇒ LOW (most conservative).
-// Feeds A.4.6's least() motor (gov.compute_level_efectivo) — does NOT compute min, only sanitizes.
+// Feeds A.4.6's least() motor (gov.compute_effective_level) — does NOT compute min, only sanitizes.
 // Fail-closed (CLAUDE.md §3.7): null | undefined | non-enum string ⇒ LOW.
 // Deterministic, no LLM, no I/O. (04 §7)
 

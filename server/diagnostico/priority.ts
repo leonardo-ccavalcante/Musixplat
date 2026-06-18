@@ -1,11 +1,11 @@
 import type { Criticidad } from "../../shared/contracts_05b.js";
 import { CRITICIDAD_RANK } from "../../shared/contracts_05b.js";
 
-// EPIC-B1/B5 priorización (pure, deterministic, no LLM — CLAUDE.md §3.6). Pieces:
+// EPIC-B1/B5 prioritization (pure, deterministic, no LLM — CLAUDE.md §3.6). Pieces:
 //   B.1.4       — dispatchPriority: f(criticidad, impacto[C], agile)
 //   US-B1.2.1   — tieBreak: fixed auditable order criticidad > impacto > agile
 //   US-B5.2.1   — routeAhoraFila: riesgo × impacto × costo ⇒ ahora|fila
-// BR-B11: indeterminado ⇒ conservative (never deprioritize a potentially grave problem).
+// BR-B11: indeterminate ⇒ conservative (never deprioritize a potentially critical problem).
 // BR-B10: a missing/ambiguous lower key ⇒ 0 (conservative), never an optimistic guess.
 
 export interface PriorityInput {
@@ -14,11 +14,11 @@ export interface PriorityInput {
   agile: number | null;
 }
 
-// Conservative fallback: a null criticidad is treated as the MAX rank (grave) so a
-// potentially-grave problem is never sent to the back of the queue (BR-B11).
+// Conservative fallback: a null criticidad is treated as the MAX rank (critical) so a
+// potentially-critical problem is never sent to the back of the queue (BR-B11).
 const MAX_CRITICIDAD_RANK = Math.max(...Object.values(CRITICIDAD_RANK));
 
-/** Rank for sorting/scoring; null ⇒ grave (max) per BR-B11 fail-closed. */
+/** Rank for sorting/scoring; null ⇒ critical (max) per BR-B11 fail-closed. */
 function rankOf(criticidad: Criticidad | null): number {
   return criticidad == null ? MAX_CRITICIDAD_RANK : CRITICIDAD_RANK[criticidad];
 }
@@ -34,7 +34,7 @@ function num(value: number | null): number {
  * disjoint magnitude bands (criticidad in the integer block, impacto/agile mapped into a
  * bounded fraction below it) so a higher criticidad always outranks any impacto/agile —
  * mirroring the lexicographic order of `tieBreak`. impacto/agile null ⇒ 0 (BR-B10).
- * criticidad null ⇒ grave/max (BR-B11): a potentially-grave problem is never deprioritized.
+ * criticidad null ⇒ critical/max (BR-B11): a potentially-critical problem is never deprioritized.
  */
 export function dispatchPriority(input: PriorityInput): number {
   const rank = rankOf(input.criticidad);

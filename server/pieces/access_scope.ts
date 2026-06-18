@@ -1,6 +1,6 @@
-// Piece 05A:A.2.0 — resolve access scope from credential, capped by teto_tier. Pure, fail-closed.
-// RLS/credential eligibility gate (status='activa' + action in matrix) runs BEFORE least().
-// levelMax NEVER exceeds teto_tier: least(rbac.level_max_liberable, tetoTier) over ordered enum.
+// Piece 05A:A.2.0 — resolve access scope from credential, capped by tier_cap. Pure, fail-closed.
+// RLS/credential eligibility gate (status='active' + action in matrix) runs BEFORE least().
+// levelMax NEVER exceeds tier_cap: least(rbac.level_max_liberable, tetoTier) over ordered enum.
 // null/invalid tetoTier ⇒ LOW cap (fail-closed §3.7). Deterministic, no LLM. (04 §3 / §7)
 
 export type Nivel = "LOW" | "MEDIUM" | "HIGH";
@@ -11,10 +11,10 @@ export interface RbacEntry {
   origen_permitido: string[];
 }
 
-export interface Credencial {
+export interface Credential {
   status: string;
   role: string;
-  rbac_matriz: Record<string, RbacEntry>;
+  rbac_matrix: Record<string, RbacEntry>;
 }
 
 export interface AccessScope {
@@ -46,11 +46,11 @@ function leastNivel(a: Nivel, b: Nivel): Nivel {
 }
 
 /**
- * Resolve effective access scope for `action` from a Credencial row and teto_tier ceiling.
+ * Resolve effective access scope for `action` from a Credential row and tier_cap ceiling.
  * Eligibility check (status + rbac) is separate from the least() cap — two distinct gates.
  */
 export function resolveAccessScope(
-  cred: Credencial | null | undefined,
+  cred: Credential | null | undefined,
   action: string,
   tetoTier: Nivel | null | undefined,
 ): AccessScope {
@@ -58,10 +58,10 @@ export function resolveAccessScope(
   if (cred == null) return { ...FAIL_CLOSED };
 
   // Eligibility gate 1: credential must be active.
-  if (cred.status !== "activa") return { ...FAIL_CLOSED };
+  if (cred.status !== "active") return { ...FAIL_CLOSED };
 
   // Eligibility gate 2: action must exist in the rbac matrix.
-  const entry = cred.rbac_matriz[action];
+  const entry = cred.rbac_matrix[action];
   if (entry == null) return { ...FAIL_CLOSED };
 
   // Cap: null/invalid tetoTier ⇒ LOW (fail-closed ceiling, never optimistic).

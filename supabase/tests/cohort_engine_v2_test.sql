@@ -6,14 +6,14 @@ begin;
 select plan(8);
 
 -- Isolation: the live DB holds the 5000-restaurant seed and fn_assign_cohorts has no restaurant
--- filter (it ranks ALL restaurants). Truncate the brutos so ONLY this fixture is processed —
+-- filter (it ranks ALL restaurants). Truncate the raw inputs so ONLY this fixture is processed —
 -- transactional, restored on rollback. Cohort tables cleared too (no stray 5000 cells).
 truncate tenant."Restaurant", tenant."Order", tenant."Weekly_Connection",
          cohort."Cohort", cohort."Subgroup", cohort."Cohort_Membership_Snapshot" cascade;
 
 insert into catalog."Cohort_Rule_Version"(version_id, effective_date, what_changed)
   values ('vtest', date '2026-06-01', 'test');
--- pin the vigente version to vtest so the producers operate on this fixture
+-- pin the current version to vtest so the producers operate on this fixture
 update catalog."Config_Knobs" set value = 'vtest' where key = 'cohort_rule_version_current';
 
 -- 6 comparable restaurants (same cell). signup old so tenure_months computes.
@@ -28,8 +28,8 @@ select 'RV' || g, date '2026-06-01', 50, 10, 'ok', true, true
 from generate_series(1, 6) g
 cross join lateral generate_series(1, g) k;
 
--- connection brutos (equal across the 6 ⇒ doesn't affect ordering, but required: §14 ranks only
--- restaurants with complete brutos = orders AND connection).
+-- connection raw inputs (equal across the 6 ⇒ doesn't affect ordering, but required: §14 ranks only
+-- restaurants with complete raw inputs = orders AND connection).
 insert into tenant."Weekly_Connection"(restaurant_id, week, connected_hours, committed_hours)
 select 'RV' || g, date '2026-06-15', 30, 40 from generate_series(1, 6) g;
 

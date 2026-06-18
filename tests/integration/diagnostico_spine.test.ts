@@ -32,19 +32,19 @@ describe("05B:US-B1.1.1 + B.1.3 — gate + dedup create-or-increment", () => {
     expect(await count(pool, `tenant."Diagnosed_Problem"`)).toBe(0);
   });
 
-  it("creates ONE open problema (tenant from session), then increments frecuencia on repeat", async () => {
+  it("creates ONE open problema (tenant from session), then increments frequency on repeat", async () => {
     const a = await caller("POOL-001", "U-OP-001").diagnostico.reportProblema({
       restaurantId: "R001",
-      criticidad: "grave",
+      criticality: "critical",
     });
     expect(a.created).toBe(true);
-    expect(a.frecuencia).toBe(1);
-    expect(a.status).toBe("abierto");
+    expect(a.frequency).toBe(1);
+    expect(a.status).toBe("open");
 
     const b = await caller("POOL-001", "U-OP-001").diagnostico.reportProblema({ restaurantId: "R001" });
     expect(b.created).toBe(false); // B.1.3: same case, no duplicate
-    expect(b.frecuencia).toBe(2); // frecuencia is a computed count
-    expect(b.problema_id).toBe(a.problema_id);
+    expect(b.frequency).toBe(2); // frequency is a computed count
+    expect(b.problem_id).toBe(a.problem_id);
     expect(await count(pool, `tenant."Diagnosed_Problem" where restaurant_id='R001'`)).toBe(1);
   });
 

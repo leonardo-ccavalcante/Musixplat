@@ -34,16 +34,16 @@ describe("05A:A.1.1 — recv + tenant server-side + create Conversation", () => 
       conversationId: "cv-1",
       restaurantId: "R001",
       channel: "whatsapp",
-      turnos: [],
+      turns: [],
     });
     expect(out.tenant_id).toBe("POOL-001");
-    expect(out.conversation_status).toBe("abierta"); // never seeded 'escalated'/'resuelto'
+    expect(out.conversation_status).toBe("open"); // never seeded 'escalated'/'resolved'
     expect(await count(pool, `tenant."Conversation_Episode" where conversation_id='cv-1'`)).toBe(1);
   });
 
   it("is idempotent on (tenant, conversation) — double recv ⇒ exactly one row", async () => {
-    const a = await caller("POOL-001", "U-OP-001").conversation.recv({ conversationId: "cv-2", restaurantId: "R001", channel: "email", turnos: [] });
-    const b = await caller("POOL-001", "U-OP-001").conversation.recv({ conversationId: "cv-2", restaurantId: "R001", channel: "email", turnos: [] });
+    const a = await caller("POOL-001", "U-OP-001").conversation.recv({ conversationId: "cv-2", restaurantId: "R001", channel: "email", turns: [] });
+    const b = await caller("POOL-001", "U-OP-001").conversation.recv({ conversationId: "cv-2", restaurantId: "R001", channel: "email", turns: [] });
     expect(b.episode_id).toBe(a.episode_id);
     expect(await count(pool, `tenant."Conversation_Episode" where conversation_id='cv-2'`)).toBe(1);
   });
@@ -51,7 +51,7 @@ describe("05A:A.1.1 — recv + tenant server-side + create Conversation", () => 
   it("rejects with no session (fail-closed tenant guard)", async () => {
     const anon = appRouter.createCaller({ session: null, tenantId: null, userId: null });
     await expect(
-      anon.conversation.recv({ conversationId: "cv-x", restaurantId: "R001", channel: "in_app", turnos: [] }),
+      anon.conversation.recv({ conversationId: "cv-x", restaurantId: "R001", channel: "in_app", turns: [] }),
     ).rejects.toThrow();
   });
 });
@@ -61,7 +61,7 @@ describe("05A:A.4.6 — min() motor (conversation path) + anti-fake", () => {
     expect(await count(pool, `gov."min_calculation"`)).toBe(0);
   });
 
-  it("seals level_efectivo = least(arms) for the conversation path", async () => {
+  it("seals effective_level = least(arms) for the conversation path", async () => {
     const r = await sellarMinCalculoConversation({ conversationId: "cv-1", pedidoNBA: "HIGH", liberadoEvals: "MEDIUM", tetoTier: "HIGH" });
     expect(r.levelEfectivo).toBe("MEDIUM");
     expect(await count(pool, `gov."min_calculation" where conversation_id='cv-1'`)).toBe(1);

@@ -1,5 +1,5 @@
-// Piece 05A:A.5.0 — branch on level_efectivo (consumes A.4.6 min()); LOW⇒autónomo, else⇒escala. (04 §3)
-// Deterministic router. NEVER recomputes least() — consumes the already-stored level_efectivo.
+// Piece 05A:A.5.0 — branch on effective_level (consumes A.4.6 min()); LOW⇒autonomous, else⇒escalate. (04 §3)
+// Deterministic router. NEVER recomputes least() — consumes the already-stored effective_level.
 // Fail-closed: null/undefined/unknown value ⇒ route 'A.7' (escalation = safe human path). §3.7
 
 export type Nivel = "LOW" | "MEDIUM" | "HIGH";
@@ -15,7 +15,7 @@ const VALID_NIVELES = new Set<string>(["LOW", "MEDIUM", "HIGH"]);
 const FALLBACK: Nivel = "HIGH";
 
 /**
- * Routes on the already-computed level_efectivo from A.4.6 min_calculation.
+ * Routes on the already-computed effective_level from A.4.6 min_calculation.
  * LOW ⇒ autonomous-low path (A.5); MEDIUM | HIGH ⇒ escalation path (A.7).
  * null / undefined / garbage ⇒ A.7 (fail-closed to human, never autonomous).
  */

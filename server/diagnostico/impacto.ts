@@ -1,7 +1,7 @@
-// EPIC-B5 puntuador de impacto + libro-razón (math in SQL, TS orchestrates). Pieces:
-//   US-B5.1.1   — computeRsPerdido: Named_Query rs_perdido = sum(Order.net_value fallido);
+// EPIC-B5 impact scorer + ledger (math in SQL, TS orchestrates). Pieces:
+//   US-B5.1.1   — computeRsPerdido: Named_Query lost_revenue = sum(Order.net_value failed);
 //                 churn_risk fail-closed to null (no pre-churn producer this session).
-//   US-B5.3.1   — writeLedger: custo_resolver vs value_ganho per case (NULL pre-run, §14).
+//   US-B5.3.1   — writeLedger: cost_to_resolve vs value_gained per case (NULL pre-run, §14).
 // BR-B10 double-check before declaring; inherits worst provenance.
 import { query } from "../db/pool.js";
 
@@ -12,16 +12,16 @@ export interface RsPerdidoResult {
 }
 
 /**
- * US-B5.1.1 (04 §14, BR-B10) — compute + persist rs_perdido for a problema.
- * The canonical UNIQUE formula lives in SQL: tenant.fn_impacto_rs_perdido sums
- * Order.net_value (fallido) over the Affected set, writes the column + provenance, and
+ * US-B5.1.1 (04 §14, BR-B10) — compute + persist lost_revenue for a problem.
+ * The canonical UNIQUE formula lives in SQL: tenant.fn_impact_lost_revenue sums
+ * Order.net_value (failed) over the Affected set, writes the column + provenance, and
  * returns the total. TS only orchestrates — it never recomputes the number (determinism in
  * SQL, §3.6). churn_risk stays NULL in the DB: no pre-churn producer was wired this session,
  * so we fail closed and surface null rather than invent a churn figure (§14).
  */
 export async function computeRsPerdido(problemaId: string): Promise<RsPerdidoResult> {
   const rows = await query<{ total: string | null }>(
-    `select tenant.fn_impacto_rs_perdido($1::uuid) as total`,
+    `select tenant.fn_impact_lost_revenue($1::uuid) as total`,
     [problemaId],
   );
   // numeric arrives as a string from pg; Number() once at the TS boundary. coalesce(...,0) in
@@ -30,9 +30,9 @@ export async function computeRsPerdido(problemaId: string): Promise<RsPerdidoRes
 }
 
 /**
- * US-B5.3.1 (04 §14, BR-B14) — write the impact ledger (custo_resolver vs value_ganho) for a
+ * US-B5.3.1 (04 §14, BR-B14) — write the impact ledger (cost_to_resolve vs value_gained) for a
  * resolved case. Both are RESULT columns: NULL pre-run, filled only by this named producer.
- * Provenance is merged per field (||), never overwriting prior fields' marks; ultima_vez_ts is
+ * Provenance is merged per field (||), never overwriting prior fields' marks; last_seen_ts is
  * bumped so the dossier #6 recurrence field reflects the write.
  */
 export async function writeLedger(
@@ -41,12 +41,12 @@ export async function writeLedger(
 ): Promise<void> {
   await query(
     `update tenant."Diagnosed_Problem"
-        set custo_resolver = $2,
-            value_ganho = $3,
+        set cost_to_resolve = $2,
+            value_gained = $3,
             provenance_by_field = provenance_by_field
-              || jsonb_build_object('custo_resolver', '[I]', 'value_ganho', '[I]'),
-            ultima_vez_ts = now()
-      where problema_id = $1`,
+              || jsonb_build_object('cost_to_resolve', '[I]', 'value_gained', '[I]'),
+            last_seen_ts = now()
+      where problem_id = $1`,
     [problemaId, entry.custoResolver, entry.valueGanho],
   );
 }

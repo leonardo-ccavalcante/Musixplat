@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { routeBand } from "../band_router.js";
 
-// Piece 05A:A.5.0 — branch on level_efectivo (consumes A.4.6 min()); LOW⇒autónomo, else⇒escala. (04 §3)
+// Piece 05A:A.5.0 — branch on effective_level (consumes A.4.6 min()); LOW⇒autonomous, else⇒escalate. (04 §3)
 
 describe("routeBand — 05A:A.5.0 (LOW⇒A.5 autónomo; MEDIUM|HIGH|invalid⇒A.7 escalación)", () => {
   it("LOW ⇒ route A.5 (autonomous-low path)", () => {

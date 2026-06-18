@@ -1,5 +1,5 @@
 -- Catalog zone (04 §3.4): versioned reference + the single source of [C] knobs.
--- Table DDL only; the knob VALUES and version rows are brutos/config seeded in seed.sql.
+-- Table DDL only; the knob VALUES and version rows are raw inputs/config seeded in seed.sql.
 
 -- Config_Knobs: every threshold read BY NAME (k_anon_threshold, n_min_threshold,
 -- tenure borders, TTL_baseline, D, ...). CLAUDE.md §3.8 — never a hard-coded literal.

@@ -38,7 +38,7 @@ describe("F-1.1 assignment + F-1.2 ranking", () => {
 
     expect(await count(pool, 'tenant."Restaurant" where tenure_months is null')).toBe(0);
     expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(5000);
-    // every membership stamped with the vigente version
+    // every membership stamped with the current version
     expect(
       await count(pool, `cohort."Cohort_Membership_Snapshot" where cohort_rule_version <> 'v1'`),
     ).toBe(0);
@@ -140,14 +140,14 @@ describe("F-1.3b k-anon gate (re-identification) — boundary, SEPARATE fixture 
   });
 });
 
-describe("F-2.2 diff + F-4.3 anti-mezcla", () => {
+describe("F-2.2 diff + F-4.3 anti-mix", () => {
   it("produces delta_status from the allowed enum across two weeks (same version only)", async () => {
     await resetDb(pool);
     await runP01({ week: W1, refDate: REF });
     await runP01({ week: W2, refDate: REF, prevSemana: W1 });
     const events = await count(pool, `cohort."Prioritized_NBA_Event" where week='${W2}'`);
     expect(events).toBeGreaterThan(0);
-    // every event carries a valid delta_status and the vigente version
+    // every event carries a valid delta_status and the current version
     expect(
       await count(
         pool,
@@ -163,6 +163,6 @@ describe("F-2.2 diff + F-4.3 anti-mezcla", () => {
     expect(ok).toHaveLength(1);
     await expect(
       pool.query("select cohort.fn_assert_single_version(array['v1','v0'])"),
-    ).rejects.toThrow(/anti-mezcla/);
+    ).rejects.toThrow(/anti-mix/);
   });
 });

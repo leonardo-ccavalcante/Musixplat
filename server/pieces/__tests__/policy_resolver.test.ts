@@ -1,5 +1,5 @@
-// Test: 05A:A.2.3 — resolve tier×intent policy at the vigente version + seal. (04 §7)
-// Anti-mezcla: only seal when policy_version === vigente. Fail-closed on none/stale/ambiguous.
+// Test: 05A:A.2.3 — resolve tier×intent policy at the current version + seal. (04 §7)
+// Anti-mix: only seal when policy_version === current. Fail-closed on none/stale/ambiguous.
 import { describe, it, expect } from "vitest";
 import { resolvePolicy } from "../policy_resolver.js";
 import type { PolicyRow } from "../policy_resolver.js";
@@ -10,8 +10,8 @@ const baseRow: PolicyRow = {
   policy_id: "p1",
   tier_id: "tier_gold",
   policy_version: "v2",
-  teto_tier: "HIGH",
-  permitido_hoy: { max_discount: 30 },
+  tier_cap: "HIGH",
+  allowed_today: { max_discount: 30 },
 };
 
 describe("resolvePolicy — 05A:A.2.3", () => {
@@ -64,7 +64,7 @@ describe("resolvePolicy — 05A:A.2.3", () => {
     expect(result.reason).toBe("none");
   });
 
-  it("mix of stale + vigente rows for tier ⇒ sealed=true (vigente wins, not ambiguous)", () => {
+  it("mix of stale + current rows for tier ⇒ sealed=true (current wins, not ambiguous)", () => {
     const staleRow: PolicyRow = { ...baseRow, policy_id: "p_old", policy_version: "v1" };
     const result = resolvePolicy([staleRow, baseRow], "tier_gold", VIGENTE);
     expect(result.sealed).toBe(true);
@@ -72,7 +72,7 @@ describe("resolvePolicy — 05A:A.2.3", () => {
     expect(result.policy_version).toBe("v2");
   });
 
-  it("other-tier vigente row does not bleed into tier_silver ⇒ reason=none", () => {
+  it("other-tier current row does not bleed into tier_silver ⇒ reason=none", () => {
     const result = resolvePolicy([baseRow], "tier_silver", VIGENTE);
     expect(result.sealed).toBe(false);
     expect(result.reason).toBe("none");

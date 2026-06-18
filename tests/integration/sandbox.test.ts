@@ -6,7 +6,7 @@ import { appRouter } from "../../server/routers/_app";
 import type { Context } from "../../server/_core/context";
 
 // EPIC-6 / F-6.2 / F-6.3 — sandbox is ephemeral + no-commit. The simulation NEVER writes real
-// Pertenencia/Prioritized_NBA_Event; only apertura/cierre are logged to Usage_Event.
+// Membership/Prioritized_NBA_Event; only open/close are logged to Usage_Event.
 
 const W1 = "2026-05-25";
 const REF = "2026-06-17";
@@ -31,7 +31,7 @@ function caller() {
 }
 
 describe("EPIC-6 sandbox no-commit", () => {
-  it("simulates without writing real Pertenencia/Evento (counts invariant) + logs open/close", async () => {
+  it("simulates without writing real Membership/Event (counts invariant) + logs open/close", async () => {
     const pBefore = await count(pool, 'cohort."Cohort_Membership_Snapshot"');
     const eBefore = await count(pool, 'cohort."Prioritized_NBA_Event"');
 
@@ -42,7 +42,7 @@ describe("EPIC-6 sandbox no-commit", () => {
     // F-6.3: no real writes happened.
     expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(pBefore);
     expect(await count(pool, 'cohort."Prioritized_NBA_Event"')).toBe(eBefore);
-    // observability: apertura + cierre logged (append-only Usage_Event).
+    // observability: open + close logged (append-only Usage_Event).
     expect(await count(pool, `tenant."Usage_Event" where event_type='sandbox_open'`)).toBeGreaterThan(0);
     expect(await count(pool, `tenant."Usage_Event" where event_type='sandbox_close'`)).toBeGreaterThan(0);
   });
