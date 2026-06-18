@@ -1,4 +1,4 @@
--- Delta / movement / counts / anti-mezcla (04 §3/§6/§14). Deterministic, version-stamped.
+-- Delta / movement / counts / anti-mix (04 §3/§6/§14). Deterministic, version-stamped.
 
 -- F-2.2 — diff snapshot_to vs snapshot_from ⇒ Prioritized_NBA_Event.delta_status. Only accounts
 -- with a meaningful delta (or new/churn) get an event. SAME version only (anti-mix); same

@@ -140,7 +140,7 @@ describe("F-1.3b k-anon gate (re-identification) — boundary, SEPARATE fixture 
   });
 });
 
-describe("F-2.2 diff + F-4.3 anti-mezcla", () => {
+describe("F-2.2 diff + F-4.3 anti-mix", () => {
   it("produces delta_status from the allowed enum across two weeks (same version only)", async () => {
     await resetDb(pool);
     await runP01({ week: W1, refDate: REF });
@@ -163,6 +163,6 @@ describe("F-2.2 diff + F-4.3 anti-mezcla", () => {
     expect(ok).toHaveLength(1);
     await expect(
       pool.query("select cohort.fn_assert_single_version(array['v1','v0'])"),
-    ).rejects.toThrow(/anti-mezcla/);
+    ).rejects.toThrow(/anti-mix/);
   });
 });

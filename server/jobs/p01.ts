@@ -8,7 +8,7 @@ export interface P01Options {
 
 // P01 batch (04 §6). Orchestration in TS; every number is computed by a named SQL producer
 // (CLAUDE.md §1/§14). Atomic per week. Determinism: same raw + same (week, refDate) ⇒
-// identical output. Pinned version is read server-side by the producers (anti-mezcla).
+// identical output. Pinned version is read server-side by the producers (anti-mix).
 export async function runP01(opts: P01Options): Promise<void> {
   const { week, refDate, prevSemana } = opts;
   await withTx(async (c) => {

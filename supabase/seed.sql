@@ -43,7 +43,7 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('tolerance_reconciliation', '0',    '[C]', 'leo'),
   ('window_silent',       '30',   '[C]', 'leo');
 
--- ── Catalog: Cohort_Rule_Version (current v1 + prior v0 for anti-mezcla F-4.3 tests). ──
+-- ── Catalog: Cohort_Rule_Version (current v1 + prior v0 for anti-mix F-4.3 tests). ──
 insert into catalog."Cohort_Rule_Version"(version_id, effective_date, what_changed, baseline_effect, provenance) values
   ('v0', date '2026-01-01', 'initial bucket rule', 'baseline v0', '[C]'),
   ('v1', date '2026-06-01', 'tenure border adjustment', 'rebaseline v1', '[V]');

@@ -1,5 +1,5 @@
 // Test: 05A:A.2.3 — resolve tier×intent policy at the current version + seal. (04 §7)
-// Anti-mezcla: only seal when policy_version === current. Fail-closed on none/stale/ambiguous.
+// Anti-mix: only seal when policy_version === current. Fail-closed on none/stale/ambiguous.
 import { describe, it, expect } from "vitest";
 import { resolvePolicy } from "../policy_resolver.js";
 import type { PolicyRow } from "../policy_resolver.js";

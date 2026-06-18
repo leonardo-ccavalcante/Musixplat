@@ -1,5 +1,5 @@
 // Piece 05A:A.2.3 — resolve tier×intent policy at the current version + seal.
-// Pure, fail-closed, anti-mezcla (§3.5 / §3.7). Caller fetches candidates from DB;
+// Pure, fail-closed, anti-mix (§3.5 / §3.7). Caller fetches candidates from DB;
 // this function SELECTS — it never invents a policy or emits a number. (04 §7)
 // Deterministic; no LLM; zero `any`.
 
@@ -30,7 +30,7 @@ const CLOSED: Omit<PolicyResolution, "reason"> = {
 
 /**
  * From `candidates` (fetched by caller for this `tierId`), find exactly one row
- * where `policy_version === currentVersion`. Anti-mezcla: stale rows are never sealed.
+ * where `policy_version === currentVersion`. Anti-mix: stale rows are never sealed.
  * Fail-closed: returns `sealed=false` when the result is none / stale / ambiguous.
  */
 export function resolvePolicy(
@@ -49,7 +49,7 @@ export function resolvePolicy(
     return { ...CLOSED, reason: "none" };
   }
 
-  // Anti-mezcla: only rows at the current version may be sealed (§3.5).
+  // Anti-mix: only rows at the current version may be sealed (§3.5).
   const current = forTier.filter((r) => r.policy_version === currentVersion);
 
   if (current.length === 0) {

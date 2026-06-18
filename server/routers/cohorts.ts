@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
-import { assertSingleVersion } from "../_core/antimezcla.js";
+import { assertSingleVersion } from "../_core/antimix.js";
 
 // Read-only projections of P01 results. All tenant-scoped server-side (RLS guard); cohort-zone
-// reads honor k-anon (k_suppression_applied) and anti-mezcla (single cohort_rule_version).
+// reads honor k-anon (k_suppression_applied) and anti-mix (single cohort_rule_version).
 // NULL pre-run passes through as NULL — never a fabricated number (§14).
 
 async function current(): Promise<string> {

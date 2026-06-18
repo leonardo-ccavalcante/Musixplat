@@ -9,7 +9,7 @@ const ok = {
   currentTonoVersion: "tono-v2",
 };
 
-describe("sealVersions — 05A:A.6.1 (anti-mezcla version seal, fail-closed)", () => {
+describe("sealVersions — 05A:A.6.1 (anti-mix version seal, fail-closed)", () => {
   it("both versions match ⇒ sealed:true, stale:false, versions populated, drifted empty", () => {
     const r = sealVersions(ok);
     expect(r.sealed).toBe(true);
