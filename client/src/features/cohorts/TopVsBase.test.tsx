@@ -27,6 +27,6 @@ describe("F-1.6 TopVsBase", () => {
 
   it("keeps NULL/suppressed baselines conservative", () => {
     render(<TopVsBase baseline={null} />);
-    expect(screen.getByText(/Sin baseline calculado/i)).toBeInTheDocument();
+    expect(screen.getByText(/No baseline computed/i)).toBeInTheDocument();
   });
 });

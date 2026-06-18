@@ -69,7 +69,7 @@ export function Modal({
           <h2 className="text-sm font-semibold text-mxm-content">{title}</h2>
           <button
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label="Close"
             className="rounded px-2 text-mxm-content-secondary hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
           >
             ✕

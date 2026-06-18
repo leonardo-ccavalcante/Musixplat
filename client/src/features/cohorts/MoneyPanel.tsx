@@ -7,7 +7,7 @@ export type MoneySummary = {
   freshness: string | null;
 };
 
-// F-3.1 / F-3.2 — money panel. Reads/links; NEVER recalculates. sin señal ⇒ conservative state
+// F-3.1 / F-3.2 — money panel. Reads/links; NEVER recalculates. no signal ⇒ conservative state
 // with seal, never a fabricated gross/estimate (§14). The seal carries meaning via text, not color.
 const SEAL_CLS: Record<MoneySummary["seal"], string> = {
   confirmed: "text-mxm-green",
@@ -17,8 +17,8 @@ const SEAL_CLS: Record<MoneySummary["seal"], string> = {
 
 export function MoneyPanel({ summary }: { summary: MoneySummary }) {
   return (
-    <Card ariaLabel="Panel de dinero">
-      <CardTitle>Impacto de negocio atribuible</CardTitle>
+    <Card ariaLabel="Money panel">
+      <CardTitle>Attributable business impact</CardTitle>
       {summary.hasSignal ? (
         <div>
           <p className="tabnum text-2xl text-mxm-content">{summary.value}</p>

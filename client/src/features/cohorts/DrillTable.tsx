@@ -14,19 +14,19 @@ export type DrillRow = {
 // F-5.1 — drill: accounts ordered by gap (server-ordered). Each row offers the F-5.2 handoff.
 // Keyboard-navigable table; NULL passes through as —.
 export function DrillTable({ rows }: { rows: DrillRow[] }) {
-  if (rows.length === 0) return <EmptyState>Celda vacía.</EmptyState>;
+  if (rows.length === 0) return <EmptyState>Empty cell.</EmptyState>;
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="text-left text-mxm-content-tertiary">
           <th scope="col">Restaurant</th>
           <th scope="col" className="text-right">
-            Percentil
+            Percentile
           </th>
           <th scope="col" aria-sort="descending" className="text-right">
             Gap
           </th>
-          <th scope="col">Acción</th>
+          <th scope="col">Action</th>
         </tr>
       </thead>
       <tbody>
