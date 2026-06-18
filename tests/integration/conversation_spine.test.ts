@@ -10,7 +10,7 @@ import { sellarMinCalculoConversation } from "../../server/conversation/min";
 
 function caller(tenantId: string, userId: string) {
   const ctx: Context = {
-    session: { user_id: userId, tenant_id: tenantId, org_level: "equipo" },
+    session: { user_id: userId, tenant_id: tenantId, org_level: "team" },
     tenantId,
     userId,
   };
@@ -37,7 +37,7 @@ describe("05A:A.1.1 — recv + tenant server-side + create Conversation", () => 
       turnos: [],
     });
     expect(out.tenant_id).toBe("POOL-001");
-    expect(out.conversation_status).toBe("abierta"); // never seeded 'escalated'/'resuelto'
+    expect(out.conversation_status).toBe("open"); // never seeded 'escalated'/'resuelto'
     expect(await count(pool, `tenant."Conversation_Episode" where conversation_id='cv-1'`)).toBe(1);
   });
 

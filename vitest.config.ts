@@ -40,7 +40,8 @@ export default defineConfig({
           environment: "node",
           globals: true,
           include: ["tests/antifake/**/*.test.ts"],
-          testTimeout: 30_000,
+          testTimeout: 120_000,
+          hookTimeout: 120_000,
         },
       },
       {
@@ -50,7 +51,9 @@ export default defineConfig({
           environment: "node",
           globals: true,
           include: ["tests/integration/**/*.test.ts"],
-          testTimeout: 30_000,
+          // serialized resetDb + 90k-row seed per test ⇒ generous per-test/hook budget
+          testTimeout: 120_000,
+          hookTimeout: 120_000,
         },
       },
     ],

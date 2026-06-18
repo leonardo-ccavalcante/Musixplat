@@ -37,7 +37,7 @@ describe("F-2.3 DeltaPanel", () => {
   });
 
   it("passes NULL through as — (never a fabricated number)", () => {
-    render(<DeltaPanel rows={[{ ...row("R1", "novo", 0), percentile_in_cohort: null, gap_to_top: null }]} />);
+    render(<DeltaPanel rows={[{ ...row("R1", "new", 0), percentile_in_cohort: null, gap_to_top: null }]} />);
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 });

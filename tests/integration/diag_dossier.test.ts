@@ -11,7 +11,7 @@ import { emitDossier } from "../../server/diagnostico/dossier";
 
 function caller(tenantId: string, userId: string) {
   const ctx: Context = {
-    session: { user_id: userId, tenant_id: tenantId, org_level: "equipo" },
+    session: { user_id: userId, tenant_id: tenantId, org_level: "team" },
     tenantId,
     userId,
   };

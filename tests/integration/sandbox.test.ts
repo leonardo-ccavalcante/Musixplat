@@ -23,7 +23,7 @@ afterAll(async () => {
 
 function caller() {
   const ctx: Context = {
-    session: { user_id: "U-OP-001", tenant_id: "POOL-001", org_level: "equipo" },
+    session: { user_id: "U-OP-001", tenant_id: "POOL-001", org_level: "team" },
     tenantId: "POOL-001",
     userId: "U-OP-001",
   };

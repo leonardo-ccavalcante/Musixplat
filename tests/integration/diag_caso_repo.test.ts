@@ -42,7 +42,7 @@ describe("05B:US-B6.2.1 — upsertCasoRepo create-or-increment + PII redaction",
       cliente_id: "cliente joao joao.silva@example.com",
       dia: "2026-06-17",
       links_replicaveis: ["repro-step-1"],
-      onde_concentra: { zone: "centro" },
+      onde_concentra: { zone: "downtown" },
     });
     expect(out.created).toBe(true);
     expect(out.frecuencia).toBe(1); // unchanged from the DDL default

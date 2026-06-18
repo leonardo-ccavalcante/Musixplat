@@ -81,7 +81,8 @@ insert into gov."User"(user_id, tenant_id, org_level, role) values
 insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date,
                                  zone, cuisine, committed_hours_week, live_attributes)
 select s.rid,
-       case when public.det_int(s.rid, 7, 100) < 10 then 'POOL-002' else 'POOL-001' end,
+       case when s.rid = 'R001' then 'POOL-001'                         -- test anchor pinned to POOL-001
+            when public.det_int(s.rid, 7, 100) < 10 then 'POOL-002' else 'POOL-001' end,
        s.tier, s.seg,
        date '2026-06-17' - (public.det_int(s.rid, 11, 24) || ' months')::interval,
        s.zone, s.tipo,
@@ -96,7 +97,10 @@ from (
               else 'long_tail'::public.tier_base end as tier,
          case when public.det_int(rid, 3, 1000) < 50 then 'managed'::public.segment
               else 'long_tail'::public.segment end as seg
-  from (select 'R' || lpad(g::text, 4, '0') as rid from generate_series(1, 5000) g) ids
+  -- g=1 ⇒ 'R001' (legacy test anchor, used by 05A/05B + handoff fixtures); rest ⇒ R0002..R5000.
+  -- (lpad to 4: 5000 needs 4 digits; lpad truncates if width<digits, so width must be 4.)
+  from (select case when g = 1 then 'R001' else 'R' || lpad(g::text, 4, '0') end as rid
+        from generate_series(1, 5000) g) ids
 ) s;
 
 -- ── tenant.Order: volume CORRELATED with connection/quality/zone-demand, penalised by cancel.

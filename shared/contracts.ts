@@ -3,11 +3,11 @@ import { z } from "zod";
 // Single source of truth for tRPC io (Zod v3, CLAUDE.md §1). Domain vocab stays native.
 
 export const deltaStatus = z.enum([
-  "mudou_cohort",
+  "cohort_changed",
   "melhorou_percentile",
   "baixou_percentile",
   "at_risk",
-  "novo",
+  "new",
   "churn",
 ]);
 export type DeltaStatus = z.infer<typeof deltaStatus>;
