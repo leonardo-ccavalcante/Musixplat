@@ -3,7 +3,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 
 export type CohortCell = {
   cohort_id: string;
-  tenure_bucket: string;
+  cuisine: string | null;
+  zone: string | null;
   tier_base: string;
   n_accounts: number | null;
   status: "pending" | "suppressed" | "collapsed" | "ok";
@@ -41,7 +42,7 @@ export function SemaforoCohort({
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-mxm-content-secondary">
-                      {c.tier_base} · {c.tenure_bucket}
+                      {[c.cuisine ?? "unknown cuisine", c.zone ?? "unknown zone", c.tier_base].join(" · ")}
                     </span>
                     <span className={m.cls} aria-hidden="true">
                       {m.icon}

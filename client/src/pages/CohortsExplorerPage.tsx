@@ -85,7 +85,7 @@ export function CohortsExplorerPage() {
           {money.isLoading ? (
             <LoadingState />
           ) : (
-            <MoneyPanel summary={(money.data ?? { hasSignal: false, value: null, sello: "no-confiable", freshness: null }) as MoneySummary} />
+            <MoneyPanel summary={(money.data ?? { hasSignal: false, value: null, seal: "unreliable", freshness: null }) as MoneySummary} />
           )}
 
           {tickets.isLoading ? (

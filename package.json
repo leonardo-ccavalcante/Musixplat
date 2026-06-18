@@ -17,8 +17,8 @@
     "test": "vitest run --project unit",
     "test:watch": "vitest",
     "test:antifake": "vitest run --project antifake",
-    "test:integration": "vitest run --project integration",
-    "test:sql": "supabase test db",
+    "test:integration": "vitest run --project integration --fileParallelism=false",
+    "test:sql": "supabase db reset && supabase test db",
     "test:e2e": "playwright test",
     "test:a11y": "playwright test --grep @a11y",
     "db:start": "supabase start",
@@ -29,7 +29,7 @@
     "db:migration": "supabase migration new",
     "db:p01": "tsx scripts/run-p01.ts",
     "db:migrate": "tsx scripts/apply-migrations.ts",
-    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:sql && pnpm test:antifake"
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:sql && pnpm test:antifake && pnpm test:integration"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

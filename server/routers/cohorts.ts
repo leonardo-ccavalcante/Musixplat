@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 import { assertSingleVersion } from "../_core/antimix.js";
@@ -6,24 +7,34 @@ import { assertSingleVersion } from "../_core/antimix.js";
 // Read-only projections of P01 results. All tenant-scoped server-side (RLS guard); cohort-zone
 // reads honor k-anon (k_suppression_applied) and anti-mix (single cohort_rule_version).
 // NULL pre-run passes through as NULL — never a fabricated number (§14).
+const DELTA_PANEL_LIMIT = 200;
 
 async function current(): Promise<string> {
   const r = await query<{ value: string }>(
     `select value from catalog."Config_Knobs" where key='cohort_rule_version_current'`,
   );
-  return r[0]?.value ?? "v1";
+  if (!r[0]?.value) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "missing cohort_rule_version_current" });
+  }
+  return r[0].value;
 }
-async function latestWeek(v: string): Promise<string | null> {
+async function latestWeek(v: string, tenantId: string): Promise<string | null> {
   const r = await query<{ s: string }>(
-    `select max(week)::text s from cohort."Cohort_Membership_Snapshot" where cohort_rule_version=$1`,
-    [v],
+    `select s.week::text s
+     from cohort."Cohort_Membership_Snapshot" s
+     join tenant."Restaurant" r on r.restaurant_id=s.restaurant_id and r.tenant_id=$2
+     where s.cohort_rule_version=$1
+     order by s.week desc
+     limit 1`,
+    [v, tenantId],
   );
   return r[0]?.s ?? null;
 }
 
 type CohortRow = {
   cohort_id: string;
-  tenure_bucket: string;
+  cuisine: string | null;
+  zone: string | null;
   tier_base: string;
   n_accounts: number | null;
   collapsed: boolean | null;
@@ -46,9 +57,9 @@ export const cohortsRouter = router({
   list: tenantProcedure.query(async ({ ctx }) => {
     const v = await current();
     const rows = await query<CohortRow>(
-      `select cohort_id, tenure_bucket, tier_base, n_accounts, collapsed, k_suppression_applied,
-              cohort_rule_version, descriptive_baseline, opportunity_value
-       from cohort."Cohort" where cohort_rule_version=$1 order by tier_base, tenure_bucket`,
+      `select cohort_id, cuisine, zone, tier_base, n_accounts, collapsed, k_suppression_applied,
+              cohort_rule_version, descriptive_baseline, opportunity_value::float8 as opportunity_value
+       from cohort."Cohort" where cohort_rule_version=$1 order by tier_base, cuisine, zone`,
       [v],
     );
     await assertSingleVersion(ctx.tenantId, rows.map((r) => r.cohort_rule_version));
@@ -72,14 +83,17 @@ export const cohortsRouter = router({
   // F-2.3 / F-2.7 — prioritized deltas (at_risk first), gap exposed. Tenant-scoped via join.
   deltas: tenantProcedure.query(async ({ ctx }) => {
     const v = await current();
+    const s = await latestWeek(v, ctx.tenantId);
+    if (!s) return [];
     const rows = await query(
-      `select e.evento_id, e.restaurant_id, e.cohort_id, e.delta_status,
-              e.percentile_in_cohort, e.gap_to_top
+      `select e.evento_id, e.restaurant_id, e.cohort_id, e.week::text as week, e.delta_status,
+              e.percentile_in_cohort::float8 as percentile_in_cohort, e.gap_to_top::float8 as gap_to_top
        from cohort."Prioritized_NBA_Event" e
        join tenant."Restaurant" r on r.restaurant_id=e.restaurant_id and r.tenant_id=$1
-       where e.cohort_rule_version=$2
-       order by (e.delta_status='at_risk') desc, e.gap_to_top desc nulls last`,
-      [ctx.tenantId, v],
+       where e.cohort_rule_version=$2 and e.week=$3
+       order by (e.delta_status='at_risk') desc, e.gap_to_top desc nulls last
+       limit $4`,
+      [ctx.tenantId, v, s, DELTA_PANEL_LIMIT],
     );
     return rows;
   }),
@@ -87,10 +101,11 @@ export const cohortsRouter = router({
   // F-5.1 — drill into one cohort's accounts, ordered by gap. Tenant-scoped.
   drill: tenantProcedure.input(z.object({ cohort_id: z.string() })).query(async ({ ctx, input }) => {
     const v = await current();
-    const s = await latestWeek(v);
+    const s = await latestWeek(v, ctx.tenantId);
     if (!s) return [];
     return query(
-      `select p.restaurant_id, p.percentile_in_cohort, p.gap_to_top, p.subgroup_id,
+      `select p.restaurant_id, p.percentile_in_cohort::float8 as percentile_in_cohort,
+              p.gap_to_top::float8 as gap_to_top, p.subgroup_id,
               p.n_min_ok, p.mode, p.week::text as week, p.cohort_id
        from cohort."Cohort_Membership_Snapshot" p
        join tenant."Restaurant" r on r.restaurant_id=p.restaurant_id and r.tenant_id=$1
@@ -111,14 +126,14 @@ export const cohortsRouter = router({
   // F-3.3 / F-3.4 — raw ticket distribution intent × cohort, tenant-scoped, k-anon respected.
   intentCounts: tenantProcedure.query(async ({ ctx }) => {
     const v = await current();
-    const s = await latestWeek(v);
+    const s = await latestWeek(v, ctx.tenantId);
     if (!s) return [];
     return query<{ cohort_id: string; intent: string; n: number }>(
       `select p.cohort_id, ce.intent, count(*)::int n
        from tenant."Conversation_Episode" ce
        join cohort."Cohort_Membership_Snapshot" p
          on p.restaurant_id=ce.restaurant_id and p.week=$2 and p.cohort_rule_version=$3
-       join cohort."Cohort" c on c.cohort_id=p.cohort_id
+       join cohort."Cohort" c on c.cohort_id=p.cohort_id and c.cohort_rule_version=p.cohort_rule_version
        where ce.tenant_id=$1 and coalesce(c.k_suppression_applied,true)=false and ce.intent is not null
        group by p.cohort_id, ce.intent order by p.cohort_id, ce.intent`,
       [ctx.tenantId, s, v],

@@ -1,8 +1,15 @@
 import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 
-type Band = { n: number; avg_metric: number; avg_ticket: number };
-export type Baseline = { top?: Band; base?: Band; dimensions?: string[] } | null;
+type TopoVsBasePair = {
+  n_top: number | null;
+  n_base: number | null;
+  d_orders: number | null;
+  d_connection: number | null;
+  d_quality: number | null;
+  d_cancel: number | null;
+};
+export type Baseline = { topo_vs_base?: { p90_vs_p10?: TopoVsBasePair } } | null;
 
 // F-1.6 — top-vs-base comparison by canonical dimension. Read-only; never recomputes baselines.
 // Suppressed/NULL ⇒ conservative empty, never fabricated zeros.
@@ -15,7 +22,8 @@ export function TopVsBase({ baseline, suppressed }: { baseline: Baseline; suppre
       </Card>
     );
   }
-  if (!baseline?.top || !baseline?.base) {
+  const pair = baseline?.topo_vs_base?.p90_vs_p10;
+  if (!pair) {
     return (
       <Card ariaLabel="Comparación topo vs base">
         <CardTitle>Topo vs Base</CardTitle>
@@ -23,10 +31,13 @@ export function TopVsBase({ baseline, suppressed }: { baseline: Baseline; suppre
       </Card>
     );
   }
-  const dims: Array<{ key: keyof Band; label: string }> = [
-    { key: "n", label: "Cuentas" },
-    { key: "avg_metric", label: "Recurrencia media" },
-    { key: "avg_ticket", label: "Ticket medio" },
+  const dims: Array<{ key: keyof TopoVsBasePair; label: string }> = [
+    { key: "n_top", label: "Cuentas top" },
+    { key: "n_base", label: "Cuentas base" },
+    { key: "d_orders", label: "Delta orders" },
+    { key: "d_connection", label: "Delta connection" },
+    { key: "d_quality", label: "Delta quality" },
+    { key: "d_cancel", label: "Delta cancel" },
   ];
   return (
     <Card ariaLabel="Comparación topo vs base">
@@ -36,10 +47,7 @@ export function TopVsBase({ baseline, suppressed }: { baseline: Baseline; suppre
           <tr className="text-left text-mxm-content-tertiary">
             <th scope="col">Dimensión</th>
             <th scope="col" className="text-right">
-              Topo (P90+)
-            </th>
-            <th scope="col" className="text-right">
-              Base
+              P90 vs P10
             </th>
           </tr>
         </thead>
@@ -49,8 +57,7 @@ export function TopVsBase({ baseline, suppressed }: { baseline: Baseline; suppre
               <th scope="row" className="text-left font-normal text-mxm-content-secondary">
                 {d.label}
               </th>
-              <td className="tabnum text-right">{baseline.top![d.key]}</td>
-              <td className="tabnum text-right">{baseline.base![d.key]}</td>
+              <td className="tabnum text-right">{pair[d.key] ?? "—"}</td>
             </tr>
           ))}
         </tbody>

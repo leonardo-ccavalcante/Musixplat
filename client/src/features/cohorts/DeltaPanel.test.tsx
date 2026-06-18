@@ -7,6 +7,7 @@ const row = (id: string, delta: DeltaRow["delta_status"], gap: number): DeltaRow
   evento_id: id,
   restaurant_id: id,
   cohort_id: "c1",
+  week: "2026-06-15",
   delta_status: delta,
   percentile_in_cohort: 50,
   gap_to_top: gap,
@@ -17,9 +18,9 @@ describe("F-2.3 DeltaPanel", () => {
     render(
       <DeltaPanel
         rows={[
-          row("R-up", "melhorou_percentile", 1),
+          row("R-up", "percentile_up", 1),
           row("R-risk1", "at_risk", 5),
-          row("R-down", "baixou_percentile", 9),
+          row("R-down", "percentile_down", 9),
           row("R-risk2", "at_risk", 20),
         ]}
       />,
