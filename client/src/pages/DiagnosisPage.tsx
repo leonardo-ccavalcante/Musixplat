@@ -7,6 +7,7 @@ import { DossierModal } from "@/features/diagnosis/DossierModal";
 import { SpineTimeline, type SpineNode } from "@/features/diagnosis/SpineTimeline";
 import { ArtifactQueue, type ArtifactAction } from "@/features/diagnosis/ArtifactQueue";
 import { ArtifactModal } from "@/features/diagnosis/ArtifactModal";
+import { DiagnosisStepsModal } from "@/features/diagnosis/DiagnosisStepsModal";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
 import type { ArtifactRow } from "@shared/contracts_05c";
 
@@ -17,6 +18,7 @@ import type { ArtifactRow } from "@shared/contracts_05c";
 export function DiagnosisPage() {
   const [ready, setReady] = useState(false);
   const [openRow, setOpenRow] = useState<DiagnosisListRow | null>(null);
+  const [stepsRow, setStepsRow] = useState<DiagnosisListRow | null>(null);
   const [openArtifact, setOpenArtifact] = useState<ArtifactRow | null>(null);
   const [busyArtifact, setBusyArtifact] = useState<string | null>(null);
 
@@ -166,12 +168,21 @@ export function DiagnosisPage() {
         <ErrorState />
       ) : (
         <>
-          <DiagnosisBoard rows={rows} onOpen={setOpenRow} />
+          <DiagnosisBoard rows={rows} onOpen={setOpenRow} onSteps={setStepsRow} />
           <ArtifactQueue artifacts={artifacts} onDecide={onDecide} onOpen={setOpenArtifact} busyId={busyArtifact} />
         </>
       )}
 
       <DossierModal row={openRow} onClose={() => setOpenRow(null)} />
+      <DiagnosisStepsModal
+        row={stepsRow}
+        artifact={stepsRow ? artifacts.find((a) => a.problem_id === stepsRow.problem_id) ?? null : null}
+        onClose={() => setStepsRow(null)}
+        onOpenDossier={(r) => {
+          setStepsRow(null);
+          setOpenRow(r);
+        }}
+      />
       <ArtifactModal
         artifact={openArtifact}
         onClose={() => setOpenArtifact(null)}
