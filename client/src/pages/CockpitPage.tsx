@@ -67,15 +67,22 @@ export function CockpitPage() {
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">
       <header className="mb-6">
-        <h1 className="text-xl font-semibold text-mxm-content">Autonomy Cockpit</h1>
-        <p className="text-sm text-mxm-content-secondary">
-          AI-proposed best actions with their autonomy verdict. The AI acts alone on AUTO rows; you release or
-          pause the rest — every decision is traced.
+        <h1 className="text-2xl font-semibold text-mxm-content">Autonomy Cockpit</h1>
+        <p className="mt-1 max-w-[70ch] text-sm text-mxm-content-secondary">
+          AI-proposed best actions with their autonomy verdict. The AI acts alone on the low-stakes ones; you
+          decide the rest — every action is traced.
         </p>
         {ready && !list.isLoading && !list.isError && (
-          <p className="mt-1 text-xs text-mxm-content-tertiary">
-            {rows.length} proposals · {autos} auto-released · {rows.length - autos} need you
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-1">
+            <span className="text-sm text-mxm-content-secondary">
+              <span className="text-2xl font-semibold tabular-nums text-mxm-brand">{rows.length - autos}</span> need
+              your decision
+            </span>
+            <span className="text-sm text-mxm-content-secondary">
+              <span className="text-2xl font-semibold tabular-nums text-mxm-green">{autos}</span> auto-handled by
+              the AI
+            </span>
+          </div>
         )}
       </header>
 

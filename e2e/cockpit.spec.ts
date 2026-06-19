@@ -10,7 +10,7 @@ test("@a11y Autonomy Cockpit renders proposals + verdicts + passes axe (WCAG 2.1
   await expect(page.getByRole("heading", { name: "Autonomy Cockpit" })).toBeVisible();
 
   // Proposals load (at least one cohort card), and both verdicts appear on the board.
-  await expect(page.getByRole("region", { name: /^Cohort / }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("region", { name: "Needs your decision" })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/AUTO · AI acts alone/).first()).toBeVisible();
   await expect(page.getByText(/Needs human/).first()).toBeVisible();
 
@@ -23,7 +23,7 @@ test("@a11y Autonomy Cockpit renders proposals + verdicts + passes axe (WCAG 2.1
 
 test("a human Release records a Decision_Trace (shows the trace id)", async ({ page }) => {
   await page.goto("/cockpit");
-  await expect(page.getByRole("region", { name: /^Cohort / }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("region", { name: "Needs your decision" })).toBeVisible({ timeout: 20_000 });
 
   const release = page.getByRole("button", { name: "Release" }).first();
   await expect(release).toBeVisible();

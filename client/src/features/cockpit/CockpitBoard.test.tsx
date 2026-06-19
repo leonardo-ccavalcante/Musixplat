@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CockpitBoard } from "./CockpitBoard";
 import type { NbaCockpitRow } from "@shared/contracts";
@@ -24,17 +24,29 @@ describe("02:F-1.1 CockpitBoard", () => {
     expect(screen.getByText(/proposed no actions/i)).toBeInTheDocument();
   });
 
-  it("groups by cohort; Release only on needs-human, Pause on every row", () => {
+  it("splits into a 'Needs your decision' queue and a calm 'Auto-handled' list", () => {
     const rows = [
-      row({ nba_id: "a1", cohort_id: "c1", status: "auto", auto_releasable: true }),
-      row({ nba_id: "h1", cohort_id: "c1", status: "needs_human", reason: "money", financial_class: "direct", auto_releasable: false }),
-      row({ nba_id: "a2", cohort_id: "c2", status: "auto" }),
+      row({ nba_id: "a1", cohort_id: "co_alpha", status: "auto", auto_releasable: true }),
+      row({ nba_id: "h1", cohort_id: "co_beta", status: "needs_human", reason: "money", financial_class: "direct", auto_releasable: false }),
+      row({ nba_id: "a2", cohort_id: "co_gamma", status: "auto" }),
     ];
     render(<CockpitBoard rows={rows} onAction={() => {}} actionState={{}} />);
-    expect(screen.getByLabelText("Cohort c1")).toBeInTheDocument();
-    expect(screen.getByLabelText("Cohort c2")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Release" })).toHaveLength(1); // only the needs-human row
-    expect(screen.getAllByRole("button", { name: "Pause" })).toHaveLength(3); // human can pause any row (override down)
+    const needs = screen.getByRole("region", { name: "Needs your decision" });
+    const auto = screen.getByRole("region", { name: "Auto-handled by the AI" });
+
+    // the money row sits in the needs queue, with its cohort shown as context + a Release action
+    expect(within(needs).getByText("co_beta")).toBeInTheDocument();
+    expect(within(needs).getByRole("button", { name: "Release" })).toBeInTheDocument();
+    // auto rows live in the calm section — no Release
+    expect(within(auto).getByText("co_alpha")).toBeInTheDocument();
+    expect(within(auto).queryByRole("button", { name: "Release" })).not.toBeInTheDocument();
+    // every row can be paused (human override down)
+    expect(screen.getAllByRole("button", { name: "Pause" })).toHaveLength(3);
+  });
+
+  it("empty needs-queue ⇒ reassuring message, not a blank", () => {
+    render(<CockpitBoard rows={[row({ status: "auto" })]} onAction={() => {}} actionState={{}} />);
+    expect(screen.getByText(/Nothing needs you/i)).toBeInTheDocument();
   });
 
   it("Release fires onAction(row, RELEASE)", () => {
