@@ -10,3 +10,8 @@ export function cn(...inputs: ClassValue[]): string {
 export function fmtNum(n: number): string {
   return Number(n.toFixed(2)).toString();
 }
+
+// Money / large-count display with thousands grouping (3760 -> "3,760"). Pair with tabular-nums.
+export function fmtMoney(n: number): string {
+  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}

@@ -64,3 +64,49 @@ export const reportProblemResult = z.object({
   created: z.boolean(),
 });
 export type ReportProblemResult = z.infer<typeof reportProblemResult>;
+
+// ─── 05B read surface (diagnosis.list + diagnosis.getDossier) ───────────────────────────────────
+// origin distinguishes the two flows: a reactive case carries the episode (conversation_id), a
+// proactive case (caught by the monitor BEFORE a ticket) has none.
+export type DiagnosisOrigin = "reactive" | "proactive";
+
+// One row of the diagnosis board (numbers READ from the producers, never recomputed). affected/silent
+// are live counts of Affected; revenue_lost is the Named_Query output. silentStatus = not_evaluable when
+// the population is unobservable (BR-B4 fail-closed). needsHuman ⇒ status degraded/blocked (BR-B3).
+export interface DiagnosisListRow {
+  problem_id: string;
+  restaurant_id: string;
+  status: string;
+  origin: DiagnosisOrigin;
+  needs_human: boolean;
+  criticality: string | null;
+  area_type: string | null;
+  hypothesis_root: string | null;
+  confidence: number | null;
+  affected: number;
+  silent: number;
+  silent_status: string | null;
+  revenue_lost: number | null;
+  suggested_route: string | null;
+  frequency: number;
+  first_seen_ts: string;
+}
+
+// getDossier input — problemId is DATA within the pool; tenant is resolved server-side (anti-spoofing §7).
+export const getDossierInput = z.object({ problemId: z.string().min(1) });
+export type GetDossierInput = z.infer<typeof getDossierInput>;
+
+// getKnowledgeCase — the dossier's "similar cases" links open these KB precedents (BR-B3 grounding).
+export const getKnowledgeCaseInput = z.object({ kbCaseId: z.string().min(1) });
+export type GetKnowledgeCaseInput = z.infer<typeof getKnowledgeCaseInput>;
+export interface KnowledgeCaseView {
+  kb_case_id: string;
+  area_type: string;
+  pattern: string | null;
+  outcome: string | null;
+  resolution: string | null;
+  not_resolved_reason: string | null;
+  probability: number | null;
+  discarded_branches: unknown;
+  created_at: string;
+}

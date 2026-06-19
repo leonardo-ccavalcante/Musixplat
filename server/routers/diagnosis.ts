@@ -1,13 +1,92 @@
+import type pg from "pg";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
-import { reportProblemInput, type ReportProblemResult } from "../../shared/contracts_05b.js";
+import { readDossier } from "../diagnosis/dossier.js";
+import {
+  reportProblemInput,
+  getDossierInput,
+  getKnowledgeCaseInput,
+  type ReportProblemResult,
+  type DiagnosisListRow,
+  type DiagnosisOrigin,
+  type KnowledgeCaseView,
+} from "../../shared/contracts_05b.js";
 
 // 05B:US-B1.1.1 (gate tenant_id + restaurant_id) + 05B:B.1.3 (dedup create-or-increment).
 // 04 §3/§7. tenant resolved server-side (tenantProcedure, anti-spoofing); cross-pool ⇒ abort +
 // Security_Log (BR-B6 hard-no). At most ONE open problem per restaurant (anti double-counting,
 // "one case = one PROBLEM") via the partial unique index — a repeat trigger increments frequency
 // instead of duplicating (BR-B5/BR-B8). frequency is a computed count, never a seeded number.
+
+// 05B read surface (F-B1.3 board + US-B6.3.1 dossier). tenant resolved server-side; numbers are READ
+// from the producers, never recomputed (§14). Diagnosed_Problem carries tenant_id directly ⇒ scope by it.
+export type Exec = <T extends pg.QueryResultRow>(sql: string, params: readonly unknown[]) => Promise<T[]>;
+
+type RawListRow = {
+  problem_id: string;
+  restaurant_id: string;
+  status: string;
+  criticality: string | null;
+  area_type: string | null;
+  hypothesis_root: string | null;
+  confidence: number | null;
+  revenue_lost: number | null;
+  suggested_route: string | null;
+  silent_status: string | null;
+  frequency: number;
+  conversation_id: string | null;
+  first_seen_ts: string;
+  affected: number;
+  silent: number;
+};
+
+/** Pure display mapping (DB-free, unit-testable): origin = reactive (has episode) vs proactive (monitor,
+ *  conversation_id NULL); needs_human = degraded/blocked status (BR-B3/B17 fail-closed). No number recomputed. */
+export function diagnosisView(r: Pick<RawListRow, "conversation_id" | "status">): {
+  origin: DiagnosisOrigin;
+  needs_human: boolean;
+} {
+  return {
+    origin: r.conversation_id ? "reactive" : "proactive",
+    needs_human: r.status === "needs_human" || r.status === "blocked",
+  };
+}
+
+const LIST_SQL = `
+  select p.problem_id::text as problem_id, p.restaurant_id, p.status, p.criticality, p.area_type,
+         p.hypothesis_root, p.confidence::float8 as confidence, p.revenue_lost::float8 as revenue_lost,
+         p.suggested_route, p.silent_status, p.frequency, p.conversation_id,
+         p.first_seen_ts::text as first_seen_ts,
+         coalesce(a.affected, 0) as affected, coalesce(a.silent, 0) as silent
+  from tenant."Diagnosed_Problem" p
+  left join lateral (
+    select count(*)::int as affected, count(*) filter (where silent)::int as silent
+    from tenant."Affected" where problem_id = p.problem_id
+  ) a on true
+  where p.tenant_id = $1
+  order by p.first_seen_ts desc, p.problem_id`;
+
+export async function listDiagnosisRows(tenantId: string, exec: Exec): Promise<DiagnosisListRow[]> {
+  const raw = await exec<RawListRow>(LIST_SQL, [tenantId]);
+  return raw.map((r) => ({
+    problem_id: r.problem_id,
+    restaurant_id: r.restaurant_id,
+    status: r.status,
+    criticality: r.criticality,
+    area_type: r.area_type,
+    hypothesis_root: r.hypothesis_root,
+    confidence: r.confidence,
+    affected: r.affected,
+    silent: r.silent,
+    silent_status: r.silent_status,
+    revenue_lost: r.revenue_lost,
+    suggested_route: r.suggested_route,
+    frequency: r.frequency,
+    first_seen_ts: r.first_seen_ts,
+    ...diagnosisView(r),
+  }));
+}
 
 export const diagnosisRouter = router({
   reportProblem: tenantProcedure
@@ -50,4 +129,48 @@ export const diagnosisRouter = router({
       if (!r) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "report failed" });
       return { problem_id: r.problem_id, status: r.status, frequency: r.frequency, created: r.created };
     }),
+
+  // F-B1.3 — the diagnosis board: every problem in the pool with produced counts + autonomy verdict.
+  list: tenantProcedure.query(({ ctx }): Promise<DiagnosisListRow[]> => listDiagnosisRows(ctx.tenantId, query)),
+
+  // US-B6.3.1 — the 11-field dossier gate for one problem (read-only; honest partial gaps). Ownership
+  // verified server-side first ⇒ no cross-pool dossier leak (BR-B6).
+  getDossier: tenantProcedure.input(getDossierInput).query(async ({ ctx, input }) => {
+    const own = await query<{ x: number }>(
+      `select 1 as x from tenant."Diagnosed_Problem" where problem_id = $1 and tenant_id = $2`,
+      [input.problemId, ctx.tenantId],
+    );
+    if (!own[0]) throw new TRPCError({ code: "NOT_FOUND", message: "problem not in this pool" });
+    return readDossier(input.problemId);
+  }),
+
+  // BR-B3 grounding read — open one KB precedent (the dossier's similar-cases links). Tenant-scoped.
+  getKnowledgeCase: tenantProcedure
+    .input(getKnowledgeCaseInput)
+    .query(async ({ ctx, input }): Promise<KnowledgeCaseView> => {
+      const rows = await query<KnowledgeCaseView>(
+        `select kb_case_id::text as kb_case_id, area_type, pattern, outcome, resolution,
+                not_resolved_reason, probability::float8 as probability, discarded_branches,
+                created_at::text as created_at
+           from tenant."Knowledge_Case" where kb_case_id = $1 and tenant_id = $2`,
+        [input.kbCaseId, ctx.tenantId],
+      );
+      if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "kb case not in this pool" });
+      return rows[0];
+    }),
+
+  // F-B1.3 header — the TRUE silent figure: COUNT(DISTINCT restaurant) flagged silent across the pool's
+  // problems. Problems share the pool population (one ticket reveals the whole pool), so summing per-row
+  // silent double-counts; this dedupes server-side. Deterministic SQL, tenant-scoped, never recomputed
+  // client-side (§14, §8 deterministic-never-LLM).
+  silentSummary: tenantProcedure.query(async ({ ctx }): Promise<{ distinctSilent: number }> => {
+    const rows = await query<{ silent: number }>(
+      `select count(distinct a.restaurant_id)::int as silent
+         from tenant."Affected" a
+         join tenant."Diagnosed_Problem" p on p.problem_id = a.problem_id
+        where p.tenant_id = $1 and a.silent`,
+      [ctx.tenantId],
+    );
+    return { distinctSilent: rows[0]?.silent ?? 0 };
+  }),
 });

@@ -30,13 +30,16 @@ describe("§14 anti-fake — results are NULL/empty pre-run", () => {
     expect(await count(pool, 'gov."min_calculation"')).toBe(0);
   });
 
-  it("05B: diagnosis tables are EMPTY pre-run (Problem/Affected/Knowledge_Case)", async () => {
+  it("05B: diagnosis tables are EMPTY pre-run (Problem/Affected/Knowledge_Case/Critical_Process)", async () => {
     // Problems are CREATED at runtime by the orchestrator; Affected rows are PRODUCED by the
     // silent-hunter anti-join. Neither is ever seeded (§14, BR-B4). Knowledge_Case has no
-    // producer this session ⇒ empty.
+    // producer this session ⇒ empty. Critical_Process is registered by run-05b/policy, never seeded,
+    // and its `state` RESULT column is NULL until fn_monitor_critical runs (BR-B12).
     expect(await count(pool, 'tenant."Diagnosed_Problem"')).toBe(0);
     expect(await count(pool, 'tenant."Affected"')).toBe(0);
     expect(await count(pool, 'tenant."Knowledge_Case"')).toBe(0);
+    expect(await count(pool, 'tenant."Critical_Process"')).toBe(0);
+    expect(await count(pool, 'tenant."Critical_Process" where state is not null')).toBe(0);
   });
 
   it("in-place RESULT columns are NULL (tenure_months, current_value, metrics_layer)", async () => {

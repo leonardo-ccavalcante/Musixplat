@@ -29,10 +29,12 @@
     "db:migration": "supabase migration new",
     "db:p01": "tsx scripts/run-p01.ts",
     "db:p02": "tsx scripts/run-p02.ts",
+    "db:05b": "tsx scripts/run-05b.ts",
     "db:migrate": "tsx scripts/apply-migrations.ts",
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:sql && pnpm test:antifake && pnpm test:integration"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@supabase/supabase-js": "^2.45.4",
     "@tanstack/react-query": "^5.59.0",
     "@trpc/client": "^11.0.0-rc.553",

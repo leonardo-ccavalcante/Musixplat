@@ -41,7 +41,8 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('cap_tree_depth',     '5',    '[C]', 'leo'),
   ('tolerance_doublecheck',    '0.05', '[C]', 'leo'),
   ('tolerance_reconciliation', '0',    '[C]', 'leo'),
-  ('window_silent',       '30',   '[C]', 'leo');
+  ('window_silent',       '30',   '[C]', 'leo'),
+  ('monitor_cost_default', '100',  '[C]', 'leo');
 
 -- ── 02 NBA action-threshold knobs ([C] placeholders — the human-approved ranges that gate autonomy,
 --    read BY NAME §3.8. "value está en el mecanismo": Leo ratifies the numbers in the cockpit). ──
@@ -110,7 +111,7 @@ insert into catalog."Named_Query"(def_version, formula, periodicity, group_by, s
    'weekly', 'cohort', 'tenant.Order', 'percentile'),
   ('nq_kpi_recurrence_v1',
    'avg(net_value ok) per restaurant, aggregated to cohort',
-   'weekly', 'cohort', 'tenant.Order', 'BRL');
+   'weekly', 'cohort', 'tenant.Order', 'EUR');
 
 -- ── tenant.KPI defs (target = config [C]; current_value is a RESULT → NULL). ──
 insert into tenant."KPI"(kpi_id, tenant_id, restaurant_id, level, class, kpi_def_version, target, provenance) values
