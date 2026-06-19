@@ -59,7 +59,7 @@ export function NbaModal({
                 href={`/cockpit/action/${row.action_type}`}
                 className="mt-1 inline-block text-xs text-mxm-brand hover:underline"
               >
-                What is {row.action_type}? See its track record →
+                See this action&apos;s track record →
               </Link>
             )}
           </div>
