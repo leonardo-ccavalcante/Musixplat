@@ -37,7 +37,10 @@ export function DiagnosisPage() {
 
   const list = trpc.diagnosis.list.useQuery(undefined, { enabled: ready });
   const rows = useMemo(() => (list.data ?? []) as DiagnosisListRow[], [list.data]);
-  const totalSilent = rows.reduce((s, r) => s + (r.silent_status === "not_evaluable" ? 0 : r.silent), 0);
+  // Headline = DISTINCT silent restaurants across the pool (server-deduped). Summing per-row silent would
+  // double-count, since problems share the same pool population (one ticket reveals the whole pool).
+  const summary = trpc.diagnosis.silentSummary.useQuery(undefined, { enabled: ready });
+  const totalSilent = summary.data?.distinctSilent ?? 0;
 
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">

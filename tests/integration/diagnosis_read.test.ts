@@ -91,7 +91,7 @@ describe("05B:US-B6.3.1 — diagnosis.getDossier (11-field gate, honest partial,
   });
 });
 
-describe("05B getKnowledgeCase + emailDossier (KB precedent read + email stub)", () => {
+describe("05B getKnowledgeCase + silentSummary (KB precedent read + deduped headline)", () => {
   it("getKnowledgeCase opens a precedent; a foreign pool is blocked (BR-B6)", async () => {
     const r = await pool.query<{ kb_case_id: string }>(`
       insert into tenant."Knowledge_Case"(tenant_id, area_type, pattern, outcome, resolution, reviewed)
@@ -104,12 +104,22 @@ describe("05B getKnowledgeCase + emailDossier (KB precedent read + email stub)",
     await expect(caller("POOL-OTHER").diagnosis.getKnowledgeCase({ kbCaseId: id })).rejects.toThrow();
   });
 
-  it("emailDossier is an honest stub (delivered:false) + enforces ownership", async () => {
-    const problemId = await seedAndDiagnose();
-    const res = await caller("POOL-DIAG").diagnosis.emailDossier({ problemId, to: "ops@example.com" });
-    expect(res.delivered).toBe(false); // fail-closed: no email service ⇒ client uses mailto
-    await expect(
-      caller("POOL-OTHER").diagnosis.emailDossier({ problemId, to: "ops@example.com" }),
-    ).rejects.toThrow();
+  it("silentSummary counts DISTINCT silent restaurants — two problems over the same pool do not double-count", async () => {
+    // reactive problem on R-RD-1, then a proactive one on R-RD-3 over the SAME fixture pool. fn_hunt_silent
+    // populates each problem's Affected set with the SAME pool population, so per-row silent repeats.
+    const p1 = await seedAndDiagnose();
+    const r2 = await pool.query<{ problem_id: string }>(`
+      insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, conversation_id, criticality, status)
+      values ('POOL-DIAG','R-RD-3',null,'critical','open') returning problem_id;`);
+    const p2 = r2.rows[0]!.problem_id;
+    await runDiagnosis(p2, "POOL-DIAG");
+
+    const per = await caller("POOL-DIAG").diagnosis.list();
+    const summed = per.reduce((s, row) => s + row.silent, 0); // the naive (wrong) header math
+    const { distinctSilent } = await caller("POOL-DIAG").diagnosis.silentSummary();
+    expect(p1).not.toBe(p2);
+    expect(per.length).toBe(2);
+    expect(distinctSilent).toBeGreaterThan(0);
+    expect(distinctSilent).toBeLessThan(summed); // deduped < summed ⇒ no double-count
   });
 });

@@ -63,6 +63,11 @@ export const deterministicReasoning: DiagnosisReasoning = {
 
 const ALLOWED_AREAS = new Set(["finance", "product", "performance", "unclassified"]);
 
+/** Real models often wrap JSON in a ```json fence despite the "no prose" instruction. Strip it before
+ *  parsing; anything still malformed throws downstream ⇒ degrade-to-human (fail-closed), never a guess. */
+const unfence = (s: string): string =>
+  s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
 /** Real-Claude provider for the working prototype. TEXT only (§8). Parses strict JSON; anything
  *  malformed or off-list THROWS ⇒ the orchestrator degrades-to-human (BR-B3), never an optimistic guess. */
 export function llmReasoning(client: Anthropic, model = "claude-sonnet-4-6"): DiagnosisReasoning {
@@ -84,7 +89,7 @@ export function llmReasoning(client: Anthropic, model = "claude-sonnet-4-6"): Di
           '{"areaType": "finance|product|performance|unclassified", "confidence": 0..1}. No prose.',
         `problem text: ${JSON.stringify(text)}\ncriticality hint: ${hint ?? "none"}`,
       );
-      const out = JSON.parse(raw) as AreaClassification;
+      const out = JSON.parse(unfence(raw)) as AreaClassification;
       if (!ALLOWED_AREAS.has(out.areaType) || typeof out.confidence !== "number") {
         throw new Error("llmReasoning.classifyArea: off-contract output");
       }
@@ -96,7 +101,7 @@ export function llmReasoning(client: Anthropic, model = "claude-sonnet-4-6"): Di
           'array of {"hypothesis": string, "probability": 0..1}, most-likely first, same hypotheses given.',
         `area: ${areaType}\nhypotheses: ${JSON.stringify(hypotheses)}`,
       );
-      const arr = JSON.parse(raw) as { hypothesis: string; probability: number }[];
+      const arr = JSON.parse(unfence(raw)) as { hypothesis: string; probability: number }[];
       if (!Array.isArray(arr) || arr.length === 0) throw new Error("llmReasoning.rankPaths: empty");
       return arr.map((p, i) => ({
         path_id: i + 1,

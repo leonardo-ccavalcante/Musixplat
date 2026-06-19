@@ -1,5 +1,5 @@
 import type { DiagnosisListRow } from "@shared/contracts_05b";
-import { memoText, type DossierData } from "./dossierMemo";
+import { memoText, escapeHtml, type DossierData } from "./dossierMemo";
 
 // A designed, on-brand HTML email (Musixmatch /Design: dark canvas, coral accent, system sans). Inline
 // styles + a CSS bar visual of the cascade (silent vs spoke-up) and the € hero — no external image assets.
@@ -19,6 +19,11 @@ export function emailHtml(row: DiagnosisListRow, d: DossierData, today: string, 
   const affected = row.affected || 1;
   const silentPct = Math.max(4, Math.min(96, Math.round((row.silent / affected) * 100)));
   const spoke = Math.max(0, row.affected - row.silent);
+  // DB-sourced strings → escape before they reach HTML (numbers above are safe). Mirrors the memo path.
+  const rid = escapeHtml(row.restaurant_id);
+  const route = escapeHtml(row.suggested_route ?? "review");
+  const day = escapeHtml(today);
+  const url = escapeHtml(appUrl);
   const headline = proactive
     ? "A silent payment problem, caught before a ticket"
     : "One ticket, a much bigger problem underneath";
@@ -32,7 +37,7 @@ export function emailHtml(row: DiagnosisListRow, d: DossierData, today: string, 
         <span style="display:inline-block;width:9px;height:9px;border-radius:9999px;background:#fc532e;vertical-align:middle;margin-right:7px;"></span>Musixmatch · Customer-Ops
       </div>
       <h1 style="margin:14px 0 4px;font-size:23px;font-weight:800;letter-spacing:-.3px;line-height:1.15;color:#ffffff;">${headline}</h1>
-      <p style="margin:0;font-size:13px;color:#9e9e9e;">${row.restaurant_id} · ${proactive ? "proactive" : "reactive"} · ${today}</p>
+      <p style="margin:0;font-size:13px;color:#9e9e9e;">${rid} · ${proactive ? "proactive" : "reactive"} · ${day}</p>
     </div>
 
     <div style="padding:4px 28px 8px;">
@@ -53,13 +58,13 @@ export function emailHtml(row: DiagnosisListRow, d: DossierData, today: string, 
     <div style="padding:18px 28px 6px;">
       <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#bdbdbd;">
         ${proactive
-          ? `The payments monitor flagged a non-payment at ${row.restaurant_id} before anyone opened a ticket. Zooming out across the pool, ${row.affected} restaurants are hit and ${row.silent} never said a word.`
-          : `${row.restaurant_id} opened a billing ticket. Zooming out, the same failure hits ${row.affected} restaurants and ${row.silent} of them never said a word.`}
+          ? `The payments monitor flagged a non-payment at ${rid} before anyone opened a ticket. Zooming out across the pool, ${row.affected} restaurants are hit and ${row.silent} never said a word.`
+          : `${rid} opened a billing ticket. Zooming out, the same failure hits ${row.affected} restaurants and ${row.silent} of them never said a word.`}
       </p>
       <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#bdbdbd;">
-        Recommended route: <strong style="color:#ffffff;">${row.suggested_route ?? "review"}</strong>. The full handoff dossier (root, evidence, impact, precedent, provenance) is one click away.
+        Recommended route: <strong style="color:#ffffff;">${route}</strong>. The full handoff dossier (root, evidence, impact, precedent, provenance) is one click away.
       </p>
-      <a href="${appUrl}" style="display:inline-block;background:#fc532e;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 20px;border-radius:8px;">Open the full dossier</a>
+      <a href="${url}" style="display:inline-block;background:#fc532e;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 20px;border-radius:8px;">Open the full dossier</a>
     </div>
 
     <div style="padding:18px 28px 24px;margin-top:10px;border-top:1px solid #343434;font-size:11px;color:#828282;">
@@ -82,7 +87,7 @@ export function openEmailPreview(row: DiagnosisListRow, d: DossierData, today: s
     <a href="${mailto}" style="background:#fc532e;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;">Send via mail client</a>
   </div>`;
   w.document.write(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${subject}</title>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title>
      <style>html{color-scheme:dark;}body{margin:0;background:#0d0d0d;}</style></head>
      <body>${toolbar}${emailHtml(row, d, today, appUrl)}</body></html>`,
   );

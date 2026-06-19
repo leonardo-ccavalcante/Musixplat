@@ -110,8 +110,3 @@ export interface KnowledgeCaseView {
   discarded_branches: unknown;
   created_at: string;
 }
-
-// emailDossier — STUB scaffolding for a future real send (Resend/SMTP). No email service is configured,
-// so it fails closed honestly; the client uses a mailto: fallback today (BR-B13: never a silent success).
-export const emailDossierInput = z.object({ problemId: z.string().min(1), to: z.string().email() });
-export type EmailDossierInput = z.infer<typeof emailDossierInput>;

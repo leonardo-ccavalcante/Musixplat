@@ -11,6 +11,10 @@ export interface DossierData {
   fields: Record<string, unknown> | null;
 }
 
+/** Escape DB-sourced strings before interpolating into HTML (shared by memo + email). */
+export const escapeHtml = (t: string): string =>
+  t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const s = (v: unknown, dash = "n/a"): string => (v == null || v === "" ? dash : String(v));
@@ -95,7 +99,7 @@ export function memoText(row: DiagnosisListRow, d: DossierData, today: string): 
 
 export function memoHtml(row: DiagnosisListRow, d: DossierData, today: string): string {
   const m = model(row, d, today);
-  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const esc = escapeHtml;
   const body = m.sections.map((sec) => `<section><h2>${esc(sec.h)}</h2><p>${esc(sec.p)}</p></section>`).join("\n");
   // On-brand (Musixmatch /Design): dark canvas, coral accents, system sans, sentence-case headings,
   // ALL-CAPS section labels. print-color-adjust keeps the dark surface in the PDF.

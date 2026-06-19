@@ -83,8 +83,8 @@ export async function runDiagnosis(
             status = case when $4 then 'needs_human' else status end,
             provenance_by_field = provenance_by_field
               || jsonb_build_object('area_type','[C]','confidence','[C]')
-      where problem_id = $1`,
-    [problemId, cls.areaType, cls.confidence, degraded],
+      where problem_id = $1 and tenant_id = $5`,
+    [problemId, cls.areaType, cls.confidence, degraded, tenantId],
   );
 
   // B.3 issue-tree (provider ranks the deterministic seed) + B.4 lazy-fetch the single top source (BR-B2).
@@ -108,8 +108,8 @@ export async function runDiagnosis(
     `update tenant."Diagnosed_Problem"
         set issue_tree = $2::jsonb,
             provenance_by_field = provenance_by_field || jsonb_build_object('issue_tree','[C]')
-      where problem_id = $1`,
-    [problemId, JSON.stringify(tree)],
+      where problem_id = $1 and tenant_id = $3`,
+    [problemId, JSON.stringify(tree), tenantId],
   );
 
   // B.5 silent-hunt (SQL anti-join) — the affected/silent counts are PRODUCED here, never seeded (BR-B4, §14).
@@ -133,8 +133,8 @@ export async function runDiagnosis(
     `update tenant."Diagnosed_Problem"
         set hypothesis_root = $2, similar_links = $3::jsonb,
             provenance_by_field = provenance_by_field || jsonb_build_object('hypothesis_root','[C]')
-      where problem_id = $1`,
-    [problemId, top.hypothesis, JSON.stringify(sims.map((x) => x.kb_case_id))],
+      where problem_id = $1 and tenant_id = $4`,
+    [problemId, top.hypothesis, JSON.stringify(sims.map((x) => x.kb_case_id)), tenantId],
   );
 
   // B.7 impact (Named_Query) + priority (risk × impact vs cost). impact = revenue_lost (SQL).
@@ -162,8 +162,8 @@ export async function runDiagnosis(
     `update tenant."Diagnosed_Problem"
         set suggested_route = $2,
             provenance_by_field = provenance_by_field || jsonb_build_object('suggested_route','[C]')
-      where problem_id = $1`,
-    [problemId, route],
+      where problem_id = $1 and tenant_id = $3`,
+    [problemId, route, tenantId],
   );
   await upsertCaseRepo(problemId, {
     where_concentrated: conc ? { dim: "zone", value: conc.zone, n: conc.n } : null,

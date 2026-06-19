@@ -52,7 +52,7 @@ begin
      and o.order_date >= current_date - v_window
      and not exists (
        select 1 from tenant."Diagnosed_Problem" d
-        where d.restaurant_id = o.restaurant_id and d.status = 'open'
+        where d.tenant_id = p_tenant and d.restaurant_id = o.restaurant_id and d.status = 'open'
      )
    order by o.order_date desc
    limit 1;
@@ -62,18 +62,25 @@ begin
     return null; -- nothing to report — processes in green.
   end if;
 
+  -- idempotent open: the partial unique index (tenant_id, restaurant_id) WHERE status='open' is the
+  -- conflict target. A concurrent monitor/report run that already opened this one ⇒ no row, return null
+  -- (never raise an unhandled unique_violation, never double-open the same restaurant — BR-B5/B8).
   insert into tenant."Diagnosed_Problem"
     (tenant_id, restaurant_id, conversation_id, criticality, status, frequency)
   values (p_tenant, v_restaurant, null, 'critical', 'open', 1)
+  on conflict (tenant_id, restaurant_id) where status = 'open' do nothing
   returning problem_id into v_problem;
+
+  if v_problem is null then
+    update tenant."Critical_Process" set state = 'green' where process_id = p_process;
+    return null; -- another open case already covers this restaurant; nothing new to report.
+  end if;
 
   update tenant."Critical_Process" set state = 'triggered' where process_id = p_process;
   return v_problem;
 end
 $$;
 
--- Cost knob read BY NAME by the orchestrator's routeNowQueue (§3.8); the classify floor reuses the
--- already-seeded 'threshold_classification'. provenance [C] — a scenario knob, defendable in the cockpit.
-insert into catalog."Config_Knobs"(key, value, provenance) values
-  ('monitor_cost_default', '100', '[C]')
-on conflict (key) do nothing;
+-- Knobs read BY NAME by the monitor + orchestrator (§3.8): 'window_silent' (fn_monitor_critical) and
+-- 'monitor_cost_default' (routeNowQueue); the classify floor reuses 'threshold_classification'. All three
+-- are seeded with the rest of the 05B knobs in supabase/seed.sql (single source) — not duplicated here.

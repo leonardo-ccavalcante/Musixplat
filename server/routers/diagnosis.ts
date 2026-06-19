@@ -7,7 +7,6 @@ import {
   reportProblemInput,
   getDossierInput,
   getKnowledgeCaseInput,
-  emailDossierInput,
   type ReportProblemResult,
   type DiagnosisListRow,
   type DiagnosisOrigin,
@@ -160,15 +159,18 @@ export const diagnosisRouter = router({
       return rows[0];
     }),
 
-  // STUB — a future real send (Resend/SMTP) plugs in here. No service configured ⇒ fail closed honestly
-  // (never a silent success); the client falls back to mailto:. Ownership enforced server-side (BR-B6).
-  emailDossier: tenantProcedure.input(emailDossierInput).mutation(async ({ ctx, input }) => {
-    const own = await query<{ x: number }>(
-      `select 1 as x from tenant."Diagnosed_Problem" where problem_id = $1 and tenant_id = $2`,
-      [input.problemId, ctx.tenantId],
+  // F-B1.3 header — the TRUE silent figure: COUNT(DISTINCT restaurant) flagged silent across the pool's
+  // problems. Problems share the pool population (one ticket reveals the whole pool), so summing per-row
+  // silent double-counts; this dedupes server-side. Deterministic SQL, tenant-scoped, never recomputed
+  // client-side (§14, §8 deterministic-never-LLM).
+  silentSummary: tenantProcedure.query(async ({ ctx }): Promise<{ distinctSilent: number }> => {
+    const rows = await query<{ silent: number }>(
+      `select count(distinct a.restaurant_id)::int as silent
+         from tenant."Affected" a
+         join tenant."Diagnosed_Problem" p on p.problem_id = a.problem_id
+        where p.tenant_id = $1 and a.silent`,
+      [ctx.tenantId],
     );
-    if (!own[0]) throw new TRPCError({ code: "NOT_FOUND", message: "problem not in this pool" });
-    // TODO(05B): wire a real email provider here (env ANTHROPIC_API_KEY-style secret by NAME, §6).
-    return { delivered: false as const, reason: "email service not configured — use the mailto fallback" };
+    return { distinctSilent: rows[0]?.silent ?? 0 };
   }),
 });
