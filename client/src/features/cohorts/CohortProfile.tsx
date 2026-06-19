@@ -2,10 +2,11 @@ import type { DescriptiveBaseline, CohortKpis, ProvTag } from "@shared/contracts
 import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { fmtNum } from "@/lib/utils";
 
 // F-1.5 — numeric/structured PERFIL render. The "who is this cohort" PROSE is AGENTE; here we ONLY
 // render DB-computed KPIs honestly. Defensive per field: missing family ⇒ skip; null ⇒ "—", never a
-// fabricated 0 (§14). Numbers shown as-is (DB already rounded) — no invented % transform.
+// fabricated 0 (§14). Numbers formatted to <=2 decimals for display (DB stores full precision).
 
 type Family = { prov?: ProvTag } & Record<string, number | null | ProvTag | undefined>;
 type FamilyDef = { key: keyof CohortKpis; title: string; fields: Array<{ k: string; label: string }> };
@@ -78,7 +79,7 @@ export function CohortProfile({ baseline, suppressed }: { baseline: DescriptiveB
                 return (
                   <div key={field.k} className="flex justify-between text-sm text-mxm-content">
                     <span className="text-mxm-content-secondary">{field.label}</span>
-                    <span className="tabnum text-right">{v ?? "—"}</span>
+                    <span className="tabnum text-right">{typeof v === "number" ? fmtNum(v) : "—"}</span>
                   </div>
                 );
               })}

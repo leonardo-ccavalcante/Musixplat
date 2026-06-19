@@ -2,6 +2,7 @@ import type { DescriptiveBaseline, ProvTag } from "@shared/contracts";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { fmtNum } from "@/lib/utils";
 
 // F-1.7 — upside projection render. ALWAYS [C]: a projection NEVER ascends to [V]. Read-only — it is a
 // lectura, not an action. null lift ⇒ needs both extremes ≥ k ⇒ conservative empty (§14). null attribution
@@ -30,17 +31,20 @@ export function UpsidePanel({ baseline }: { baseline: DescriptiveBaseline }) {
       <CardTitle>Upside (if the base operated like the top)</CardTitle>
       <div className="mb-2 flex items-center gap-2">
         <p className="tabnum text-2xl text-mxm-content">
-          +{upside.lift_orders} {upside.unit ?? ""}
+          +{fmtNum(upside.lift_orders)} {upside.unit ?? ""}
         </p>
         <ProvenanceBadge prov={(upside.prov ?? "[C]") as ProvTag} />
       </div>
       <dl className="space-y-1">
-        {ATTR.map((a) => (
-          <div key={a.k} className="flex justify-between text-sm text-mxm-content">
-            <dt className="text-mxm-content-secondary">{a.label}</dt>
-            <dd className="tabnum text-right">{attr?.[a.k] ?? "—"}</dd>
-          </div>
-        ))}
+        {ATTR.map((a) => {
+          const v = attr?.[a.k];
+          return (
+            <div key={a.k} className="flex justify-between text-sm text-mxm-content">
+              <dt className="text-mxm-content-secondary">{a.label}</dt>
+              <dd className="tabnum text-right">{typeof v === "number" ? fmtNum(v) : "—"}</dd>
+            </div>
+          );
+        })}
       </dl>
       <p className="mt-3 text-xs text-mxm-content-tertiary">
         Projection — read-only, not an action (never ascends to [V]).

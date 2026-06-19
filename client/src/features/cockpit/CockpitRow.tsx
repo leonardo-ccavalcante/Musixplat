@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn, fmtNum } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { AutonomyBadge } from "./AutonomyBadge";
 import type { NbaCockpitRow } from "@shared/contracts";
@@ -9,20 +9,15 @@ export interface RowState {
   msg?: string;
 }
 
-// Round to <=2 decimals, drop trailing zeros (0.0833…->"0.08", 0.05->"0.05", 12->"12").
-function fmt(n: number): string {
-  return Number(n.toFixed(2)).toString();
-}
-
 // One clean, human-readable evidence line. Prefer the structured before_after_expected (a [C] projection —
-// numbers ROUNDED for display, never fabricated); fall back to the proposal's prose root_cause. Rendered
-// defensively: a malformed payload degrades gracefully, never throws (CLAUDE.md §3.10 / §4).
+// numbers ROUNDED for display via fmtNum, never fabricated); fall back to the proposal's prose root_cause.
+// Rendered defensively: a malformed payload degrades gracefully, never throws (CLAUDE.md §3.10 / §4).
 function describe(j: unknown, rootCause: string | null): string {
   if (j && typeof j === "object") {
     const o = j as { dimension?: unknown; measured?: unknown; standard?: unknown; gap?: unknown };
     if (typeof o.dimension === "string" && typeof o.measured === "number" && typeof o.standard === "number") {
-      const gap = typeof o.gap === "number" ? ` · gap ${fmt(o.gap)}` : "";
-      return `${o.dimension}: ${fmt(o.measured)} → ${fmt(o.standard)}${gap}`;
+      const gap = typeof o.gap === "number" ? ` · gap ${fmtNum(o.gap)}` : "";
+      return `${o.dimension}: ${fmtNum(o.measured)} → ${fmtNum(o.standard)}${gap}`;
     }
   }
   return rootCause ?? "no attributable cause";
