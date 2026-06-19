@@ -1,4 +1,4 @@
-import { cn, fmtNum } from "@/lib/utils";
+import { cn, fmtMoney } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { DiagnosisListRow, DiagnosisOrigin } from "@shared/contracts_05b";
 
@@ -51,7 +51,7 @@ export function DiagnosisRow({
         )}
       </div>
       <div className="text-xs tabular-nums text-mxm-content-secondary">
-        R$ <span className="text-mxm-content">{row.revenue_lost != null ? fmtNum(row.revenue_lost) : "n/a"}</span>
+        R$ <span className="text-mxm-content">{row.revenue_lost != null ? fmtMoney(row.revenue_lost) : "n/a"}</span>
       </div>
       <span className="hidden text-xs text-mxm-content-secondary sm:inline">{row.suggested_route ?? "n/a"}</span>
       <OriginBadge origin={row.origin} />

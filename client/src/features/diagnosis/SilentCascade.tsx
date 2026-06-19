@@ -1,4 +1,4 @@
-import { fmtNum } from "@/lib/utils";
+import { fmtMoney } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
 
@@ -47,7 +47,7 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
           <Stat n={row.silent} label="silent · never spoke" accent />
           <div>
             <div className="text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-none tracking-tight tabular-nums text-mxm-content">
-              R$ {row.revenue_lost != null ? fmtNum(row.revenue_lost) : "n/a"}
+              R$ {row.revenue_lost != null ? fmtMoney(row.revenue_lost) : "n/a"}
             </div>
             <div className="mt-1.5 text-xs text-mxm-content-secondary">at risk</div>
           </div>
