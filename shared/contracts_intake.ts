@@ -11,10 +11,18 @@ export const ticketRowInput = z.object({
   restaurant_id: z.string().min(1).max(64),
   zone: z.string().min(1).max(64).default("Centro"),
   payment_status: z.enum(["failed", "ok", "pending"]).default("failed"),
+  order_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  gross_value: z.number().nonnegative(),
+  fee: z.number().nonnegative(),
   opened_ticket: z.boolean().default(false),
   intent: z.string().min(1).max(64).optional(),
   criticality: criticality.optional(),
   message: z.string().max(4000).optional(),
+  resolution_how: z.string().min(1).max(2000).optional(),
+}).superRefine((row, ctx) => {
+  if (row.fee > row.gross_value) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["fee"], message: "fee cannot exceed gross_value" });
+  }
 });
 export type TicketRowInput = z.infer<typeof ticketRowInput>;
 export const uploadTicketsInput = z.object({ rows: z.array(ticketRowInput).min(1).max(2000) });

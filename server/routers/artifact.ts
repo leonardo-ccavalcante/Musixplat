@@ -51,30 +51,49 @@ export const artifactRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool artifact blocked" });
       }
       return withTx(async (client) => {
-        // 4-eyes: an independent AI proposer in the pool, != the human confirmer. Fail-closed if absent.
-        const ai = (
-          await client.query<{ user_id: string }>(
-            `select user_id from gov."User" where tenant_id = $1 and role = 'ai_agent' order by user_id limit 1`,
-            [ctx.tenantId],
+        // Lock the state transition. Only one terminal decision may leave pending_review.
+        const artifact = (
+          await client.query<{
+            tenant_id: string;
+            status: string;
+            decision_trace_id: string | null;
+            proposer_id: string | null;
+            superseded_at: string | null;
+          }>(
+            `select tenant_id, status, decision_trace_id, proposer_id, superseded_at::text
+               from gov."Generated_Artifact" where artifact_id=$1 for update`,
+            [input.artifactId],
           )
         ).rows[0];
-        if (!ai || ai.user_id === ctx.userId) {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "no independent AI proposer (4-eyes)" });
+        if (!artifact || artifact.tenant_id !== ctx.tenantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "artifact decision scope changed" });
+        }
+        if (artifact.status !== "pending_review" || artifact.decision_trace_id || artifact.superseded_at) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "artifact is already decided or superseded" });
+        }
+        if (!artifact.proposer_id || artifact.proposer_id === ctx.userId) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "no independent recorded proposer (4-eyes)" });
         }
         const status = input.action === "approve" ? "approved" : input.action === "reject" ? "rejected" : "escalated";
+        const gateReason = input.action === "approve"
+          ? "approved_after_review"
+          : input.action === "reject"
+            ? "rejected_incorrect_or_unsafe"
+            : "escalated_requires_specialist";
         const dec = (
           await client.query<{ decision_id: string }>(
             `insert into gov."Artifact_Decision"(artifact_id, tenant_id, action, proposer_id, confirmer_id, gate_reason)
-             values ($1, $2, $3::public.artifact_action, $4, $5, 'manual_review')
+             values ($1, $2, $3::public.artifact_action, $4, $5, $6)
              returning decision_id::text as decision_id`,
-            [input.artifactId, ctx.tenantId, input.action, ai.user_id, ctx.userId],
+            [input.artifactId, ctx.tenantId, input.action, artifact.proposer_id, ctx.userId, gateReason],
           )
         ).rows[0]!;
-        await client.query(
+        const updated = await client.query(
           `update gov."Generated_Artifact" set status = $2::public.artifact_status, decision_trace_id = $3, updated_at = now()
-            where artifact_id = $1`,
+            where artifact_id = $1 and status='pending_review' and decision_trace_id is null`,
           [input.artifactId, status, dec.decision_id],
         );
+        if (updated.rowCount !== 1) throw new TRPCError({ code: "CONFLICT", message: "artifact decision lost race" });
         // Refresh the 1:10 leverage: this human touch lowers the ratio (escalation/review up ⇒ ratio down).
         await client.query(`select gov.fn_roi_1_10($1)`, [ctx.tenantId]);
         return { artifact_id: input.artifactId, status, trace_id: dec.decision_id };
@@ -85,7 +104,9 @@ export const artifactRouter = router({
     query<ArtifactRow>(
       `select artifact_id::text as artifact_id, problem_id::text as problem_id, artifact_type, target_metric,
               status, content, decision_trace_id::text as decision_trace_id, created_at::text as created_at
-         from gov."Generated_Artifact" where tenant_id = $1 order by created_at desc`,
+         from gov."Generated_Artifact"
+        where tenant_id = $1 and superseded_at is null
+        order by created_at desc`,
       [ctx.tenantId],
     ),
   ),
