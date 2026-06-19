@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TicketsPanel, type IntentCount } from "./TicketsPanel";
 
@@ -30,6 +30,21 @@ describe("F-3.3 TicketsPanel — grouped by intent", () => {
     );
     expect(screen.getByText("menu")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument(); // 3 + 4
+  });
+
+  it("an intent chip filters which groups show", () => {
+    render(
+      <TicketsPanel
+        counts={[
+          { cohort_id: "x", intent: "billing", n: 5 },
+          { cohort_id: "z", intent: "delivery", n: 9 },
+        ]}
+      />,
+    );
+    expect(screen.getByText("x")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "delivery 9" })); // the intent chip
+    expect(screen.queryByText("x")).not.toBeInTheDocument();
+    expect(screen.getByText("z")).toBeInTheDocument();
   });
 
   it("renders an explicit empty state (never green-fake)", () => {

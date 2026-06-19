@@ -16,11 +16,13 @@ export function Disclosure({
   children: ReactNode;
 }) {
   return (
-    <details open={defaultOpen} className="group rounded-mxm border border-mxm-border">
+    <details open={defaultOpen} className="rounded-mxm border border-mxm-border">
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-mxm px-3 py-2.5 text-sm font-medium text-mxm-content hover:bg-mxm-bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand [&::-webkit-details-marker]:hidden">
+        {/* rotate via the OWN <details open> only (direct-child selector) — nesting-safe, unlike
+            group-open which matches any .group ancestor and would rotate inner chevrons wrongly */}
         <span
           aria-hidden="true"
-          className="text-mxm-content-tertiary transition-transform duration-150 group-open:rotate-90"
+          className="text-mxm-content-tertiary transition-transform duration-150 [details[open]>summary>&]:rotate-90"
         >
           ▸
         </span>

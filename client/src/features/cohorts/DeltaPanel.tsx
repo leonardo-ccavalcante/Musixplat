@@ -3,30 +3,31 @@ import type { DeltaRow } from "@shared/contracts";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { cn, fmtNum } from "@/lib/utils";
+import { FilterChips, type ChipOption } from "@/components/ui/FilterChips";
+import { ProvenanceLegend } from "@/components/ui/ProvenanceLegend";
+import { fmtNum } from "@/lib/utils";
 import { AttributionDetail, reasonLabel } from "./AttributionDetail";
 
 // F-2.3 — prioritized deltas, GROUPED by why-it-moved (F-2.4 cause). Render/sort only — never
 // recomputes deltas (produced by F-2.2). Within a group: at_risk on top (deterministic), then gap
 // desc. Groups ordered by size desc. A multi-select chip bar filters by cause; each group is a
-// collapsible <details> so a human opens one cause at a time. Order/at_risk exposed via redundant
-// text (▲ AT RISK), never color-only. NULL passes through as "—".
+// collapsible <details>. Order/at_risk exposed via redundant text (▲ AT RISK), never color-only.
+// A helper line + provenance legend decode the screen for a non-technical reader. NULL ⇒ "—".
 const RANK: Record<string, number> = { at_risk: 0, churn: 1, percentile_down: 2 };
+
+// plain-language status labels (the enum strings are developer tokens, not manager language)
+const STATUS_LABEL: Record<string, string> = {
+  at_risk: "At risk",
+  churn: "Churning",
+  percentile_down: "Falling behind",
+  percentile_up: "Improving",
+};
 
 function withinGroup(a: DeltaRow, b: DeltaRow): number {
   const ra = RANK[a.delta_status ?? ""] ?? 9;
   const rb = RANK[b.delta_status ?? ""] ?? 9;
   if (ra !== rb) return ra - rb;
   return (b.gap_to_top ?? -Infinity) - (a.gap_to_top ?? -Infinity);
-}
-
-function chipCls(active: boolean): string {
-  return cn(
-    "tabnum rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand",
-    active
-      ? "border-mxm-brand text-mxm-brand"
-      : "border-mxm-border text-mxm-content-secondary hover:text-mxm-content",
-  );
 }
 
 export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
@@ -54,6 +55,7 @@ export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
       return next;
     });
   const visible = active.size === 0 ? groups : groups.filter((g) => active.has(g.reason));
+  const chipOptions: ChipOption[] = groups.map((g) => ({ key: g.reason, label: g.reason, count: g.rows.length }));
 
   return (
     <Card ariaLabel="Prioritized delta panel">
@@ -62,21 +64,23 @@ export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
         <EmptyState>No deltas this period.</EmptyState>
       ) : (
         <>
-          <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by cause">
-            <button type="button" onClick={() => setActive(new Set())} aria-pressed={active.size === 0} className={chipCls(active.size === 0)}>
-              All
-            </button>
-            {groups.map((g) => (
-              <button
-                key={g.reason}
-                type="button"
-                onClick={() => toggle(g.reason)}
-                aria-pressed={active.has(g.reason)}
-                className={chipCls(active.has(g.reason))}
-              >
-                {g.reason} {g.rows.length}
-              </button>
-            ))}
+          <p className="mb-1 text-xs text-mxm-content-secondary">
+            {rows.length} restaurant{rows.length === 1 ? "" : "s"} slipping behind their cohort&apos;s best,
+            grouped by reason — the count on each group is how many. Open a group, or filter by reason.
+          </p>
+          <p className="mb-1 text-xs text-mxm-content-tertiary">
+            Rank in cohort and gap to top are 0–1; lower rank / bigger gap = further behind.
+          </p>
+          <ProvenanceLegend className="mb-3" />
+
+          <div className="mb-3">
+            <FilterChips
+              options={chipOptions}
+              active={active}
+              onToggle={toggle}
+              onClear={() => setActive(new Set())}
+              ariaLabel="Filter by reason"
+            />
           </div>
 
           <div className="space-y-2">
@@ -91,17 +95,15 @@ export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
                   <thead>
                     <tr className="text-left text-mxm-content-tertiary">
                       <th scope="col">Restaurant</th>
-                      <th scope="col" aria-sort="ascending">
-                        Status
+                      <th scope="col">Status</th>
+                      <th scope="col" className="text-right">
+                        Rank in cohort
                       </th>
                       <th scope="col" className="text-right">
-                        Percentile
-                      </th>
-                      <th scope="col" aria-sort="descending" className="text-right">
-                        Gap
+                        Gap to top
                       </th>
                       <th scope="col" className="pl-6">
-                        Why
+                        Confidence
                       </th>
                     </tr>
                   </thead>
@@ -117,7 +119,7 @@ export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
                           <td>{r.restaurant_id}</td>
                           <td>
                             <span aria-hidden="true">{atRisk ? "▲ " : ""}</span>
-                            {r.delta_status ?? "—"}
+                            {r.delta_status ? (STATUS_LABEL[r.delta_status] ?? r.delta_status) : "—"}
                           </td>
                           <td className="tabnum text-right">
                             {r.percentile_in_cohort == null ? "—" : fmtNum(r.percentile_in_cohort)}
@@ -126,7 +128,7 @@ export function DeltaPanel({ rows }: { rows: DeltaRow[] }) {
                             {r.gap_to_top == null ? "—" : fmtNum(r.gap_to_top)}
                           </td>
                           <td className="pl-6">
-                            {/* cause label is the group header ⇒ compact: magnitude + provenance only */}
+                            {/* cause is the group header ⇒ this column shows confidence (the provenance word) only */}
                             <AttributionDetail delta={r.percentile_delta} compact />
                           </td>
                         </tr>
