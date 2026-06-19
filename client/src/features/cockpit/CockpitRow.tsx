@@ -9,13 +9,23 @@ export interface RowState {
   msg?: string;
 }
 
-// before_after_expected is [C] (projection, never a measured number) — rendered defensively: a malformed
-// payload degrades to null, never throws, never fabricates (CLAUDE.md §3.10 / §4).
-function beforeAfter(j: unknown): string | null {
-  if (!j || typeof j !== "object") return null;
-  const o = j as { dimension?: unknown; measured?: unknown; standard?: unknown };
-  if (typeof o.dimension !== "string" || typeof o.measured !== "number" || typeof o.standard !== "number") return null;
-  return `${o.dimension}: ${o.measured} → ${o.standard}`;
+// Round to <=2 decimals, drop trailing zeros (0.0833…->"0.08", 0.05->"0.05", 12->"12").
+function fmt(n: number): string {
+  return Number(n.toFixed(2)).toString();
+}
+
+// One clean, human-readable evidence line. Prefer the structured before_after_expected (a [C] projection —
+// numbers ROUNDED for display, never fabricated); fall back to the proposal's prose root_cause. Rendered
+// defensively: a malformed payload degrades gracefully, never throws (CLAUDE.md §3.10 / §4).
+function describe(j: unknown, rootCause: string | null): string {
+  if (j && typeof j === "object") {
+    const o = j as { dimension?: unknown; measured?: unknown; standard?: unknown; gap?: unknown };
+    if (typeof o.dimension === "string" && typeof o.measured === "number" && typeof o.standard === "number") {
+      const gap = typeof o.gap === "number" ? ` · gap ${fmt(o.gap)}` : "";
+      return `${o.dimension}: ${fmt(o.measured)} → ${fmt(o.standard)}${gap}`;
+    }
+  }
+  return rootCause ?? "no attributable cause";
 }
 
 // One proposal row — compact (~40px), scannable: [action + cohort] · [root cause + before/after] · [level] ·
@@ -34,12 +44,11 @@ export function CockpitRow({
   state?: RowState;
   muted?: boolean;
 }) {
-  const ba = beforeAfter(row.before_after_expected);
   const busy = state?.status === "pending";
   const canAct = row.effective_level != null && state?.status !== "done";
-  const detail = [row.root_cause ?? "no attributable cause", ba].filter(Boolean).join(" · ");
+  const detail = describe(row.before_after_expected, row.root_cause);
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-mxm-border py-2.5 text-sm last:border-b-0">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-mxm-border py-3.5 text-sm last:border-b-0">
       <div className="flex min-w-[11rem] items-baseline gap-2">
         <span className={cn("font-medium", muted ? "text-mxm-content-secondary" : "text-mxm-content")}>
           {row.action_type ?? "—"}
