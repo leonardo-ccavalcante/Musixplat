@@ -38,8 +38,8 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
       </div>
       <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-mxm-content-secondary [hyphens:auto] [text-align:justify]">
         {proactive
-          ? "The monitor flagged a non-payment before anyone opened a ticket — zooming out reveals who else is hit."
-          : "A customer opened a ticket — zooming out reveals who else is hit and never said a word."}
+          ? "The monitor flagged a non-payment before anyone opened a ticket. Zooming out reveals who else is hit."
+          : "A customer opened a ticket. Zooming out reveals who else is hit and never said a word."}
       </p>
       {evaluable ? (
         <div className="mt-4 flex flex-wrap items-end gap-x-10 gap-y-3">
@@ -47,7 +47,7 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
           <Stat n={row.silent} label="silent · never spoke" accent />
           <div>
             <div className="text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-none tracking-tight tabular-nums text-mxm-content">
-              R$ {row.revenue_lost != null ? fmtNum(row.revenue_lost) : "—"}
+              R$ {row.revenue_lost != null ? fmtNum(row.revenue_lost) : "n/a"}
             </div>
             <div className="mt-1.5 text-xs text-mxm-content-secondary">at risk</div>
           </div>
@@ -62,7 +62,7 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
       ) : (
         // BR-B4 fail-closed — population unobservable; we say so, never invent a number.
         <p role="status" className="mt-4 text-sm text-mxm-amber">
-          Population unavailable — silent ones not evaluable. Never assumed zero.
+          Population unavailable. Silent ones not evaluable. Never assumed zero.
         </p>
       )}
     </section>

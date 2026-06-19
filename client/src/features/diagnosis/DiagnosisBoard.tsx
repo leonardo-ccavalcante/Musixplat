@@ -34,7 +34,7 @@ export function DiagnosisBoard({
   rows: DiagnosisListRow[];
   onOpen: (row: DiagnosisListRow) => void;
 }) {
-  if (rows.length === 0) return <EmptyState>Nothing to report — all processes green.</EmptyState>;
+  if (rows.length === 0) return <EmptyState>Nothing to report. All processes green.</EmptyState>;
 
   // headline cascade = the biggest hidden problem (most silent, then most affected).
   const headline = [...rows].sort((a, b) => b.silent - a.silent || b.affected - a.affected)[0]!;

@@ -5,7 +5,8 @@ import { ProvenanceLegend } from "@/components/ui/ProvenanceLegend";
 import { trpc } from "@/lib/trpc";
 import { fmtNum } from "@/lib/utils";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
-import { printDossierMemo, mailtoDossier, type DossierData } from "./dossierMemo";
+import { printDossierMemo, type DossierData } from "./dossierMemo";
+import { openEmailPreview } from "./dossierEmail";
 
 const FIELD_LABELS: ReadonlyArray<readonly [string, string]> = [
   ["f1_tipo_raiz", "Type & root"],
@@ -22,45 +23,45 @@ const FIELD_LABELS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const numOrDash = (v: unknown): string => (typeof v === "number" ? fmtNum(v) : v == null ? "—" : String(v));
+const numOrDash = (v: unknown): string => (typeof v === "number" ? fmtNum(v) : v == null ? "n/a" : String(v));
 
 function summarize(field: string, v: unknown): string {
   try {
     switch (field) {
       case "f1_tipo_raiz":
-        return isObj(v) ? `${v.area_type ?? "—"} · ${v.hypothesis_root ?? "—"} (conf ${numOrDash(v.confidence)})` : "—";
+        return isObj(v) ? `${v.area_type ?? "n/a"} · ${v.hypothesis_root ?? "n/a"} (conf ${numOrDash(v.confidence)})` : "n/a";
       case "f2_evidence":
         return `${isObj(v) && Array.isArray(v.paths) ? v.paths.length : 0} ranked path(s)`;
       case "f3_who":
-        return Array.isArray(v) ? `${v.length} affected · ${v.filter((a) => isObj(a) && a.silent).length} silent` : "—";
+        return Array.isArray(v) ? `${v.length} affected · ${v.filter((a) => isObj(a) && a.silent).length} silent` : "n/a";
       case "f4_where_concentrated":
-        return isObj(v) ? `${v.dim ?? "—"} = ${v.value ?? "—"} (${numOrDash(v.n)})` : "—";
+        return isObj(v) ? `${v.dim ?? "n/a"} = ${v.value ?? "n/a"} (${numOrDash(v.n)})` : "n/a";
       case "f5_how_much":
         return isObj(v)
           ? `R$ ${numOrDash(v.revenue_lost)} · churn ${numOrDash(v.churn_risk)} · cost ${numOrDash(v.cost_to_resolve)}`
-          : "—";
+          : "n/a";
       case "f6_recurrence":
-        return isObj(v) ? `${numOrDash(v.frequency)}× since ${String(v.first_seen_ts ?? "").slice(0, 10) || "—"}` : "—";
+        return isObj(v) ? `${numOrDash(v.frequency)}× since ${String(v.first_seen_ts ?? "").slice(0, 10) || "n/a"}` : "n/a";
       case "f8_auditable_hypothesis":
-        return isObj(v) ? `${v.hypothesis_root ?? "—"} (conf ${numOrDash(v.confidence)})` : "—";
+        return isObj(v) ? `${v.hypothesis_root ?? "n/a"} (conf ${numOrDash(v.confidence)})` : "n/a";
       case "f9_suggested_route":
-        return v == null ? "—" : String(v);
+        return v == null ? "n/a" : String(v);
       case "f10_raw_data":
-        return isObj(v) ? Object.keys(v).join(", ") || "—" : "—";
+        return isObj(v) ? Object.keys(v).join(", ") || "n/a" : "n/a";
       case "f11_provenance":
-        return isObj(v) ? Object.entries(v).map(([k, p]) => `${k} ${String(p)}`).join(" · ") || "—" : "—";
+        return isObj(v) ? Object.entries(v).map(([k, p]) => `${k} ${String(p)}`).join(" · ") || "n/a" : "n/a";
       default:
-        return "—";
+        return "n/a";
     }
   } catch {
-    return "—";
+    return "n/a";
   }
 }
 
 // Clickable KB precedent links — the dossier's "similar cases" open the actual case (BR-B3 grounding).
 function SimilarCases({ ids, onOpen }: { ids: unknown; onOpen: (id: string) => void }) {
   const list = Array.isArray(ids) ? ids.map(String) : [];
-  if (list.length === 0) return <span className="text-mxm-content">—</span>;
+  if (list.length === 0) return <span className="text-mxm-content">n/a</span>;
   return (
     <span className="flex flex-wrap gap-x-2 gap-y-1">
       {list.map((id) => (
@@ -82,7 +83,7 @@ function KbCasePanel({ kbCaseId, onBack }: { kbCaseId: string; onBack: () => voi
   const row = (label: string, v: unknown) => (
     <div className="grid grid-cols-[8rem_1fr] gap-3 py-1.5">
       <dt className="text-xs text-mxm-content-secondary">{label}</dt>
-      <dd className="break-words text-xs text-mxm-content">{v == null || v === "" ? "—" : String(v)}</dd>
+      <dd className="break-words text-xs text-mxm-content">{v == null || v === "" ? "n/a" : String(v)}</dd>
     </div>
   );
   return (
@@ -103,7 +104,7 @@ function KbCasePanel({ kbCaseId, onBack }: { kbCaseId: string; onBack: () => voi
           {row("Resolution", q.data.resolution)}
           {row("Not-resolved reason", q.data.not_resolved_reason)}
           {row("Historical probability", q.data.probability)}
-          {row("Discarded branches", Array.isArray(q.data.discarded_branches) ? q.data.discarded_branches.length + " tried" : "—")}
+          {row("Discarded branches", Array.isArray(q.data.discarded_branches) ? q.data.discarded_branches.length + " tried" : "n/a")}
           {row("Recorded", String(q.data.created_at).slice(0, 10))}
         </dl>
       ) : null}
@@ -113,20 +114,9 @@ function KbCasePanel({ kbCaseId, onBack }: { kbCaseId: string; onBack: () => voi
 
 function DossierBody({ row, data }: { row: DiagnosisListRow; data: DossierData }) {
   const [kbCaseId, setKbCaseId] = useState<string | null>(null);
-  const email = trpc.diagnosis.emailDossier.useMutation();
   const today = new Date().toISOString().slice(0, 10);
   const gaps = new Set(data.gaps);
   const ready = FIELD_LABELS.filter(([f]) => !gaps.has(f)).length;
-
-  function onEmail() {
-    const to = window.prompt("Email the dossier to:") ?? "";
-    const fallback = () => {
-      window.location.href = mailtoDossier(row, data, today, to);
-    };
-    if (!to) return fallback();
-    // Try the (stub) server send; it fails-closed to not-delivered ⇒ fall back to the working mailto.
-    email.mutate({ problemId: row.problem_id, to }, { onSuccess: (r) => !r.delivered && fallback(), onError: fallback });
-  }
 
   if (kbCaseId) return <KbCasePanel kbCaseId={kbCaseId} onBack={() => setKbCaseId(null)} />;
 
@@ -140,14 +130,14 @@ function DossierBody({ row, data }: { row: DiagnosisListRow; data: DossierData }
           }`}
         >
           {data.emitted
-            ? "✓ Complete — ready to hand off (11/11)"
-            : `Partial — ${ready}/11 ready · won't emit until complete (gap: ${data.gaps.join(", ")})`}
+            ? "✓ Complete · ready to hand off (11/11)"
+            : `Partial · ${ready}/11 ready · won't emit until complete (gap: ${data.gaps.join(", ")})`}
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => printDossierMemo(row, data, today)} title="Open a print-ready memo (Save as PDF)">
             Download PDF
           </Button>
-          <Button variant="ghost" onClick={onEmail} aria-busy={email.isPending}>
+          <Button variant="ghost" onClick={() => openEmailPreview(row, data, today)}>
             Email
           </Button>
         </div>
@@ -180,7 +170,7 @@ function DossierBody({ row, data }: { row: DiagnosisListRow; data: DossierData }
 export function DossierModal({ row, onClose }: { row: DiagnosisListRow | null; onClose: () => void }) {
   const q = trpc.diagnosis.getDossier.useQuery({ problemId: row?.problem_id ?? "" }, { enabled: !!row });
   return (
-    <Modal open={!!row} onClose={onClose} title="Dossier #8 — handoff">
+    <Modal open={!!row} onClose={onClose} title="Dossier #8 · handoff">
       {q.isLoading ? (
         <p role="status" aria-live="polite" className="text-sm text-mxm-content-secondary">
           Loading dossier…

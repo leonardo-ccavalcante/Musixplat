@@ -36,11 +36,11 @@ export function DiagnosisRow({
         <span className={cn("font-medium", muted ? "text-mxm-content-secondary" : "text-mxm-content")}>
           {row.restaurant_id}
         </span>
-        <span className="text-xs text-mxm-content-secondary">{row.area_type ?? "—"}</span>
+        <span className="text-xs text-mxm-content-secondary">{row.area_type ?? "n/a"}</span>
       </div>
       <div className="text-xs tabular-nums text-mxm-content-secondary">
         {row.silent_status === "not_evaluable" ? (
-          <span className="text-mxm-amber" title="Population unobservable — never assumed zero (BR-B4)">
+          <span className="text-mxm-amber" title="Population unobservable. Never assumed zero (BR-B4)">
             silent: not evaluable
           </span>
         ) : (
@@ -51,14 +51,14 @@ export function DiagnosisRow({
         )}
       </div>
       <div className="text-xs tabular-nums text-mxm-content-secondary">
-        R$ <span className="text-mxm-content">{row.revenue_lost != null ? fmtNum(row.revenue_lost) : "—"}</span>
+        R$ <span className="text-mxm-content">{row.revenue_lost != null ? fmtNum(row.revenue_lost) : "n/a"}</span>
       </div>
-      <span className="hidden text-xs text-mxm-content-secondary sm:inline">{row.suggested_route ?? "—"}</span>
+      <span className="hidden text-xs text-mxm-content-secondary sm:inline">{row.suggested_route ?? "n/a"}</span>
       <OriginBadge origin={row.origin} />
       {row.needs_human && (
         <span
           role="status"
-          title="Degraded to human — low confidence or blocked (fail-closed)"
+          title="Degraded to human. Low confidence or blocked (fail-closed)"
           className="inline-flex items-center gap-1 rounded-full border border-mxm-amber px-2 py-0.5 text-[11px] font-medium text-mxm-amber"
         >
           ⚠ needs you

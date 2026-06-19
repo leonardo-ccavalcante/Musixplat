@@ -46,7 +46,7 @@ export function DiagnosisPage() {
           Support · Diagnosis
         </h1>
         <p className="mt-1.5 max-w-[64ch] text-sm leading-relaxed text-mxm-content-secondary [hyphens:auto] [text-align:justify]">
-          The problem the ticket hides — the silent ones and the pattern — found before they become churn.
+          The problem the ticket hides: the silent ones and the pattern, found before they become churn.
         </p>
         {ready && !list.isLoading && !list.isError && rows.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-1">
