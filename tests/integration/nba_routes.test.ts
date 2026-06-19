@@ -57,4 +57,17 @@ describe("nba.* routes — tenant-gated verdicts (§3.4)", () => {
     const crossSingle = await caller(foreign).nba.test({ restaurant_id: r.restaurant_id, action_code: "A1", week: W1 });
     expect(crossSingle).toBeNull();
   });
+
+  it("nba.detail returns the action definition + COMPANY-WIDE history; unknown code ⇒ NOT_FOUND", async () => {
+    const t = (await rows<{ tenant_id: string }>(pool, `select distinct tenant_id from tenant."Restaurant" limit 1`))[0]!.tenant_id;
+    const d = await caller(t).nba.detail({ action_code: "A1" });
+    expect(d.definition.code).toBe("A1");
+    expect(d.definition.label).toBeTruthy();
+    expect(d.definition.playbook).toBeTruthy(); // 02:DETAIL-A1
+    expect(d.definition.current_version).toBe("v1");
+    expect(typeof d.history.run_count).toBe("number"); // bigint cast to number server-side
+    expect(d.history.action_code).toBe("A1");
+
+    await expect(caller(t).nba.detail({ action_code: "ZZ" })).rejects.toThrow(/unknown action_code/);
+  });
 });

@@ -71,6 +71,38 @@ export const nbaTestAllInput = z.object({
   week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+// 02:DETAIL-C — NBA action-detail io. definition = catalog (global) + current_version (knob). history =
+// company-wide diagnostic rates (fn_nba_action_history). acerto_rate is NULL when no breach-class run (§14).
+export const nbaDetailInput = z.object({ action_code: z.string().min(1) });
+
+export const nbaActionDefinition = z.object({
+  code: z.string(),
+  label: z.string(),
+  funnel_stage: z.string(),
+  financial_class: z.enum(["direct", "indirect", "none"]),
+  root_cause_signal: z.string().nullable(),
+  threshold_knob: z.string().nullable(),
+  action_hint: z.string(),
+  playbook: z.string().nullable(),
+  created_at: z.string().nullable(),
+  current_version: z.string().nullable(),
+});
+export type NbaActionDefinition = z.infer<typeof nbaActionDefinition>;
+
+export const nbaActionHistory = z.object({
+  action_code: z.string(),
+  run_count: z.number(),
+  last_run_at: z.string().nullable(),
+  solid_count: z.number(),
+  unconfirmed_count: z.number(),
+  no_data_count: z.number(),
+  acerto_rate: z.number().nullable(),
+});
+export type NbaActionHistory = z.infer<typeof nbaActionHistory>;
+
+export const nbaActionDetail = z.object({ definition: nbaActionDefinition, history: nbaActionHistory });
+export type NbaActionDetail = z.infer<typeof nbaActionDetail>;
+
 // F-2.2 / F-2.4 — feature-attribution carried on a delta: WHY a restaurant moved (root_cause +
 // orders_delta), not only THAT it moved. Produced by fn_diff_delta; prov is [V] (measured), never
 // fabricated. new/churn rows carry {sentido:"new"}; normal rows carry magnitud + root_cause.
