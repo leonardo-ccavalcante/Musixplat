@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/Button";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CohortMatrix } from "@/features/cohorts/CohortMatrix";
 import { DeltaPanel } from "@/features/cohorts/DeltaPanel";
@@ -42,6 +43,32 @@ export function CohortsExplorerPage() {
     };
   }, []);
 
+  const utils = trpc.useUtils();
+  const run = trpc.cohorts.run.useMutation();
+  const [runMsg, setRunMsg] = useState<{ status: "idle" | "running" | "done" | "error"; text?: string }>({
+    status: "idle",
+  });
+  const running = runMsg.status === "running";
+
+  // 01 operability — drive the P01 batch from the screen (no `pnpm db:p01`). Numbers are PRODUCED server-side
+  // by the producers; the UI only triggers + reads. Fail-closed: a failure surfaces honestly, never green-fake.
+  async function runFlow(): Promise<void> {
+    setRunMsg({ status: "running" });
+    try {
+      const r = await run.mutateAsync();
+      await Promise.all([
+        utils.cohorts.list.invalidate(),
+        utils.cohorts.deltas.invalidate(),
+        utils.cohorts.intentCounts.invalidate(),
+        utils.cohorts.changelog.invalidate(),
+        utils.money.summary.invalidate(),
+      ]);
+      setRunMsg({ status: "done", text: `Computed · ${r.cohorts} cohorts · ${r.memberships} memberships · weeks ${r.weeks.join(", ")}` });
+    } catch (e) {
+      setRunMsg({ status: "error", text: e instanceof Error ? e.message : "P01 run failed (fail-closed)" });
+    }
+  }
+
   const cells = trpc.cohorts.list.useQuery(undefined, { enabled: ready });
   const deltas = trpc.cohorts.deltas.useQuery(undefined, { enabled: ready });
   const money = trpc.money.summary.useQuery(undefined, { enabled: ready });
@@ -59,6 +86,21 @@ export function CohortsExplorerPage() {
         <p className="text-sm text-mxm-content-secondary">
           Top-vs-base comparison, prioritized deltas, and handoff to NBA.
         </p>
+        {ready && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={() => void runFlow()} disabled={running} className="text-mxm-content-inverted">
+              {running ? "Running P01…" : "Run flow"}
+            </Button>
+            <span
+              aria-live="polite"
+              className={runMsg.status === "error" ? "text-sm text-mxm-red" : "text-sm text-mxm-content-secondary"}
+            >
+              {runMsg.status === "running" && "Computing cohorts → ranking → deltas…"}
+              {runMsg.status === "done" && runMsg.text}
+              {runMsg.status === "error" && `Fail-closed: ${runMsg.text}`}
+            </span>
+          </div>
+        )}
       </header>
 
       {!ready ? (
