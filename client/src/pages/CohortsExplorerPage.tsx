@@ -9,6 +9,7 @@ import { TicketsPanel, type IntentCount } from "@/features/cohorts/TicketsPanel"
 import { ChangelogTimeline, type RuleVersion } from "@/features/cohorts/ChangelogTimeline";
 import { SandboxPanel } from "@/features/cohorts/SandboxPanel";
 import { CohortModal } from "@/features/cohorts/CohortModal";
+import { SegmentModal, type SegmentFilter } from "@/features/cohorts/SegmentModal";
 import type { DeltaRow, CohortCell } from "@shared/contracts";
 
 // Screen 01 — Cohorts Explorer. Composes the slice-01 panels over P01 results (read-only),
@@ -16,6 +17,7 @@ import type { DeltaRow, CohortCell } from "@shared/contracts";
 export function CohortsExplorerPage() {
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<CohortCell | null>(null);
+  const [segment, setSegment] = useState<SegmentFilter | null>(null);
 
   // Dev session (stands in for Manus OAuth locally): mints the server-side tenant cookie.
   // Retries through the dev-server boot race so the session is set before queries fire.
@@ -71,7 +73,11 @@ export function CohortsExplorerPage() {
             ) : cells.isError ? (
               <ErrorState />
             ) : (
-              <CohortMatrix cells={(cells.data ?? []) as CohortCell[]} onOpen={setSelected} />
+              <CohortMatrix
+                cells={(cells.data ?? []) as CohortCell[]}
+                onOpen={setSelected}
+                onSegment={setSegment}
+              />
             )}
           </div>
 
@@ -104,6 +110,15 @@ export function CohortsExplorerPage() {
         </div>
       )}
 
+      <SegmentModal
+        filter={segment}
+        cells={(cells.data ?? []) as CohortCell[]}
+        onOpenCell={(c) => {
+          setSegment(null);
+          setSelected(c);
+        }}
+        onClose={() => setSegment(null)}
+      />
       <CohortModal cell={selected} onClose={() => setSelected(null)} />
     </main>
   );

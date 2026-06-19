@@ -58,6 +58,28 @@ describe("F-2.1 CohortMatrix heatmap", () => {
     expect(screen.getByText(/No cohorts computed/)).toBeInTheDocument();
   });
 
+  it("clicking a tier/cuisine/zone header fires onSegment with that axis (drill-by-segment)", () => {
+    const onSegment = vi.fn();
+    render(
+      <CohortMatrix
+        cells={[cell({ cohort_id: "a", status: "ok", tier_base: "managed_brand", cuisine: "brazilian", zone: "coast" })]}
+        onSegment={onSegment}
+      />,
+    );
+    screen.getByRole("button", { name: /Show cohorts in tier managed_brand/ }).click();
+    expect(onSegment).toHaveBeenCalledWith({ kind: "tier", value: "managed_brand" });
+    screen.getByRole("button", { name: /Show cohorts in cuisine brazilian/ }).click();
+    expect(onSegment).toHaveBeenCalledWith({ kind: "cuisine", value: "brazilian" });
+    screen.getByRole("button", { name: /Show cohorts in zone coast/ }).click();
+    expect(onSegment).toHaveBeenCalledWith({ kind: "zone", value: "coast" });
+  });
+
+  it("renders axis headers as inert text when onSegment is absent (read-only context)", () => {
+    render(<CohortMatrix cells={[cell({ cohort_id: "a", status: "ok", tier_base: "long_tail", cuisine: "sushi", zone: "z1" })]} />);
+    expect(screen.queryByRole("button", { name: /Show cohorts in/ })).not.toBeInTheDocument();
+    expect(screen.getByText("sushi")).toBeInTheDocument();
+  });
+
   it("renders one section + caption per tier present (small-multiples)", () => {
     render(
       <CohortMatrix
