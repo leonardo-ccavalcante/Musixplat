@@ -8,6 +8,7 @@ import { SpineTimeline, type SpineNode } from "@/features/diagnosis/SpineTimelin
 import { ArtifactQueue, type ArtifactAction } from "@/features/diagnosis/ArtifactQueue";
 import { ArtifactModal } from "@/features/diagnosis/ArtifactModal";
 import { DiagnosisStepsModal } from "@/features/diagnosis/DiagnosisStepsModal";
+import { SituationRoom } from "@/features/diagnosis/SituationRoom";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
 import type { ArtifactRow } from "@shared/contracts_05c";
 
@@ -161,6 +162,8 @@ export function DiagnosisPage() {
       </header>
 
       {ready && <SpineTimeline nodes={nodes} />}
+
+      {ready && <SituationRoom onDone={() => void refetchAll()} />}
 
       {!ready || list.isLoading ? (
         <LoadingState label={!ready ? "Signing in…" : "Hunting silent ones…"} />
