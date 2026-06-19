@@ -75,6 +75,8 @@ export const artifactRouter = router({
             where artifact_id = $1`,
           [input.artifactId, status, dec.decision_id],
         );
+        // Refresh the 1:10 leverage: this human touch lowers the ratio (escalation/review up ⇒ ratio down).
+        await client.query(`select gov.fn_roi_1_10($1)`, [ctx.tenantId]);
         return { artifact_id: input.artifactId, status, trace_id: dec.decision_id };
       });
     }),

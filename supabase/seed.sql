@@ -44,7 +44,8 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('window_silent',       '30',   '[C]', 'leo'),
   ('monitor_cost_default', '100',  '[C]', 'leo'),
   ('cost_per_affected_default', '15',  '[I]', 'leo'),
-  ('value_recovery_rate',       '0.6', '[I]', 'leo');
+  ('value_recovery_rate',       '0.6', '[I]', 'leo'),
+  ('aht_human_touch_minutes',   '5',   '[V]', 'leo');
 
 -- ── 02 NBA action-threshold knobs ([C] placeholders — the human-approved ranges that gate autonomy,
 --    read BY NAME §3.8. "value está en el mecanismo": Leo ratifies the numbers in the cockpit). ──
