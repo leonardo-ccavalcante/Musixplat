@@ -26,8 +26,14 @@ export async function stagePayScenario(): Promise<void> {
   await query(`delete from tenant."Restaurant" where tenant_id=$1`, [POOL_PAY]);
   await query(`delete from gov."User" where tenant_id=$1`, [POOL_PAY]);
 
-  // dev-login operator (tenant is read from THIS row server-side, never the client — §3.4 anti-spoofing).
-  await query(`insert into gov."User"(user_id, tenant_id, org_level) values ($1,$2,'team')`, [PAY_USER, POOL_PAY]);
+  // dev-login operator (tenant read from THIS row server-side, never the client — §3.4 anti-spoofing) +
+  // an independent AI proposer so the artifact human gate has 4-eyes (confirmer != proposer, Gate 4).
+  await query(
+    `insert into gov."User"(user_id, tenant_id, org_level, role) values
+       ($1, $2, 'team', 'agent_manager_senior'),
+       ($3, $2, 'team', 'ai_agent')`,
+    [PAY_USER, POOL_PAY, PAY_USER + "-AI"],
+  );
 
   // 47 restaurants, one FAILED payment each. zone concentration 30 Centro / 17 Norte (a real pattern).
   await query(

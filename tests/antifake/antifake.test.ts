@@ -30,6 +30,7 @@ describe("§14 anti-fake — results are NULL/empty pre-run", () => {
     expect(await count(pool, 'gov."min_calculation"')).toBe(0);
     // 05C artifact — generateFromDossier creates rows at runtime; never seeded (§14).
     expect(await count(pool, 'gov."Generated_Artifact"')).toBe(0);
+    expect(await count(pool, 'gov."Artifact_Decision"')).toBe(0);
   });
 
   it("05B: diagnosis tables are EMPTY pre-run (Problem/Affected/Knowledge_Case/Critical_Process)", async () => {

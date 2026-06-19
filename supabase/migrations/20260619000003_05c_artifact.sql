@@ -17,7 +17,7 @@ create table gov."Generated_Artifact" (
   content            jsonb not null,                                             -- PRODUCED at generation (§14)
   status             public.artifact_status not null default 'pending_review',   -- conservative pre-decision
   provenance         jsonb not null default '{}'::jsonb,
-  decision_trace_id  text references gov."Decision_Trace"(trace_id),             -- set by the human gate (Gate 4)
+  decision_trace_id  text,                                                       -- Gate 4: holds Artifact_Decision.decision_id (its own append-only trace, not the NBA Decision_Trace)
   created_at         timestamptz not null default now(),
   updated_at         timestamptz,
   unique (problem_id, artifact_type)
