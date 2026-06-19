@@ -9,10 +9,12 @@ export type ArtifactAction = "approve" | "reject" | "escalate";
 export function ArtifactQueue({
   artifacts,
   onDecide,
+  onOpen,
   busyId,
 }: {
   artifacts: ArtifactRow[];
   onDecide: (id: string, action: ArtifactAction) => void;
+  onOpen: (a: ArtifactRow) => void;
   busyId: string | null;
 }) {
   if (artifacts.length === 0) return null;
@@ -32,6 +34,9 @@ export function ArtifactQueue({
               </div>
               {a.status === "pending_review" ? (
                 <div className="flex gap-2">
+                  <Button type="button" variant="ghost" onClick={() => onOpen(a)}>
+                    Open
+                  </Button>
                   <Button
                     type="button"
                     className="text-mxm-content-inverted"
@@ -58,9 +63,14 @@ export function ArtifactQueue({
                   </Button>
                 </div>
               ) : (
-                <span className="text-xs text-mxm-content-secondary">
-                  {a.status} · trace {a.decision_trace_id?.slice(0, 8) ?? "—"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-mxm-content-secondary">
+                    {a.status} · trace {a.decision_trace_id?.slice(0, 8) ?? "—"}
+                  </span>
+                  <Button type="button" variant="ghost" onClick={() => onOpen(a)}>
+                    Open
+                  </Button>
+                </div>
               )}
             </div>
           </li>

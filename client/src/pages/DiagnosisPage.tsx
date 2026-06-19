@@ -6,6 +6,7 @@ import { DiagnosisBoard } from "@/features/diagnosis/DiagnosisBoard";
 import { DossierModal } from "@/features/diagnosis/DossierModal";
 import { SpineTimeline, type SpineNode } from "@/features/diagnosis/SpineTimeline";
 import { ArtifactQueue, type ArtifactAction } from "@/features/diagnosis/ArtifactQueue";
+import { ArtifactModal } from "@/features/diagnosis/ArtifactModal";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
 import type { ArtifactRow } from "@shared/contracts_05c";
 
@@ -16,6 +17,7 @@ import type { ArtifactRow } from "@shared/contracts_05c";
 export function DiagnosisPage() {
   const [ready, setReady] = useState(false);
   const [openRow, setOpenRow] = useState<DiagnosisListRow | null>(null);
+  const [openArtifact, setOpenArtifact] = useState<ArtifactRow | null>(null);
   const [busyArtifact, setBusyArtifact] = useState<string | null>(null);
 
   useEffect(() => {
@@ -101,7 +103,10 @@ export function DiagnosisPage() {
       { artifactId, action },
       {
         onSettled: () => setBusyArtifact(null),
-        onSuccess: () => void refetchAll(),
+        onSuccess: () => {
+          setOpenArtifact(null); // close the viewer so the queue reflects the new (server) status
+          void refetchAll();
+        },
       },
     );
   }
@@ -162,11 +167,17 @@ export function DiagnosisPage() {
       ) : (
         <>
           <DiagnosisBoard rows={rows} onOpen={setOpenRow} />
-          <ArtifactQueue artifacts={artifacts} onDecide={onDecide} busyId={busyArtifact} />
+          <ArtifactQueue artifacts={artifacts} onDecide={onDecide} onOpen={setOpenArtifact} busyId={busyArtifact} />
         </>
       )}
 
       <DossierModal row={openRow} onClose={() => setOpenRow(null)} />
+      <ArtifactModal
+        artifact={openArtifact}
+        onClose={() => setOpenArtifact(null)}
+        onDecide={onDecide}
+        busyId={busyArtifact}
+      />
     </main>
   );
 }
