@@ -13,7 +13,7 @@ const FIELD_LABELS: ReadonlyArray<readonly [string, string]> = [
   ["f2_evidence", "Evidence (issue-tree)"],
   ["f3_who", "Who is affected"],
   ["f4_where_concentrated", "Where it concentrates"],
-  ["f5_how_much", "How much (R$ + churn)"],
+  ["f5_how_much", "How much (€ + churn)"],
   ["f6_recurrence", "Recurrence"],
   ["f7_similar_cases", "Similar cases (KB)"],
   ["f8_auditable_hypothesis", "Hypothesis"],
@@ -38,7 +38,7 @@ function summarize(field: string, v: unknown): string {
         return isObj(v) ? `${v.dim ?? "n/a"} = ${v.value ?? "n/a"} (${numOrDash(v.n)})` : "n/a";
       case "f5_how_much":
         return isObj(v)
-          ? `R$ ${numOrDash(v.revenue_lost)} · churn ${numOrDash(v.churn_risk)} · cost ${numOrDash(v.cost_to_resolve)}`
+          ? `€ ${numOrDash(v.revenue_lost)} · churn ${numOrDash(v.churn_risk)} · cost ${numOrDash(v.cost_to_resolve)}`
           : "n/a";
       case "f6_recurrence":
         return isObj(v) ? `${numOrDash(v.frequency)}× since ${String(v.first_seen_ts ?? "").slice(0, 10) || "n/a"}` : "n/a";

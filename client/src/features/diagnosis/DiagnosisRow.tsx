@@ -18,7 +18,7 @@ export function OriginBadge({ origin }: { origin: DiagnosisOrigin }) {
   );
 }
 
-// One diagnosed-problem row — scannable: [restaurant + area] · [affected/silent] · [R$] · [route] ·
+// One diagnosed-problem row — scannable: [restaurant + area] · [affected/silent] · [€] · [route] ·
 // [origin] · [needs-you] · [dossier]. Presentational: the page owns the modal, wired via onOpen. Every
 // number is READ (the producers computed it); a not_evaluable population is shown honestly, never as 0.
 export function DiagnosisRow({
@@ -51,7 +51,7 @@ export function DiagnosisRow({
         )}
       </div>
       <div className="text-xs tabular-nums text-mxm-content-secondary">
-        R$ <span className="text-mxm-content">{row.revenue_lost != null ? fmtMoney(row.revenue_lost) : "n/a"}</span>
+        € <span className="text-mxm-content">{row.revenue_lost != null ? fmtMoney(row.revenue_lost) : "n/a"}</span>
       </div>
       <span className="hidden text-xs text-mxm-content-secondary sm:inline">{row.suggested_route ?? "n/a"}</span>
       <OriginBadge origin={row.origin} />

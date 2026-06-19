@@ -2,7 +2,7 @@ import type { DiagnosisListRow } from "@shared/contracts_05b";
 import { memoText, type DossierData } from "./dossierMemo";
 
 // A designed, on-brand HTML email (Musixmatch /Design: dark canvas, coral accent, system sans). Inline
-// styles + a CSS bar visual of the cascade (silent vs spoke-up) and the R$ hero — no external image assets.
+// styles + a CSS bar visual of the cascade (silent vs spoke-up) and the € hero — no external image assets.
 // Opened as a preview (what a real provider would send); the toolbar's Send uses a plain-text mailto today.
 // No em-dashes (AI tell). Numbers come from the dossier; nothing invented.
 
@@ -39,7 +39,7 @@ export function emailHtml(row: DiagnosisListRow, d: DossierData, today: string, 
       <div style="display:flex;gap:26px;flex-wrap:wrap;">
         <div><div style="font-size:34px;font-weight:800;line-height:1;color:#ffffff;">${row.affected}</div><div style="font-size:12px;color:#9e9e9e;margin-top:4px;">affected</div></div>
         <div><div style="font-size:34px;font-weight:800;line-height:1;color:#fc532e;">${row.silent}</div><div style="font-size:12px;color:#9e9e9e;margin-top:4px;">silent, never spoke</div></div>
-        <div><div style="font-size:34px;font-weight:800;line-height:1;color:#ffffff;">R$ ${money(revenue)}</div><div style="font-size:12px;color:#9e9e9e;margin-top:4px;">at risk</div></div>
+        <div><div style="font-size:34px;font-weight:800;line-height:1;color:#ffffff;">€ ${money(revenue)}</div><div style="font-size:12px;color:#9e9e9e;margin-top:4px;">at risk</div></div>
       </div>
       <div style="margin:18px 0 6px;height:14px;border-radius:9999px;background:#343434;overflow:hidden;display:flex;">
         <div style="width:${silentPct}%;background:#fc532e;"></div>

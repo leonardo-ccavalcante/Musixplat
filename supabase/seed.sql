@@ -111,7 +111,7 @@ insert into catalog."Named_Query"(def_version, formula, periodicity, group_by, s
    'weekly', 'cohort', 'tenant.Order', 'percentile'),
   ('nq_kpi_recurrence_v1',
    'avg(net_value ok) per restaurant, aggregated to cohort',
-   'weekly', 'cohort', 'tenant.Order', 'BRL');
+   'weekly', 'cohort', 'tenant.Order', 'EUR');
 
 -- ── tenant.KPI defs (target = config [C]; current_value is a RESULT → NULL). ──
 insert into tenant."KPI"(kpi_id, tenant_id, restaurant_id, level, class, kpi_def_version, target, provenance) values

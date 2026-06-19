@@ -9,7 +9,7 @@ import type { Context } from "../server/_core/context.js";
 // HERE). It owns a DEDICATED pool (POOL-PAY) so the silent-hunt yields the spec's clean reverse-cascade
 // (47 affected / 35 silent / 12 complainants) without the seed's pool-wide failed-payment noise — and
 // it proves RLS isolation (nothing bleeds into POOL-001's cockpit). Run after the seed: `pnpm db:05b`.
-// The numbers (47/35/R$) are PRODUCED by fn_hunt_silent + fn_impact_revenue_lost over fixture Orders —
+// The numbers (47/35/€) are PRODUCED by fn_hunt_silent + fn_impact_revenue_lost over fixture Orders —
 // never seeded into result columns. The fixture rows (Orders/Conversations) are INPUTS, marked [C].
 const POOL = "POOL-PAY";
 const USER = "U-PAY-001";
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
   const r1 = await runDiagnosis(reported.problem_id, POOL, reasoning);
   console.warn(
     `  reactive  ${reported.problem_id.slice(0, 8)} → area=${r1.areaType} affected=${r1.affected} ` +
-      `silent=${r1.silent} R$=${r1.revenueLost} route=${r1.route} ` +
+      `silent=${r1.silent} €=${r1.revenueLost} route=${r1.route} ` +
       `dossier=${r1.dossier.emitted ? "complete" : `partial(${r1.dossier.gaps.join(",")})`}`,
   );
 
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
       const r2 = await runDiagnosis(mon.pid, POOL, reasoning);
       console.warn(
         `  proactive ${mon.pid.slice(0, 8)} → area=${r2.areaType} affected=${r2.affected} ` +
-          `silent=${r2.silent} R$=${r2.revenueLost} route=${r2.route}`,
+          `silent=${r2.silent} €=${r2.revenueLost} route=${r2.route}`,
       );
     }
   }

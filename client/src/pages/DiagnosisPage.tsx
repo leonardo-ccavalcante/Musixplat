@@ -6,7 +6,7 @@ import { DossierModal } from "@/features/diagnosis/DossierModal";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
 
 // 05B — Support · Diagnosis. Surfaces the silent problem the ticket hides: the reverse-cascade (someone →
-// N affected / M silent → R$) and the 11-field handoff dossier. dev-login mints the POOL-PAY operator
+// N affected / M silent → €) and the 11-field handoff dossier. dev-login mints the POOL-PAY operator
 // (the run-05b scenario pool); tenant_id is resolved server-side. Numbers are produced, never recomputed.
 export function DiagnosisPage() {
   const [ready, setReady] = useState(false);

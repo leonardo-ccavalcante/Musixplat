@@ -53,7 +53,7 @@ function model(row: DiagnosisListRow, d: DossierData, today: string): MemoModel 
       },
       {
         h: "Problem",
-        p: `Zooming out across the pool, ${affected} restaurants have a failed payment in the window. Of those, ${silent} never opened a ticket. They are the silent ones a reactive queue never sees. Exposure is R$ ${money(how.revenue_lost)}.`,
+        p: `Zooming out across the pool, ${affected} restaurants have a failed payment in the window. Of those, ${silent} never opened a ticket. They are the silent ones a reactive queue never sees. Exposure is € ${money(how.revenue_lost)}.`,
       },
       { h: "Structure (issue tree)", p: `Hypotheses, most likely first: ${treeLine}.` },
       {
@@ -68,7 +68,7 @@ function model(row: DiagnosisListRow, d: DossierData, today: string): MemoModel 
       },
       {
         h: "Impact",
-        p: `R$ ${money(how.revenue_lost)} at risk [I]. Churn is not measured this run (no pre-churn producer), so the figure is a floor, not a ceiling. The dossier says so rather than inventing it.`,
+        p: `€ ${money(how.revenue_lost)} at risk [I]. Churn is not measured this run (no pre-churn producer), so the figure is a floor, not a ceiling. The dossier says so rather than inventing it.`,
       },
       {
         h: "Recommendation",

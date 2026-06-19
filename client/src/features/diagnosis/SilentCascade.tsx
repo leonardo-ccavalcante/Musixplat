@@ -18,7 +18,7 @@ function Stat({ n, label, accent }: { n: number; label: string; accent?: boolean
 }
 
 // The "uau" — the reverse-cascade hero. One restaurant flagged → zoom out → N affected / M silent (never
-// spoke) → R$ at risk. Every number is PRODUCED (anti-join + Named_Query), shown rounded for display only.
+// spoke) → € at risk. Every number is PRODUCED (anti-join + Named_Query), shown rounded for display only.
 // A proactive headline carries the "caught before a ticket" mark — the whole point of the monitor (BR-B12).
 export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: (row: DiagnosisListRow) => void }) {
   const proactive = row.origin === "proactive";
@@ -47,7 +47,7 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
           <Stat n={row.silent} label="silent · never spoke" accent />
           <div>
             <div className="text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-none tracking-tight tabular-nums text-mxm-content">
-              R$ {row.revenue_lost != null ? fmtMoney(row.revenue_lost) : "n/a"}
+              € {row.revenue_lost != null ? fmtMoney(row.revenue_lost) : "n/a"}
             </div>
             <div className="mt-1.5 text-xs text-mxm-content-secondary">at risk</div>
           </div>
