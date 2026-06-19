@@ -144,3 +144,32 @@ export type CohortCell = {
   freshness_ts: string | null;
   stale: boolean | null;
 };
+
+// 02:EPIC-1 / F-1.1 — Autonomy Cockpit row: an NBA_Proposal with its min() effective_level + the
+// auto_releasable verdict (02:BR-5). status mirrors auto_releasable (AUTO = AI acts alone vs NEEDS-HUMAN);
+// reason explains the human route. effective_level/auto_releasable are NULL until 02:1B runs (§14) — the
+// screen renders that conservatively, never a fabricated number. before_after_expected is [C] (projection).
+export const nbaCockpitRow = z.object({
+  nba_id: z.string(),
+  cohort_id: z.string(),
+  action_type: z.string().nullable(),
+  root_cause: z.string().nullable(),
+  financial_class: z.enum(["direct", "indirect", "none"]).nullable(),
+  effective_level: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+  auto_releasable: z.boolean().nullable(),
+  before_after_expected: z.unknown().nullable(),
+  status: z.enum(["auto", "needs_human"]),
+  reason: z.enum(["money", "level", "gates"]).nullable(),
+  cohort_rule_version: z.string(),
+});
+export type NbaCockpitRow = z.infer<typeof nbaCockpitRow>;
+
+// 02:1C / F-1.2 — human release/pause of a proposal. Carries NO tenant_id / operator_id (both resolved
+// server-side from the session, anti-spoofing). resulting_level is the human override — validated
+// server-side to be <= effective_level (override only DOWN, AUT-11 / BR-1).
+export const cockpitReleaseInput = z.object({
+  nba_id: z.string().min(1),
+  action: z.enum(["RELEASE", "PAUSE"]),
+  resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
+});
+export type CockpitReleaseInput = z.infer<typeof cockpitReleaseInput>;

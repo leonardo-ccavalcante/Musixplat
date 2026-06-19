@@ -48,7 +48,7 @@ describe("§14 anti-fake — results are NULL/empty pre-run", () => {
   it("BRUTOS are present (seed actually ran)", async () => {
     expect(await count(pool, 'tenant."Restaurant"')).toBe(5000);
     expect(await count(pool, 'tenant."Order"')).toBeGreaterThan(50000);
-    expect(await count(pool, 'gov."User"')).toBe(2);
+    expect(await count(pool, 'gov."User"')).toBe(4); // 2 human operators + 2 AI agent proposers (one per pool, 02:1C 4-eyes)
     expect(await count(pool, 'catalog."Config_Knobs"')).toBeGreaterThan(0);
   });
 

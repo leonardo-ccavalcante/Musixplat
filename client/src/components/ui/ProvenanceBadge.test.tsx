@@ -15,4 +15,13 @@ describe("ProvenanceBadge (read-only attribution §3.10)", () => {
     const { container } = render(<ProvenanceBadge prov={null} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("renders the plain WORD with showLabel (still keeping the code in title/aria)", () => {
+    render(<ProvenanceBadge prov="[V]" showLabel />);
+    const el = screen.getByText("measured");
+    expect(el).toBeInTheDocument();
+    expect(el).toHaveAttribute("aria-label", "provenance [V]");
+    expect(el).toHaveAttribute("title");
+    expect(screen.queryByText("[V]")).not.toBeInTheDocument(); // word replaces the bare code
+  });
 });
