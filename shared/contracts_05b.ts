@@ -96,6 +96,26 @@ export interface DiagnosisListRow {
 export const getDossierInput = z.object({ problemId: z.string().min(1) });
 export type GetDossierInput = z.infer<typeof getDossierInput>;
 
+// run (Gate 1 operability) — the product triggers the orchestrator for one problem. problemId is DATA
+// within the pool; tenant resolved server-side (anti-spoofing §7). Idempotent (orchestrator UPDATE-only
+// + fn_hunt_silent ON CONFLICT DO NOTHING).
+export const runDiagnosisInput = z.object({ problemId: z.string().min(1) });
+export type RunDiagnosisInput = z.infer<typeof runDiagnosisInput>;
+// Result the UI needs to render the run outcome (numbers PRODUCED by the orchestrator, never seeded).
+export interface RunDiagnosisResult {
+  problem_id: string;
+  area_type: string;
+  confidence: number;
+  degraded: boolean;
+  affected: number;
+  silent: number;
+  silent_status: string;
+  revenue_lost: number;
+  route: string;
+  dossier_emitted: boolean;
+  dossier_gaps: string[];
+}
+
 // getKnowledgeCase — the dossier's "similar cases" links open these KB precedents (BR-B3 grounding).
 export const getKnowledgeCaseInput = z.object({ kbCaseId: z.string().min(1) });
 export type GetKnowledgeCaseInput = z.infer<typeof getKnowledgeCaseInput>;

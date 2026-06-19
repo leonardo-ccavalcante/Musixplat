@@ -12,6 +12,7 @@ export default {
         "mxm-bg-elevated": "var(--mxm-backgroundPrimaryElevated)",
         "mxm-bg-secondary": "var(--mxm-backgroundSecondary)",
         "mxm-content": "var(--mxm-contentPrimary)",
+        "mxm-content-inverted": "var(--mxm-contentPrimaryInverted)",
         "mxm-content-secondary": "var(--mxm-contentSecondary)",
         "mxm-content-tertiary": "var(--mxm-contentTertiary)",
         "mxm-brand": "var(--mxm-paletteBrand100)",

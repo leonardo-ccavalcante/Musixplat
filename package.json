@@ -31,6 +31,7 @@
     "db:p02": "tsx scripts/run-p02.ts",
     "db:05b": "tsx scripts/run-05b.ts",
     "db:migrate": "tsx scripts/apply-migrations.ts",
+    "prototype:reset": "tsx scripts/prototype-reset.ts",
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:sql && pnpm test:antifake && pnpm test:integration"
   },
   "dependencies": {
