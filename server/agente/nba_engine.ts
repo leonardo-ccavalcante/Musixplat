@@ -101,12 +101,10 @@ export async function proposeNba(
         gap: sel.lever.gap,
       })
     : null;
-  // root_cause is templated interpretation ⇒ [C]. before_after_expected currently carries ONLY the
-  // measured diagnosis snapshot (dimension/measured/standard/gap straight from fn_nba_test) ⇒ [V];
-  // tagging it [C] would misreport measured data as projection (§3.10). The projected "after" is a
-  // later piece — when added, that portion ascends to [C].
   // root_cause is templated interpretation ⇒ [C]. before_after_expected carries the measured diagnosis
-  // snapshot ⇒ [V]. diagnosis_verdict/n_min_ok/k_anon_ok come straight from fn_nba_test ⇒ [V] (02:DETAIL-A2).
+  // snapshot (dimension/measured/standard/gap straight from fn_nba_test) ⇒ [V] (tagging it [C] would
+  // misreport measured data as projection, §3.10; the projected "after" is a later piece, ascends to [C]
+  // then). diagnosis_verdict/n_min_ok/k_anon_ok also come straight from fn_nba_test ⇒ [V] (02:DETAIL-A2).
   const provenance = JSON.stringify({
     root_cause: "[C]",
     before_after_expected: "[V]",
