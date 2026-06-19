@@ -31,11 +31,13 @@ function describe(j: unknown, rootCause: string | null): string {
 export function CockpitRow({
   row,
   onAction,
+  onOpen,
   state,
   muted,
 }: {
   row: NbaCockpitRow;
   onAction: (row: NbaCockpitRow, action: RowAction) => void;
+  onOpen?: (row: NbaCockpitRow) => void;
   state?: RowState;
   muted?: boolean;
 }) {
@@ -61,6 +63,11 @@ export function CockpitRow({
       </div>
       <AutonomyBadge status={row.status} reason={row.reason} />
       <div className="ml-auto flex items-center gap-2">
+        {onOpen && (
+          <Button variant="ghost" onClick={() => onOpen(row)}>
+            Details
+          </Button>
+        )}
         {state?.status === "done" ? (
           <span role="status" className="text-xs text-mxm-green">
             {state.msg ?? "Recorded ✓"}

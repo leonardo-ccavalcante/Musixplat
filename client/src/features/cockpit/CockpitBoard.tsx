@@ -31,10 +31,12 @@ function Section({ title, count, accent, children }: { title: string; count: num
 export function CockpitBoard({
   rows,
   onAction,
+  onOpen,
   actionState,
 }: {
   rows: NbaCockpitRow[];
   onAction: (row: NbaCockpitRow, action: RowAction) => void;
+  onOpen?: (row: NbaCockpitRow) => void;
   actionState: Record<string, RowState | undefined>;
 }) {
   if (rows.length === 0) return <EmptyState>The AI has proposed no actions yet.</EmptyState>;
@@ -49,7 +51,7 @@ export function CockpitBoard({
           <p className="py-3 text-sm text-mxm-content-secondary">Nothing needs you right now — the AI has it.</p>
         ) : (
           human.map((r) => (
-            <CockpitRow key={r.nba_id} row={r} onAction={onAction} state={actionState[r.nba_id]} />
+            <CockpitRow key={r.nba_id} row={r} onAction={onAction} onOpen={onOpen} state={actionState[r.nba_id]} />
           ))
         )}
       </Section>
@@ -58,7 +60,9 @@ export function CockpitBoard({
         {auto.length === 0 ? (
           <p className="py-3 text-sm text-mxm-content-secondary">No actions cleared for autonomy yet.</p>
         ) : (
-          auto.map((r) => <CockpitRow key={r.nba_id} row={r} onAction={onAction} state={actionState[r.nba_id]} muted />)
+          auto.map((r) => (
+            <CockpitRow key={r.nba_id} row={r} onAction={onAction} onOpen={onOpen} state={actionState[r.nba_id]} muted />
+          ))
         )}
       </Section>
     </div>
