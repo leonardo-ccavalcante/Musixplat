@@ -74,3 +74,23 @@ export async function emitDossier(problemId: string): Promise<DossierGateResult>
   // BR-B17/B18 — emit only a complete, provenanced, PII-safe dossier; otherwise hand off nothing.
   return gaps.length === 0 ? { emitted: true, gaps: [], dossier } : { emitted: false, gaps, dossier: null };
 }
+
+// For the READ surface (screen): the gate verdict (emitted + gaps) AND the 11 field values regardless
+// of completeness — so the UI can render the dossier honestly, marking which fields are still gaps,
+// instead of the emit-only view (which nulls everything when partial). Reuses emitDossier for the gate.
+export interface DossierView {
+  emitted: boolean;
+  gaps: string[];
+  fields: Record<string, unknown> | null;
+}
+
+export async function readDossier(problemId: string): Promise<DossierView> {
+  const gate = await emitDossier(problemId);
+  const rows = await query<DossierRow>(
+    `select problem_id, ${FIELDS.join(", ")} from tenant.v_dossier_handoff where problem_id = $1`,
+    [problemId],
+  );
+  const row = rows[0];
+  const fields = row ? (Object.fromEntries(FIELDS.map((f) => [f, row[f]])) as Record<string, unknown>) : null;
+  return { emitted: gate.emitted, gaps: gate.gaps, fields };
+}

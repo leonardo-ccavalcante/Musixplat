@@ -2,7 +2,7 @@ import type pg from "pg";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
-import { emitDossier } from "../diagnosis/dossier.js";
+import { readDossier } from "../diagnosis/dossier.js";
 import {
   reportProblemInput,
   getDossierInput,
@@ -139,6 +139,6 @@ export const diagnosisRouter = router({
       [input.problemId, ctx.tenantId],
     );
     if (!own[0]) throw new TRPCError({ code: "NOT_FOUND", message: "problem not in this pool" });
-    return emitDossier(input.problemId);
+    return readDossier(input.problemId);
   }),
 });
