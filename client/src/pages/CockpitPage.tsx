@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CockpitBoard } from "@/features/cockpit/CockpitBoard";
+import { NbaModal } from "@/features/cockpit/NbaModal";
 import { type RowAction, type RowState } from "@/features/cockpit/CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
@@ -10,6 +11,7 @@ import type { NbaCockpitRow } from "@shared/contracts";
 // POOL-001 operator session (stands in for Manus OAuth locally); tenant_id is resolved server-side.
 export function CockpitPage() {
   const [ready, setReady] = useState(false);
+  const [openNba, setOpenNba] = useState<NbaCockpitRow | null>(null);
   const [actionState, setActionState] = useState<Record<string, RowState | undefined>>({});
 
   useEffect(() => {
@@ -91,8 +93,15 @@ export function CockpitPage() {
       ) : list.isError ? (
         <ErrorState />
       ) : (
-        <CockpitBoard rows={rows} onAction={onAction} actionState={actionState} />
+        <CockpitBoard rows={rows} onAction={onAction} onOpen={setOpenNba} actionState={actionState} />
       )}
+
+      <NbaModal
+        row={openNba}
+        onClose={() => setOpenNba(null)}
+        onAction={onAction}
+        state={openNba ? actionState[openNba.nba_id] : undefined}
+      />
     </main>
   );
 }

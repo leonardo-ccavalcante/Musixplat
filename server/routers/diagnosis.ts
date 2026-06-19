@@ -2,15 +2,19 @@ import type pg from "pg";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
-import { readDossier } from "../diagnosis/dossier.js";
+import { readDossier, emitDossier } from "../diagnosis/dossier.js";
+import { computeImpactLedger } from "../diagnosis/impact.js";
+import { runDiagnosis } from "../diagnosis/orchestrator.js";
 import {
   reportProblemInput,
   getDossierInput,
   getKnowledgeCaseInput,
+  runDiagnosisInput,
   type ReportProblemResult,
   type DiagnosisListRow,
   type DiagnosisOrigin,
   type KnowledgeCaseView,
+  type RunDiagnosisResult,
 } from "../../shared/contracts_05b.js";
 
 // 05B:US-B1.1.1 (gate tenant_id + restaurant_id) + 05B:B.1.3 (dedup create-or-increment).
@@ -128,6 +132,50 @@ export const diagnosisRouter = router({
       const r = rows[0];
       if (!r) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "report failed" });
       return { problem_id: r.problem_id, status: r.status, frequency: r.frequency, created: r.created };
+    }),
+
+  // Gate 1 (05B operability) — the PRODUCT triggers the orchestrator for one problem (no terminal).
+  // tenant resolved server-side; a foreign pool ⇒ Security_Log + abort (BR-B6, mirrors reportProblem).
+  // runDiagnosis is idempotent (UPDATE-only writes + fn_hunt_silent ON CONFLICT DO NOTHING), so a
+  // re-run never duplicates Affected/Diagnosed_Problem. Numbers are PRODUCED by the orchestrator (§14).
+  run: tenantProcedure
+    .input(runDiagnosisInput)
+    .mutation(async ({ ctx, input }): Promise<RunDiagnosisResult> => {
+      const owner = await query<{ tenant_id: string }>(
+        `select tenant_id from tenant."Diagnosed_Problem" where problem_id = $1`,
+        [input.problemId],
+      );
+      if (!owner[0]) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "unknown problem (fail-closed)" });
+      }
+      if (owner[0].tenant_id !== ctx.tenantId) {
+        await query(
+          `insert into gov."Security_Log"(tenant_id, kind, detail) values ($1, 'cross_pool', $2)`,
+          [ctx.tenantId, JSON.stringify({ piece: "05B:diagnosis.run", problemId: input.problemId })],
+        );
+        throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool diagnosis blocked" });
+      }
+      const r = await runDiagnosis(input.problemId, ctx.tenantId);
+      // EPIC-B5 — quantify f5 (churn/cost/value) from the produced counts, then re-gate the dossier so the
+      // returned verdict reflects the completed impact. Fail-closed: no affected population ⇒ f5 stays NULL
+      // ⇒ dossier remains PARTIAL (the SQL producer no-ops). Numbers PRODUCED, never seeded (§14).
+      await computeImpactLedger(input.problemId);
+      const gate = await emitDossier(input.problemId);
+      // Refresh the 1:10 leverage from the produced counts (deterministic, §14). Read-only surface = roi.summary.
+      await query(`select gov.fn_roi_1_10($1)`, [ctx.tenantId]);
+      return {
+        problem_id: r.problemId,
+        area_type: r.areaType,
+        confidence: r.confidence,
+        degraded: r.degraded,
+        affected: r.affected,
+        silent: r.silent,
+        silent_status: r.silentStatus,
+        revenue_lost: r.revenueLost,
+        route: r.route,
+        dossier_emitted: gate.emitted,
+        dossier_gaps: gate.gaps,
+      };
     }),
 
   // F-B1.3 — the diagnosis board: every problem in the pool with produced counts + autonomy verdict.

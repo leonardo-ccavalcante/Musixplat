@@ -173,3 +173,11 @@ export const cockpitReleaseInput = z.object({
   resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
 });
 export type CockpitReleaseInput = z.infer<typeof cockpitReleaseInput>;
+
+// 01 operability — cohorts.run summary. Counts are PRODUCED by the P01 batch (read back after it runs),
+// never seeded as results (§14). weeks = the demo windows computed (the second enables the delta diff).
+export interface CohortsRunResult {
+  weeks: string[];
+  cohorts: number;
+  memberships: number;
+}

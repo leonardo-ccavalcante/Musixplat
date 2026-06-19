@@ -20,7 +20,15 @@ function Stat({ n, label, accent }: { n: number; label: string; accent?: boolean
 // The "uau" — the reverse-cascade hero. One restaurant flagged → zoom out → N affected / M silent (never
 // spoke) → € at risk. Every number is PRODUCED (anti-join + Named_Query), shown rounded for display only.
 // A proactive headline carries the "caught before a ticket" mark — the whole point of the monitor (BR-B12).
-export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: (row: DiagnosisListRow) => void }) {
+export function SilentCascade({
+  row,
+  onOpen,
+  onSteps,
+}: {
+  row: DiagnosisListRow;
+  onOpen: (row: DiagnosisListRow) => void;
+  onSteps?: (row: DiagnosisListRow) => void;
+}) {
   const proactive = row.origin === "proactive";
   const evaluable = row.silent_status !== "not_evaluable";
   return (
@@ -51,13 +59,20 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
             </div>
             <div className="mt-1.5 text-xs text-mxm-content-secondary">at risk</div>
           </div>
-          <Button
-            variant="ghost"
-            className="ml-auto border-mxm-brand font-semibold text-mxm-brand"
-            onClick={() => onOpen(row)}
-          >
-            Open dossier
-          </Button>
+          <div className="ml-auto flex flex-wrap gap-2">
+            {onSteps && (
+              <Button variant="ghost" onClick={() => onSteps(row)}>
+                How it was diagnosed
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              className="border-mxm-brand font-semibold text-mxm-brand"
+              onClick={() => onOpen(row)}
+            >
+              Open dossier
+            </Button>
+          </div>
         </div>
       ) : (
         // BR-B4 fail-closed — population unobservable; we say so, never invent a number.

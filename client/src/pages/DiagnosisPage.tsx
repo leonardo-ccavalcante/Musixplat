@@ -1,16 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
+import { Button } from "@/components/ui/Button";
 import { DiagnosisBoard } from "@/features/diagnosis/DiagnosisBoard";
 import { DossierModal } from "@/features/diagnosis/DossierModal";
+import { SpineTimeline, type SpineNode } from "@/features/diagnosis/SpineTimeline";
+import { ArtifactQueue, type ArtifactAction } from "@/features/diagnosis/ArtifactQueue";
+import { ArtifactModal } from "@/features/diagnosis/ArtifactModal";
+import { DiagnosisStepsModal } from "@/features/diagnosis/DiagnosisStepsModal";
+import { SituationRoom } from "@/features/diagnosis/SituationRoom";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
+import type { ArtifactRow } from "@shared/contracts_05c";
 
-// 05B — Support · Diagnosis. Surfaces the silent problem the ticket hides: the reverse-cascade (someone →
-// N affected / M silent → €) and the 11-field handoff dossier. dev-login mints the POOL-PAY operator
-// (the run-05b scenario pool); tenant_id is resolved server-side. Numbers are produced, never recomputed.
+// 05B/05C — Support · Diagnosis = the operable spine console. The operator drives the WHOLE spine IN-PRODUCT
+// (no terminal): Run flow = reportProblem → diagnosis.run → (if dossier complete) artifact.generate; then
+// the human gate (approve/reject/escalate) writes a 4-eyes trace; the 1:10 node reflects the derived
+// leverage. Every number is PRODUCED server-side and only READ here. dev-login mints the POOL-PAY operator.
 export function DiagnosisPage() {
   const [ready, setReady] = useState(false);
   const [openRow, setOpenRow] = useState<DiagnosisListRow | null>(null);
+  const [stepsRow, setStepsRow] = useState<DiagnosisListRow | null>(null);
+  const [openArtifact, setOpenArtifact] = useState<ArtifactRow | null>(null);
+  const [busyArtifact, setBusyArtifact] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,10 +48,85 @@ export function DiagnosisPage() {
 
   const list = trpc.diagnosis.list.useQuery(undefined, { enabled: ready });
   const rows = useMemo(() => (list.data ?? []) as DiagnosisListRow[], [list.data]);
-  // Headline = DISTINCT silent restaurants across the pool (server-deduped). Summing per-row silent would
-  // double-count, since problems share the same pool population (one ticket reveals the whole pool).
   const summary = trpc.diagnosis.silentSummary.useQuery(undefined, { enabled: ready });
   const totalSilent = summary.data?.distinctSilent ?? 0;
+  const artifactsQ = trpc.artifact.list.useQuery(undefined, { enabled: ready });
+  const artifacts = useMemo(() => (artifactsQ.data ?? []) as ArtifactRow[], [artifactsQ.data]);
+  const health = trpc.roi.summary.useQuery(undefined, { enabled: ready });
+
+  const utils = trpc.useUtils();
+  const report = trpc.diagnosis.reportProblem.useMutation();
+  const run = trpc.diagnosis.run.useMutation();
+  const generate = trpc.artifact.generate.useMutation();
+  const decide = trpc.artifact.decide.useMutation();
+  const [runMsg, setRunMsg] = useState<{ status: "idle" | "running" | "done" | "error"; text?: string }>({
+    status: "idle",
+  });
+  const running = runMsg.status === "running";
+
+  async function refetchAll(): Promise<void> {
+    await Promise.all([
+      utils.diagnosis.list.invalidate(),
+      utils.diagnosis.silentSummary.invalidate(),
+      utils.artifact.list.invalidate(),
+      utils.roi.summary.invalidate(),
+    ]);
+  }
+
+  // Run flow — intake → diagnose → (complete ⇒) generate artifact. Fail-closed surfaces honestly.
+  async function runFlow(): Promise<void> {
+    setRunMsg({ status: "running" });
+    try {
+      const rep = await report.mutateAsync({
+        restaurantId: "R-PAY-001",
+        conversationId: "R-PAY-001:conv1",
+        criticality: "critical",
+      });
+      const out = await run.mutateAsync({ problemId: rep.problem_id });
+      let tail = "";
+      if (out.dossier_emitted) {
+        const art = await generate.mutateAsync({ problemId: rep.problem_id });
+        tail = art.status === "generated" ? " · artifact ready for review" : ` · artifact ${art.status}`;
+      } else {
+        tail = ` · dossier partial (${out.dossier_gaps.join(",")}) — no artifact`;
+      }
+      await refetchAll();
+      setRunMsg({
+        status: "done",
+        text: `Diagnosed · ${out.affected} affected · ${out.silent} silent · €${out.revenue_lost} · route ${out.route}${tail}`,
+      });
+    } catch (e) {
+      setRunMsg({ status: "error", text: e instanceof Error ? e.message : "run failed (fail-closed)" });
+    }
+  }
+
+  function onDecide(artifactId: string, action: ArtifactAction): void {
+    setBusyArtifact(artifactId);
+    decide.mutate(
+      { artifactId, action },
+      {
+        onSettled: () => setBusyArtifact(null),
+        onSuccess: () => {
+          setOpenArtifact(null); // close the viewer so the queue reflects the new (server) status
+          void refetchAll();
+        },
+      },
+    );
+  }
+
+  const revenue = rows.reduce((s, r) => s + (r.revenue_lost ?? 0), 0);
+  const decided = artifacts.filter((a) => a.status !== "pending_review").length;
+  const ratio = health.data?.ratio ?? null;
+  const nodes: SpineNode[] = [
+    { key: "inbound", label: "Inbound", value: `${rows.filter((r) => r.origin === "reactive").length} ticket(s)`, done: rows.length > 0 },
+    { key: "diagnosis", label: "Diagnosis", value: `${rows.length} diagnosed`, done: rows.length > 0 },
+    { key: "silent", label: "Silent", value: `${totalSilent} surfaced`, done: totalSilent > 0 },
+    { key: "impact", label: "Impact", value: `€${revenue}`, done: revenue > 0 },
+    { key: "dossier", label: "Dossier", value: `${rows.filter((r) => !r.needs_human).length} ready`, done: rows.length > 0 },
+    { key: "artifact", label: "Artifact", value: `${artifacts.length} generated`, done: artifacts.length > 0 },
+    { key: "gate", label: "Human gate", value: `${decided} decided`, done: decided > 0 },
+    { key: "ratio", label: "1:10 health", value: ratio == null ? "no signal" : `${ratio} : 1`, done: ratio != null },
+  ];
 
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">
@@ -49,30 +135,63 @@ export function DiagnosisPage() {
           Support · Diagnosis
         </h1>
         <p className="mt-1.5 max-w-[64ch] text-sm leading-relaxed text-mxm-content-secondary [hyphens:auto] [text-align:justify]">
-          The problem the ticket hides: the silent ones and the pattern, found before they become churn.
+          The problem the ticket hides: the silent ones and the pattern, found before they become churn —
+          diagnosed, quantified, turned into an artifact, gated by a human, measured as 1:10.
         </p>
-        {ready && !list.isLoading && !list.isError && rows.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-1">
-            <span className="text-sm text-mxm-content-secondary">
-              <span className="text-2xl font-semibold tabular-nums text-mxm-content">{rows.length}</span> diagnosed
-            </span>
-            <span className="text-sm text-mxm-content-secondary">
-              <span className="text-2xl font-semibold tabular-nums text-mxm-brand">{totalSilent}</span> silent ones
-              surfaced
+        <p className="mt-2 text-xs text-mxm-content-tertiary">
+          Honesty: reasoning = <span className="text-mxm-content-secondary">deterministic</span> (LLM optional,
+          numbers always from SQL) · route = <span className="text-mxm-content-secondary">stub</span> (1
+          deterministic rule) · 1:10 = <span className="text-mxm-content-secondary">provisional</span>
+          (efficiency, not 2-gate confirmed). No field renders green without a producer.
+        </p>
+        {ready && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={() => void runFlow()} disabled={running} className="text-mxm-content-inverted">
+              {running ? "Running flow…" : "Run flow"}
+            </Button>
+            <span
+              aria-live="polite"
+              className={runMsg.status === "error" ? "text-sm text-mxm-red" : "text-sm text-mxm-content-secondary"}
+            >
+              {runMsg.status === "running" && "Reporting → diagnosing → generating…"}
+              {runMsg.status === "done" && runMsg.text}
+              {runMsg.status === "error" && `Fail-closed: ${runMsg.text}`}
             </span>
           </div>
         )}
       </header>
+
+      {ready && <SpineTimeline nodes={nodes} />}
+
+      {ready && <SituationRoom onDone={() => void refetchAll()} />}
 
       {!ready || list.isLoading ? (
         <LoadingState label={!ready ? "Signing in…" : "Hunting silent ones…"} />
       ) : list.isError ? (
         <ErrorState />
       ) : (
-        <DiagnosisBoard rows={rows} onOpen={setOpenRow} />
+        <>
+          <DiagnosisBoard rows={rows} onOpen={setOpenRow} onSteps={setStepsRow} />
+          <ArtifactQueue artifacts={artifacts} onDecide={onDecide} onOpen={setOpenArtifact} busyId={busyArtifact} />
+        </>
       )}
 
       <DossierModal row={openRow} onClose={() => setOpenRow(null)} />
+      <DiagnosisStepsModal
+        row={stepsRow}
+        artifact={stepsRow ? artifacts.find((a) => a.problem_id === stepsRow.problem_id) ?? null : null}
+        onClose={() => setStepsRow(null)}
+        onOpenDossier={(r) => {
+          setStepsRow(null);
+          setOpenRow(r);
+        }}
+      />
+      <ArtifactModal
+        artifact={openArtifact}
+        onClose={() => setOpenArtifact(null)}
+        onDecide={onDecide}
+        busyId={busyArtifact}
+      />
     </main>
   );
 }

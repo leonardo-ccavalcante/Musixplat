@@ -1,5 +1,5 @@
 import type { DiagnosisListRow } from "@shared/contracts_05b";
-import { memoText, escapeHtml, type DossierData } from "./dossierMemo";
+import { memoText, memoHtml, escapeHtml, type DossierData } from "./dossierMemo";
 
 // A designed, on-brand HTML email (Musixmatch /Design: dark canvas, coral accent, system sans). Inline
 // styles + a CSS bar visual of the cascade (silent vs spoke-up) and the € hero — no external image assets.
@@ -74,22 +74,43 @@ export function emailHtml(row: DiagnosisListRow, d: DossierData, today: string, 
 </div>`;
 }
 
-/** Open the designed email as a preview (what a provider would send) with a Send action (mailto today). */
+/** Gmail compose deep-link with the subject + body pre-filled (opens Leo's Gmail, not the OS default app). */
+export function gmailComposeUrl(subject: string, body: string): string {
+  const p = new URLSearchParams({ view: "cm", fs: "1", su: subject, body });
+  return `https://mail.google.com/mail/?${p.toString()}`;
+}
+
+interface PreviewUrls {
+  dossierUrl: string; // the email CTA — opens the generated dossier memo (Save as PDF)
+  gmailUrl: string; // "Send via Gmail" — Gmail compose, pre-filled
+  mailtoUrl: string; // fallback — the OS default mail app
+}
+
+/** The full preview document (pure, testable): the brand email + a toolbar to send via Gmail (or the
+ *  default mail app). The email CTA opens the generated dossier PDF, never navigates back to /diagnosis. */
+export function previewDoc(row: DiagnosisListRow, d: DossierData, today: string, urls: PreviewUrls): string {
+  const subject = `Support dossier: ${row.restaurant_id} (${row.affected} affected / ${row.silent} silent)`;
+  const toolbar = `<div style="position:sticky;top:0;background:#1f1f1f;border-bottom:1px solid #343434;padding:10px 16px;display:flex;gap:10px;align-items:center;font-family:ui-sans-serif,system-ui,sans-serif;">
+    <span style="font-size:12px;color:#9e9e9e;flex:1;">Email preview · brand HTML a provider would send. Open the dossier link for the PDF.</span>
+    <a href="${urls.mailtoUrl}" style="color:#bdbdbd;text-decoration:none;font-size:12px;padding:8px 10px;">Default mail app</a>
+    <a href="${urls.gmailUrl}" target="_blank" rel="noopener" style="background:#fc532e;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;">Send via Gmail</a>
+  </div>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title>
+     <style>html{color-scheme:dark;}body{margin:0;background:#0d0d0d;}</style></head>
+     <body>${toolbar}${emailHtml(row, d, today, urls.dossierUrl)}</body></html>`;
+}
+
+/** Open the designed email as a preview. Send via Gmail (compose, pre-filled) or the default mail app; the
+ *  email CTA opens the GENERATED dossier memo (a real PDF of exactly what happened), not the app screen. */
 export function openEmailPreview(row: DiagnosisListRow, d: DossierData, today: string): void {
   const w = window.open("", "_blank", "width=680,height=900");
   if (!w) return;
-  const appUrl = `${window.location.origin}/diagnosis`;
   const subject = `Support dossier: ${row.restaurant_id} (${row.affected} affected / ${row.silent} silent)`;
-  const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(memoText(row, d, today))}`;
-  // a thin toolbar (not part of the email) lets Leo dispatch via his mail client (plain-text body today).
-  const toolbar = `<div style="position:sticky;top:0;background:#1f1f1f;border-bottom:1px solid #343434;padding:10px 16px;display:flex;gap:10px;align-items:center;font-family:ui-sans-serif,system-ui,sans-serif;">
-    <span style="font-size:12px;color:#9e9e9e;flex:1;">Email preview · brand HTML (a provider would send this); Send uses your mail client</span>
-    <a href="${mailto}" style="background:#fc532e;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;">Send via mail client</a>
-  </div>`;
-  w.document.write(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title>
-     <style>html{color-scheme:dark;}body{margin:0;background:#0d0d0d;}</style></head>
-     <body>${toolbar}${emailHtml(row, d, today, appUrl)}</body></html>`,
-  );
+  const body = memoText(row, d, today);
+  const gmailUrl = gmailComposeUrl(subject, body);
+  const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  // the CTA target = the print-ready memo as a blob ⇒ "Open the full dossier" shows the actual PDF.
+  const dossierUrl = URL.createObjectURL(new Blob([memoHtml(row, d, today)], { type: "text/html" }));
+  w.document.write(previewDoc(row, d, today, { dossierUrl, gmailUrl, mailtoUrl }));
   w.document.close();
 }

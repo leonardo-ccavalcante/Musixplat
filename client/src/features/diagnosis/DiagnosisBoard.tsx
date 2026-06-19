@@ -30,9 +30,11 @@ function Section({ title, count, accent, children }: { title: string; count: num
 export function DiagnosisBoard({
   rows,
   onOpen,
+  onSteps,
 }: {
   rows: DiagnosisListRow[];
   onOpen: (row: DiagnosisListRow) => void;
+  onSteps?: (row: DiagnosisListRow) => void;
 }) {
   if (rows.length === 0) return <EmptyState>Nothing to report. All processes green.</EmptyState>;
 
@@ -42,19 +44,19 @@ export function DiagnosisBoard({
 
   return (
     <div className="grid gap-[clamp(1rem,2vw,1.5rem)]">
-      <SilentCascade row={headline} onOpen={onOpen} />
+      <SilentCascade row={headline} onOpen={onOpen} onSteps={onSteps} />
 
       {needsHuman.length > 0 && (
         <Section title="Needs your decision" count={needsHuman.length} accent>
           {needsHuman.map((r) => (
-            <DiagnosisRow key={r.problem_id} row={r} onOpen={onOpen} />
+            <DiagnosisRow key={r.problem_id} row={r} onOpen={onOpen} onSteps={onSteps} />
           ))}
         </Section>
       )}
 
       <Section title="Diagnosed" count={rows.length}>
         {rows.map((r) => (
-          <DiagnosisRow key={r.problem_id} row={r} onOpen={onOpen} muted={r.needs_human} />
+          <DiagnosisRow key={r.problem_id} row={r} onOpen={onOpen} onSteps={onSteps} muted={r.needs_human} />
         ))}
       </Section>
     </div>

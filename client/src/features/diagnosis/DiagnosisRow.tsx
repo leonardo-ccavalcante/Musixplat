@@ -24,10 +24,12 @@ export function OriginBadge({ origin }: { origin: DiagnosisOrigin }) {
 export function DiagnosisRow({
   row,
   onOpen,
+  onSteps,
   muted,
 }: {
   row: DiagnosisListRow;
   onOpen: (row: DiagnosisListRow) => void;
+  onSteps?: (row: DiagnosisListRow) => void;
   muted?: boolean;
 }) {
   return (
@@ -64,7 +66,12 @@ export function DiagnosisRow({
           ⚠ needs you
         </span>
       )}
-      <div className="ml-auto">
+      <div className="ml-auto flex gap-2">
+        {onSteps && (
+          <Button variant="ghost" onClick={() => onSteps(row)}>
+            How it was diagnosed
+          </Button>
+        )}
         <Button variant="ghost" onClick={() => onOpen(row)}>
           View dossier
         </Button>

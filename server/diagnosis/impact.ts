@@ -35,6 +35,17 @@ export async function computeRevenueLost(problemId: string): Promise<RevenueLost
  * Provenance is merged per field (||), never overwriting prior fields' marks; last_seen_ts is
  * bumped so the dossier #6 recurrence field reflects the write.
  */
+/**
+ * EPIC-B5 (04 §14, §3.6) — quantify the impact ledger via the SQL producer (determinism in SQL).
+ * Fills f5's churn_risk / cost_to_resolve / value_gained from PRODUCED counts (Affected) + knobs read by
+ * name; FAIL-CLOSED (no write ⇒ values stay NULL) when there is no observable affected population, so the
+ * dossier stays honestly PARTIAL. Composed by the diagnosis.run product flow AFTER computeRevenueLost
+ * (value_gained needs revenue_lost). Idempotent (UPDATE of the same row).
+ */
+export async function computeImpactLedger(problemId: string): Promise<void> {
+  await query(`select tenant.fn_impact_ledger($1::uuid)`, [problemId]);
+}
+
 export async function writeLedger(
   problemId: string,
   entry: { costToResolve: number; valueGained: number },
