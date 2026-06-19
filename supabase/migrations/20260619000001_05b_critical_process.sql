@@ -51,8 +51,11 @@ begin
      and o.payment_status = 'failed'
      and o.order_date >= current_date - v_window
      and not exists (
+       -- any ACTIVE problem (open/needs_human/blocked) already covers this restaurant — only a fully
+       -- resolved case lets a fresh recurrence open. Excludes degraded cases so a degrade-to-human does
+       -- not let the next sweep open a duplicate (BR-B5/B8 one case = one PROBLEM).
        select 1 from tenant."Diagnosed_Problem" d
-        where d.tenant_id = p_tenant and d.restaurant_id = o.restaurant_id and d.status = 'open'
+        where d.tenant_id = p_tenant and d.restaurant_id = o.restaurant_id and d.status <> 'resolved'
      )
    order by o.order_date desc
    limit 1;
@@ -72,8 +75,11 @@ begin
   returning problem_id into v_problem;
 
   if v_problem is null then
-    update tenant."Critical_Process" set state = 'green' where process_id = p_process;
-    return null; -- another open case already covers this restaurant; nothing new to report.
+    -- conflict: a concurrent run already opened this restaurant's problem ⇒ the process IS triggered,
+    -- NEVER 'green' (fail-closed §7 — an open critical problem demonstrably exists). No NEW case to
+    -- diagnose this run, so return null, but the state must reflect the open problem, not all-good.
+    update tenant."Critical_Process" set state = 'triggered' where process_id = p_process;
+    return null;
   end if;
 
   update tenant."Critical_Process" set state = 'triggered' where process_id = p_process;

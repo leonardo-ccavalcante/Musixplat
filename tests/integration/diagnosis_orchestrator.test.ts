@@ -177,4 +177,33 @@ describe("05B BR-B12 — proactive monitor (fn_monitor_critical, reverse-cascade
     );
     expect(st[0]?.state).toBe("monitoring_degraded");
   });
+
+  it("BR-B5/B8: a degraded (needs_human) case is NOT re-opened as a duplicate by the next sweep", async () => {
+    // one silent failed-payment restaurant whose problem has degraded to needs_human (out of 'open').
+    await pool.query(`
+      insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date)
+        values ('R-DEG-1','POOL-DEG','long_tail','long_tail', date '2026-01-01');
+      insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status)
+        values ('R-DEG-1', current_date, 100, 20, 'failed');
+      insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, conversation_id, criticality, status)
+        values ('POOL-DEG','R-DEG-1', null, 'critical', 'needs_human');`);
+    const processId = await seedProcess("POOL-DEG");
+
+    // degraded ⇒ still an ACTIVE case ⇒ the monitor must skip it; nothing else to pick ⇒ null (no dup).
+    const swept = await rows<{ pid: string | null }>(
+      pool, `select tenant.fn_monitor_critical('POOL-DEG', $1) as pid`, [processId]);
+    expect(swept[0]?.pid).toBeNull();
+    const after = await rows<{ n: number }>(
+      pool,
+      `select count(*)::int n from tenant."Diagnosed_Problem" where tenant_id='POOL-DEG' and restaurant_id='R-DEG-1'`,
+      [],
+    );
+    expect(after[0]?.n).toBe(1); // still ONE problem — no duplicate opened (BR-B5/B8)
+
+    // boundary: once fully RESOLVED, a genuine recurrence MAY open a fresh case.
+    await pool.query(`update tenant."Diagnosed_Problem" set status='resolved' where tenant_id='POOL-DEG'`);
+    const reopened = await rows<{ pid: string | null }>(
+      pool, `select tenant.fn_monitor_critical('POOL-DEG', $1) as pid`, [processId]);
+    expect(reopened[0]?.pid).toBeTruthy();
+  });
 });

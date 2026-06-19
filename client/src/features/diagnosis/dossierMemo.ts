@@ -141,9 +141,3 @@ export function printDossierMemo(row: DiagnosisListRow, d: DossierData, today: s
   w.document.write(memoHtml(row, d, today));
   w.document.close();
 }
-
-/** mailto: URL with the plain-text memo as the body (the dispatch path; the server send is a stub). */
-export function mailtoDossier(row: DiagnosisListRow, d: DossierData, today: string, to = ""): string {
-  const subject = `Support dossier: ${row.restaurant_id} (${row.affected} affected / ${row.silent} silent)`;
-  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(memoText(row, d, today))}`;
-}
