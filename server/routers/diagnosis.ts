@@ -2,7 +2,8 @@ import type pg from "pg";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
-import { readDossier } from "../diagnosis/dossier.js";
+import { readDossier, emitDossier } from "../diagnosis/dossier.js";
+import { computeImpactLedger } from "../diagnosis/impact.js";
 import { runDiagnosis } from "../diagnosis/orchestrator.js";
 import {
   reportProblemInput,
@@ -155,6 +156,11 @@ export const diagnosisRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool diagnosis blocked" });
       }
       const r = await runDiagnosis(input.problemId, ctx.tenantId);
+      // EPIC-B5 — quantify f5 (churn/cost/value) from the produced counts, then re-gate the dossier so the
+      // returned verdict reflects the completed impact. Fail-closed: no affected population ⇒ f5 stays NULL
+      // ⇒ dossier remains PARTIAL (the SQL producer no-ops). Numbers PRODUCED, never seeded (§14).
+      await computeImpactLedger(input.problemId);
+      const gate = await emitDossier(input.problemId);
       return {
         problem_id: r.problemId,
         area_type: r.areaType,
@@ -165,8 +171,8 @@ export const diagnosisRouter = router({
         silent_status: r.silentStatus,
         revenue_lost: r.revenueLost,
         route: r.route,
-        dossier_emitted: r.dossier.emitted,
-        dossier_gaps: r.dossier.gaps,
+        dossier_emitted: gate.emitted,
+        dossier_gaps: gate.gaps,
       };
     }),
 
