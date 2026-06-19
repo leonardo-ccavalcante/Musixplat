@@ -24,6 +24,10 @@ async function bootstrapPolicies(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Prototype convenience: relax k-anonymity to k=1 so every cohort shows (production keeps the seeded
+  // k=5; the mechanism stays intact + tested). k_anon_threshold is a named knob (§3.8) — tuned, not ripped.
+  await query(`update catalog."Config_Knobs" set value='1' where key='k_anon_threshold'`);
+  console.warn("prototype: k_anon_threshold relaxed to 1 (production = 5)");
   await runP01({ week: WEEK, refDate: REF }); // cohorts + funnel signals (fn_nba_signals)
   await bootstrapPolicies();
 
