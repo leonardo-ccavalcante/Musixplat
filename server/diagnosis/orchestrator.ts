@@ -21,10 +21,11 @@ const HYPOTHESES: Record<string, string[]> = {
   performance: ["latency / connection window"],
 };
 
-/** Threshold BY NAME (§3.8); soft fallback (knob may be unseeded in a fresh DB) — never a magic literal in logic. */
-async function knob(name: string, fallback: number): Promise<number> {
-  const r = await query<{ value: string }>(`select value from catalog."Config_Knobs" where key=$1`, [name]);
-  return r[0] ? Number(r[0].value) : fallback;
+/** Threshold BY NAME (§3.8), FAIL-CLOSED: knob_required_num RAISES if the knob is absent — never a
+ *  silent literal default (mirrors silent.ts). Both knobs are seeded in seed.sql + the migration. */
+async function knob(name: string): Promise<number> {
+  const r = await query<{ v: number }>(`select catalog.knob_required_num($1) as v`, [name]);
+  return Number(r[0]?.v);
 }
 
 export interface DiagnosisResult {
@@ -70,7 +71,7 @@ export async function runDiagnosis(
 
   // B.2 classify (TEXT only). Grounding floor: low confidence + no KB precedent ⇒ degrade (BR-B3).
   const cls = await reasoning.classifyArea({ text, hint: prob.criticality });
-  const floor = await knob("threshold_classification", 0.6); // reuse the seeded 05B classify floor (§3.8)
+  const floor = await knob("threshold_classification"); // seeded 05B classify floor (§3.8, fail-closed)
   const kb = await query<{ n: number }>(
     `select count(*)::int n from tenant."Knowledge_Case" where tenant_id = $1 and area_type = $2`,
     [tenantId, cls.areaType],
@@ -91,6 +92,7 @@ export async function runDiagnosis(
     areaType: cls.areaType,
     hypotheses: HYPOTHESES[cls.areaType] ?? ["unclassified hypothesis"],
   });
+  if (ranked.length === 0) throw new Error("runDiagnosis: rankPaths returned no paths (fail-closed)");
   const tree: IssueTree = {
     paths: ranked.map((p) => ({
       path_id: p.path_id,
@@ -138,7 +140,7 @@ export async function runDiagnosis(
   // B.7 impact (Named_Query) + priority (risk × impact vs cost). impact = revenue_lost (SQL).
   const imp = await computeRevenueLost(problemId);
   const risk = rec.restaurantsAffected > 0 ? s.silent / rec.restaurantsAffected : 0;
-  const cost = await knob("monitor_cost_default", 100);
+  const cost = await knob("monitor_cost_default");
   const nowQueue = routeNowQueue({ risk, impact: imp.revenueLost, cost });
   const priorityScore = dispatchPriority({
     criticality: prob.criticality,
