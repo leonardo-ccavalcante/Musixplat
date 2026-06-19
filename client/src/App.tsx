@@ -7,10 +7,10 @@ export function App() {
   return (
     <div className="min-h-screen bg-mxm-bg text-mxm-content">
       <nav aria-label="Primary" className="flex gap-4 border-b border-mxm-border px-[clamp(1rem,2vw,2rem)] py-2 text-sm">
-        <Link href="/cohorts" className="text-mxm-content-secondary hover:text-mxm-content">
+        <Link href="/cohorts" className="inline-flex min-h-[24px] items-center rounded-mxm px-1 text-mxm-content-secondary hover:text-mxm-content">
           Cohorts
         </Link>
-        <Link href="/cockpit" className="text-mxm-content-secondary hover:text-mxm-content">
+        <Link href="/cockpit" className="inline-flex min-h-[24px] items-center rounded-mxm px-1 text-mxm-content-secondary hover:text-mxm-content">
           Autonomy Cockpit
         </Link>
       </nav>
