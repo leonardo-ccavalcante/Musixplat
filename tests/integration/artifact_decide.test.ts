@@ -113,6 +113,40 @@ describe("05C Gate 4 — artifact.decide (human gate, append-only trace, 4-eyes,
     ).rejects.toThrow();
   });
 
+  it("a terminal artifact rejects a second decision and keeps exactly one audit row", async () => {
+    const artifactId = await setup("POOL-DC");
+    await caller("POOL-DC").artifact.decide({ artifactId, action: "approve" });
+    await expect(caller("POOL-DC").artifact.decide({ artifactId, action: "reject" })).rejects.toThrow(
+      "already decided or superseded",
+    );
+    const decisions = await rows<{ n: number }>(
+      pool,
+      `select count(*)::int n from gov."Artifact_Decision" where artifact_id=$1`,
+      [artifactId],
+    );
+    expect(decisions[0]!.n).toBe(1);
+  });
+
+  it("regeneration cannot mutate content after the human decision", async () => {
+    const artifactId = await setup("POOL-DC");
+    const before = await rows<{ problem_id: string; content: unknown }>(
+      pool,
+      `select problem_id::text, content from gov."Generated_Artifact" where artifact_id=$1`,
+      [artifactId],
+    );
+    await caller("POOL-DC").artifact.decide({ artifactId, action: "approve" });
+
+    const regenerated = await caller("POOL-DC").artifact.generate({ problemId: before[0]!.problem_id });
+    expect(regenerated).toEqual({ status: "locked", artifact_id: artifactId });
+    const after = await rows<{ status: string; content: unknown }>(
+      pool,
+      `select status, content from gov."Generated_Artifact" where artifact_id=$1`,
+      [artifactId],
+    );
+    expect(after[0]!.status).toBe("approved");
+    expect(after[0]!.content).toEqual(before[0]!.content);
+  });
+
   it("BR-B6 fail-closed: a foreign pool cannot decide on another pool's artifact (+ Security_Log)", async () => {
     const artifactId = await setup("POOL-DC");
     await expect(caller("POOL-OTHER").artifact.decide({ artifactId, action: "approve" })).rejects.toThrow();

@@ -47,8 +47,8 @@ export function HealthPage() {
       <header className="mb-6">
         <h1 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-mxm-content">Health · 1:10</h1>
         <p className="mt-1.5 max-w-[64ch] text-sm leading-relaxed text-mxm-content-secondary">
-          Operator leverage, DERIVED from real counters — units the AI processed per unit of human touch.
-          The number appears only once a human touches; it is provisional, not confirmed business impact.
+          Team-equivalent capacity, derived from observed escalation plus the explicit X tickets/day,
+          AHT, SLA and operator-time assumptions. Throughput per review is shown separately.
         </p>
       </header>
 
@@ -62,7 +62,7 @@ export function HealthPage() {
             aria-live="polite"
             className="mb-6 rounded-mxm border border-mxm-brand bg-mxm-bg-elevated p-5"
           >
-            <div className="text-xs uppercase tracking-wide text-mxm-content-secondary">Operator leverage</div>
+            <div className="text-xs uppercase tracking-wide text-mxm-content-secondary">Team-equivalent capacity</div>
             <div className="mt-1 text-4xl font-semibold tabular-nums text-mxm-content">
               {h.ratio == null ? "no signal yet" : `${h.ratio} : 1`}
             </div>
@@ -72,9 +72,15 @@ export function HealthPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Stat label="Units processed" value={String(h.units)} />
-            <Stat label="Dossiers" value={String(h.dossiers)} />
+            <Stat label="Units / human touch" value={h.unitsPerTouch == null ? "no signal" : String(h.unitsPerTouch)} />
+            <Stat label="Tickets / day baseline" value={h.ticketsPerDay == null ? "n/a" : String(h.ticketsPerDay)} />
+            <Stat label="Relationships covered" value={String(h.relationshipsCovered)} />
+            <Stat label="SLA target" value={h.slaHours == null ? "n/a" : `${h.slaHours}h`} />
+            <Stat label="Escalation rate" value={h.escalationRate == null ? "n/a" : `${(h.escalationRate * 100).toFixed(1)}%`} />
+            <Stat label="Projected human time" value={h.projectedHumanMinutes == null ? "n/a" : `${h.projectedHumanMinutes} min`} />
+            <Stat label="Complete dossiers" value={String(h.dossiers)} />
             <Stat label="Artifacts" value={String(h.artifacts)} />
             <Stat label="Human reviews" value={String(h.reviews)} />
             <Stat label="Escalations" value={String(h.escalations)} />

@@ -28,6 +28,8 @@ async function stage(opts: { tenant: string; how: boolean; failed: boolean }): P
     : `'not_resolved', null, 'gateway vendor unresponsive — no documented fix yet'`;
   const status = opts.failed ? "'failed'" : "'ok'";
   await pool.query(`
+    insert into gov."User"(user_id, tenant_id, org_level, role)
+    values ('${opts.tenant}-AI','${opts.tenant}','team','ai_agent');
     insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date, zone)
     values ('R-AR-1','${opts.tenant}','long_tail','long_tail', date '2026-01-01','Centro'),
            ('R-AR-2','${opts.tenant}','long_tail','long_tail', date '2026-01-01','Centro'),
@@ -71,9 +73,10 @@ describe("05C Gate 3 — artifact.generate (dossier → persisted, metric-bound 
       content: unknown;
       status: string;
       decision_trace_id: string | null;
+      proposer_id: string | null;
     }>(
       pool,
-      `select artifact_id::text, target_metric, content, status, decision_trace_id::text
+      `select artifact_id::text, target_metric, content, status, decision_trace_id::text, proposer_id
          from gov."Generated_Artifact" where problem_id = $1`,
       [problemId],
     );
@@ -82,6 +85,7 @@ describe("05C Gate 3 — artifact.generate (dossier → persisted, metric-bound 
     expect(a[0]!.content).not.toBeNull(); // produced from the dossier
     expect(a[0]!.status).toBe("pending_review"); // conservative pre-decision (§14)
     expect(a[0]!.decision_trace_id).toBeNull(); // no human decision yet (Gate 4)
+    expect(a[0]!.proposer_id).toBe("POOL-ART-AI"); // actual persisted proposer, never selected at approval time
   });
 
   it("idempotent — generating twice does NOT duplicate the artifact", async () => {

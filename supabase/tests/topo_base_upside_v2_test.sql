@@ -32,7 +32,8 @@ select cohort.fn_upside(date '2026-06-17');
 
 -- bands: P90+ band has non-null metrics (n90 ≥ k_anon=5)
 select isnt((select descriptive_baseline->'bands'->'p90'->>'orders' from cohort."Cohort"
-             where cohort_id='sushi_downtown_long_tail_vtest'), null, 'F-1.6: P90+ band metrics present (n≥k)');
+             where cohort_id='sushi_downtown_long_tail_vtest'), null::text,
+            'F-1.6: P90+ band metrics present (n≥k)');
 
 -- topo-vs-base: top sells more than base (positive order delta)
 select ok((select (descriptive_baseline->'topo_vs_base'->'p90_vs_p10'->>'d_orders')::numeric

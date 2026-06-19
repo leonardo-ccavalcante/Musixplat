@@ -35,6 +35,14 @@ async function runSpine(
   const r = await runDiagnosis(problemId, tenantId);
   await computeImpactLedger(problemId);
   const gate = await emitDossier(problemId);
+  if (gate.emitted) {
+    await query(
+      `update tenant."Diagnosed_Problem"
+          set dossier_emitted_at = coalesce(dossier_emitted_at, now())
+        where problem_id=$1 and tenant_id=$2`,
+      [problemId, tenantId],
+    );
+  }
   let artifact = false;
   if (gate.emitted) {
     const a = await generateFromDossier(problemId, tenantId);

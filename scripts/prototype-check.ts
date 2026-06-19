@@ -54,7 +54,11 @@ async function main(): Promise<void> {
   }
 
   const health = await caller.roi.summary();
-  check("1:10 ratio DERIVED (non-null after a human touch)", health.ratio !== null, `ratio=${health.ratio}:1 units=${health.units} touches=${health.reviews + health.escalations}`);
+  check(
+    "1:10 team-equivalent capacity DERIVED (non-null after a human touch)",
+    health.ratio !== null && health.unitsPerTouch !== null,
+    `team_equivalent=${health.ratio}:1 units_per_touch=${health.unitsPerTouch} tickets/day=${health.ticketsPerDay}`,
+  );
 
   const dossier = await caller.diagnosis.getDossier({ problemId: rep.problem_id });
   check("getDossier returns the gate verdict", typeof dossier.emitted === "boolean");

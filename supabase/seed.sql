@@ -45,7 +45,13 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('monitor_cost_default', '100',  '[C]', 'leo'),
   ('cost_per_affected_default', '15',  '[I]', 'leo'),
   ('value_recovery_rate',       '0.6', '[I]', 'leo'),
-  ('aht_human_touch_minutes',   '5',   '[V]', 'leo');
+  ('aht_human_touch_minutes',   '5',   '[V]', 'leo'),
+  -- Take-home capacity model: explicit X/Z/team assumptions, never hidden literals in the producer.
+  ('baseline_tickets_per_day',  '300', '[C]', 'leo'),
+  ('baseline_team_size',        '10',  '[C]', 'leo'),
+  ('operator_available_minutes','480', '[C]', 'leo'),
+  ('aht_ai_absorbed_minutes',   '0.5', '[C]', 'leo'),
+  ('sla_target_hours',          '24',  '[V]', 'leo');
 
 -- ── 02 NBA action-threshold knobs ([C] placeholders — the human-approved ranges that gate autonomy,
 --    read BY NAME §3.8. "value está en el mecanismo": Leo ratifies the numbers in the cockpit). ──

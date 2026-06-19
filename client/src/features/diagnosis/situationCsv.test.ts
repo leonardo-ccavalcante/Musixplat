@@ -7,9 +7,9 @@ import { parseTicketCsv, parseConversationCsv } from "./situationCsv";
 describe("parseTicketCsv", () => {
   it("maps situation rows, coercing opened_ticket to bool and dropping blanks", () => {
     const text = [
-      "restaurant_id,zone,payment_status,opened_ticket,intent,criticality,message",
-      'R-1,Centro,failed,true,billing,critical,"payout missing"',
-      "R-2,Norte,failed,false,,,",
+      "restaurant_id,zone,payment_status,order_date,gross_value,fee,opened_ticket,intent,criticality,message,resolution_how",
+      'R-1,Centro,failed,2026-06-18,120,20,true,billing,critical,"payout missing","manual reissue"',
+      "R-2,Norte,failed,2026-06-18,80,10,false,,,,",
     ].join("\n");
     const rows = parseTicketCsv(text);
     expect(rows).toHaveLength(2);
@@ -17,20 +17,30 @@ describe("parseTicketCsv", () => {
       restaurant_id: "R-1",
       zone: "Centro",
       payment_status: "failed",
+      order_date: "2026-06-18",
+      gross_value: 120,
+      fee: 20,
       opened_ticket: true,
       intent: "billing",
       criticality: "critical",
       message: "payout missing",
+      resolution_how: "manual reissue",
     });
     expect(rows[1]!.opened_ticket).toBe(false);
     expect(rows[1]!.intent).toBeUndefined();
     expect(rows[1]!.message).toBeUndefined();
   });
 
-  it("defaults an unknown payment_status to failed and skips rows with no restaurant_id", () => {
-    const rows = parseTicketCsv("restaurant_id,payment_status\nR-9,weird\n,failed");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.payment_status).toBe("failed");
+  it("fails closed for unknown status or incomplete financial inputs", () => {
+    expect(() =>
+      parseTicketCsv("restaurant_id,payment_status,order_date,gross_value,fee\nR-9,weird,2026-06-18,100,20"),
+    ).toThrow("invalid payment_status");
+    expect(() =>
+      parseTicketCsv("restaurant_id,payment_status,order_date,gross_value,fee\nR-9,failed,2026-06-18,,20"),
+    ).toThrow("gross_value");
+    expect(() =>
+      parseTicketCsv("restaurant_id,payment_status,order_date,gross_value,fee\nR-9,failed,2026-06-18,10,20"),
+    ).toThrow("fee cannot exceed gross_value");
   });
 });
 

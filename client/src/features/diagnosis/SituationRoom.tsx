@@ -7,11 +7,11 @@ import type { IntakeResult } from "@shared/contracts_intake";
 // 05B Situation Room — the operator uploads REAL data (a ticket CSV or an n8n conversation export) and the
 // WHOLE spine runs on it: numbers are PRODUCED from the file, never the fixed 47/35 (Leo: "se não vou estar
 // fakeando"). Two modes; each ships its own downloadable template so the format is unambiguous.
-const TICKET_TEMPLATE = `restaurant_id,zone,payment_status,opened_ticket,intent,criticality,message
-R-001,Centro,failed,true,billing,critical,"My payout for last week never arrived. Customers paid but I see nothing on my side."
-R-002,Centro,failed,false,,,
-R-003,Norte,failed,false,,,
-R-004,Norte,ok,false,,,
+const TICKET_TEMPLATE = `restaurant_id,zone,payment_status,order_date,gross_value,fee,opened_ticket,intent,criticality,message,resolution_how
+R-001,Centro,failed,2026-06-19,100,20,true,billing,critical,"My payout for last week never arrived. Customers paid but I see nothing on my side.","gateway retry + manual reissue"
+R-002,Centro,failed,2026-06-19,125,25,false,,,,
+R-003,Norte,failed,2026-06-19,80,10,false,,,,
+R-004,Norte,ok,2026-06-19,90,15,false,,,,
 `;
 const CONVERSATION_TEMPLATE = `id,session_id,message,created_at
 1,5699,"{""type"": ""human"", ""content"": ""Hola, mi pago de la semana no llego""}",2025-08-18 14:57:35+00
@@ -132,7 +132,7 @@ export function SituationRoom({ onDone }: { onDone: () => void }) {
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <UploadCard
           title="Upload tickets (CSV)"
-          hint={<>One row per restaurant. <code>payment_status=failed</code> + <code>opened_ticket=false</code> = a silent one. <code>message</code> = what they wrote.</>}
+          hint={<>One row per restaurant. Financial impact uses the uploaded <code>gross_value</code> and <code>fee</code>. Add <code>resolution_how</code> only when a reviewed KB fix exists.</>}
           templateName="situation-tickets-template.csv"
           template={TICKET_TEMPLATE}
           onFile={(f) => void handleTickets(f)}

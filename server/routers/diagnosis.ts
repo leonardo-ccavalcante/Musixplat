@@ -161,6 +161,14 @@ export const diagnosisRouter = router({
       // ⇒ dossier remains PARTIAL (the SQL producer no-ops). Numbers PRODUCED, never seeded (§14).
       await computeImpactLedger(input.problemId);
       const gate = await emitDossier(input.problemId);
+      if (gate.emitted) {
+        await query(
+          `update tenant."Diagnosed_Problem"
+              set dossier_emitted_at = coalesce(dossier_emitted_at, now())
+            where problem_id=$1 and tenant_id=$2`,
+          [input.problemId, ctx.tenantId],
+        );
+      }
       // Refresh the 1:10 leverage from the produced counts (deterministic, §14). Read-only surface = roi.summary.
       await query(`select gov.fn_roi_1_10($1)`, [ctx.tenantId]);
       return {

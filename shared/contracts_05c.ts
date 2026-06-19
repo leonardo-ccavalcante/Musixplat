@@ -8,6 +8,7 @@ export type GenerateArtifactInput = z.infer<typeof generateArtifactInput>;
 // generate outcome: a persisted artifact, OR a fail-closed reason (no row written).
 export type GenerateArtifactResult =
   | { status: "generated"; artifact_id: string; artifact_type: string; target_metric: string }
+  | { status: "locked"; artifact_id: string }
   | { status: "incomplete_dossier"; gaps: string[] }
   | { status: "missing_how" };
 
@@ -26,7 +27,7 @@ export interface ArtifactDecisionResult {
 // One artifact row for the read surface / human queue.
 export interface ArtifactRow {
   artifact_id: string;
-  problem_id: string;
+  problem_id: string | null;
   artifact_type: string;
   target_metric: string;
   status: string;
