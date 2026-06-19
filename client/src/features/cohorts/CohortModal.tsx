@@ -1,6 +1,7 @@
 import { Modal } from "@/components/ui/Modal";
 import { LoadingState } from "@/components/ui/EmptyState";
 import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { ProvenanceLegend } from "@/components/ui/ProvenanceLegend";
 import { trpc } from "@/lib/trpc";
 import { DrillTable, type DrillRow } from "./DrillTable";
 import { CohortProfile } from "./CohortProfile";
@@ -34,6 +35,9 @@ export function CohortModal({ cell, onClose }: { cell: CohortCell | null; onClos
             </dl>
             <FreshnessBadge freshness={cell.freshness_ts} stale={cell.stale} />
           </div>
+
+          {/* decode the [V]/[C]/[I] confidence codes the profile/upside stamp — don't assume the reader knows them */}
+          <ProvenanceLegend />
 
           {compare.isLoading ? (
             <LoadingState />

@@ -24,11 +24,17 @@ export function AttributionDetail({ delta, compact }: { delta: PercentileDelta; 
   if (delta.sentido === "new")
     return <span className="text-mxm-content-tertiary">new (no history)</span>;
 
+  if (compact) {
+    // The CAUSE is carried by the group header; this compact form renders CONFIDENCE only (the
+    // provenance word). We deliberately do NOT show orders_delta here: root_cause=cancel/quality/
+    // connection only fires when orders held or rose, so a raw "+2 more orders" under "lower
+    // quality" reads as a contradiction. Confidence-per-row keeps §3.10 without the false signal.
+    return <ProvenanceBadge prov={delta.prov} showLabel />;
+  }
   const od = delta.orders_delta;
   return (
     <span className="inline-flex items-center gap-1 text-mxm-content-secondary">
-      {/* compact: the cause label is carried by the group header, so show only magnitude + prov */}
-      {!compact && <span>{reasonLabel(delta)}</span>}
+      <span>{reasonLabel(delta)}</span>
       {od != null && <span className="tabnum text-mxm-content-tertiary">({od})</span>}
       <ProvenanceBadge prov={delta.prov} />
     </span>
