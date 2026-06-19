@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { CohortsExplorerPage } from "./pages/CohortsExplorerPage";
 import { CockpitPage } from "./pages/CockpitPage";
+import { ActionDetailPage } from "@/pages/ActionDetailPage";
 import { DiagnosisPage } from "./pages/DiagnosisPage";
 import { HealthPage } from "./pages/HealthPage";
 
@@ -43,6 +44,7 @@ export function App() {
       <Switch>
         <Route path="/" component={CohortsExplorerPage} />
         <Route path="/cohorts" component={CohortsExplorerPage} />
+        <Route path="/cockpit/action/:code" component={ActionDetailPage} />
         <Route path="/cockpit" component={CockpitPage} />
         <Route path="/diagnosis" component={DiagnosisPage} />
         <Route path="/health" component={HealthPage} />
