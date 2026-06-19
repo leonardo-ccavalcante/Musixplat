@@ -130,6 +130,12 @@ export function DiagnosisPage() {
           The problem the ticket hides: the silent ones and the pattern, found before they become churn —
           diagnosed, quantified, turned into an artifact, gated by a human, measured as 1:10.
         </p>
+        <p className="mt-2 text-xs text-mxm-content-tertiary">
+          Honesty: reasoning = <span className="text-mxm-content-secondary">deterministic</span> (LLM optional,
+          numbers always from SQL) · route = <span className="text-mxm-content-secondary">stub</span> (1
+          deterministic rule) · 1:10 = <span className="text-mxm-content-secondary">provisional</span>
+          (efficiency, not 2-gate confirmed). No field renders green without a producer.
+        </p>
         {ready && (
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button type="button" onClick={() => void runFlow()} disabled={running} className="text-mxm-content-inverted">
