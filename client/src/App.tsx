@@ -3,6 +3,7 @@ import { Link, Route, Switch, useLocation } from "wouter";
 import { CohortsExplorerPage } from "./pages/CohortsExplorerPage";
 import { CockpitPage } from "./pages/CockpitPage";
 import { DiagnosisPage } from "./pages/DiagnosisPage";
+import { HealthPage } from "./pages/HealthPage";
 
 // Active nav = coral (Design §8 "active: coral marker · ONE active style everywhere"). aria-current
 // for wayfinding (the trunk test: which page am I on?). Inactive = muted, hover lifts to primary.
@@ -35,12 +36,16 @@ export function App() {
         <NavLink href="/diagnosis" active={loc.startsWith("/diagnosis")}>
           Support · Diagnosis
         </NavLink>
+        <NavLink href="/health" active={loc.startsWith("/health")}>
+          Health · 1:10
+        </NavLink>
       </nav>
       <Switch>
         <Route path="/" component={CohortsExplorerPage} />
         <Route path="/cohorts" component={CohortsExplorerPage} />
         <Route path="/cockpit" component={CockpitPage} />
         <Route path="/diagnosis" component={DiagnosisPage} />
+        <Route path="/health" component={HealthPage} />
         <Route>
           <main className="p-6 text-mxm-content-secondary">Not found</main>
         </Route>

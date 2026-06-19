@@ -13,6 +13,12 @@ export const PAY_COMPLAINANTS = PAY_N - PAY_SILENT; // 12 opened a billing ticke
 
 /** Idempotent: OWNS POOL-PAY — clear then rebuild its scenario (never touches other pools). */
 export async function stagePayScenario(): Promise<void> {
+  // gov.Artifact_Decision is APPEND-ONLY (DELETE blocked by trigger) and gov.Generated_Artifact cascades
+  // into it — a plain DELETE of Diagnosed_Problem would cascade into the append-only table and fail, which
+  // would break re-staging after the operator decides an artifact (repeatability is a prototype must).
+  // TRUNCATE bypasses the row trigger (it is not a DELETE); only POOL-PAY produces these, so it is safe.
+  // Run FIRST so the subsequent deletes' cascade finds nothing append-only.
+  await query(`truncate gov."Generated_Artifact" cascade`);
   await query(`delete from tenant."Affected" where tenant_id=$1`, [POOL_PAY]);
   await query(`delete from tenant."Diagnosed_Problem" where tenant_id=$1`, [POOL_PAY]);
   await query(`delete from tenant."Critical_Process" where tenant_id=$1`, [POOL_PAY]);
