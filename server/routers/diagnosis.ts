@@ -6,9 +6,12 @@ import { readDossier } from "../diagnosis/dossier.js";
 import {
   reportProblemInput,
   getDossierInput,
+  getKnowledgeCaseInput,
+  emailDossierInput,
   type ReportProblemResult,
   type DiagnosisListRow,
   type DiagnosisOrigin,
+  type KnowledgeCaseView,
 } from "../../shared/contracts_05b.js";
 
 // 05B:US-B1.1.1 (gate tenant_id + restaurant_id) + 05B:B.1.3 (dedup create-or-increment).
@@ -140,5 +143,32 @@ export const diagnosisRouter = router({
     );
     if (!own[0]) throw new TRPCError({ code: "NOT_FOUND", message: "problem not in this pool" });
     return readDossier(input.problemId);
+  }),
+
+  // BR-B3 grounding read — open one KB precedent (the dossier's similar-cases links). Tenant-scoped.
+  getKnowledgeCase: tenantProcedure
+    .input(getKnowledgeCaseInput)
+    .query(async ({ ctx, input }): Promise<KnowledgeCaseView> => {
+      const rows = await query<KnowledgeCaseView>(
+        `select kb_case_id::text as kb_case_id, area_type, pattern, outcome, resolution,
+                not_resolved_reason, probability::float8 as probability, discarded_branches,
+                created_at::text as created_at
+           from tenant."Knowledge_Case" where kb_case_id = $1 and tenant_id = $2`,
+        [input.kbCaseId, ctx.tenantId],
+      );
+      if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "kb case not in this pool" });
+      return rows[0];
+    }),
+
+  // STUB — a future real send (Resend/SMTP) plugs in here. No service configured ⇒ fail closed honestly
+  // (never a silent success); the client falls back to mailto:. Ownership enforced server-side (BR-B6).
+  emailDossier: tenantProcedure.input(emailDossierInput).mutation(async ({ ctx, input }) => {
+    const own = await query<{ x: number }>(
+      `select 1 as x from tenant."Diagnosed_Problem" where problem_id = $1 and tenant_id = $2`,
+      [input.problemId, ctx.tenantId],
+    );
+    if (!own[0]) throw new TRPCError({ code: "NOT_FOUND", message: "problem not in this pool" });
+    // TODO(05B): wire a real email provider here (env ANTHROPIC_API_KEY-style secret by NAME, §6).
+    return { delivered: false as const, reason: "email service not configured — use the mailto fallback" };
   }),
 });

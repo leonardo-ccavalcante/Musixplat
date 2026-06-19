@@ -95,3 +95,23 @@ export interface DiagnosisListRow {
 // getDossier input — problemId is DATA within the pool; tenant is resolved server-side (anti-spoofing §7).
 export const getDossierInput = z.object({ problemId: z.string().min(1) });
 export type GetDossierInput = z.infer<typeof getDossierInput>;
+
+// getKnowledgeCase — the dossier's "similar cases" links open these KB precedents (BR-B3 grounding).
+export const getKnowledgeCaseInput = z.object({ kbCaseId: z.string().min(1) });
+export type GetKnowledgeCaseInput = z.infer<typeof getKnowledgeCaseInput>;
+export interface KnowledgeCaseView {
+  kb_case_id: string;
+  area_type: string;
+  pattern: string | null;
+  outcome: string | null;
+  resolution: string | null;
+  not_resolved_reason: string | null;
+  probability: number | null;
+  discarded_branches: unknown;
+  created_at: string;
+}
+
+// emailDossier — STUB scaffolding for a future real send (Resend/SMTP). No email service is configured,
+// so it fails closed honestly; the client uses a mailto: fallback today (BR-B13: never a silent success).
+export const emailDossierInput = z.object({ problemId: z.string().min(1), to: z.string().email() });
+export type EmailDossierInput = z.infer<typeof emailDossierInput>;

@@ -10,7 +10,7 @@ import type { DiagnosisListRow } from "@shared/contracts_05b";
 // (the run-05b scenario pool); tenant_id is resolved server-side. Numbers are produced, never recomputed.
 export function DiagnosisPage() {
   const [ready, setReady] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openRow, setOpenRow] = useState<DiagnosisListRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,8 +42,10 @@ export function DiagnosisPage() {
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-mxm-content">Support · Diagnosis</h1>
-        <p className="mt-1 max-w-[70ch] text-sm text-mxm-content-secondary">
+        <h1 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-mxm-content">
+          Support · Diagnosis
+        </h1>
+        <p className="mt-1.5 max-w-[64ch] text-sm leading-relaxed text-mxm-content-secondary [hyphens:auto] [text-align:justify]">
           The problem the ticket hides — the silent ones and the pattern — found before they become churn.
         </p>
         {ready && !list.isLoading && !list.isError && rows.length > 0 && (
@@ -64,10 +66,10 @@ export function DiagnosisPage() {
       ) : list.isError ? (
         <ErrorState />
       ) : (
-        <DiagnosisBoard rows={rows} onOpen={(r) => setOpenId(r.problem_id)} />
+        <DiagnosisBoard rows={rows} onOpen={setOpenRow} />
       )}
 
-      <DossierModal problemId={openId} onClose={() => setOpenId(null)} />
+      <DossierModal row={openRow} onClose={() => setOpenRow(null)} />
     </main>
   );
 }

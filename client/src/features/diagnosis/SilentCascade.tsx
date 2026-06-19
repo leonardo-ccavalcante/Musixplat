@@ -5,8 +5,14 @@ import type { DiagnosisListRow } from "@shared/contracts_05b";
 function Stat({ n, label, accent }: { n: number; label: string; accent?: boolean }) {
   return (
     <div>
-      <div className={`text-3xl font-semibold tabular-nums ${accent ? "text-mxm-brand" : "text-mxm-content"}`}>{n}</div>
-      <div className="text-xs text-mxm-content-secondary">{label}</div>
+      <div
+        className={`text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-none tracking-tight tabular-nums ${
+          accent ? "text-mxm-brand" : "text-mxm-content"
+        }`}
+      >
+        {n}
+      </div>
+      <div className="mt-1.5 text-xs text-mxm-content-secondary">{label}</div>
     </div>
   );
 }
@@ -20,17 +26,17 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
   return (
     <section
       aria-label="Silent cascade"
-      className="rounded-mxm border border-mxm-brand bg-mxm-bg-elevated p-[clamp(1rem,2.5vw,1.75rem)]"
+      className="rounded-mxm border border-mxm-border bg-mxm-bg-elevated p-[clamp(1.25rem,2.5vw,2rem)]"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold text-mxm-content">The silent cascade</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-mxm-content">The silent cascade</h2>
         {proactive && (
           <span className="rounded-full border border-mxm-brand px-2 py-0.5 text-[11px] font-medium text-mxm-brand">
             caught before a ticket
           </span>
         )}
       </div>
-      <p className="mt-2 max-w-[62ch] text-sm text-mxm-content-secondary">
+      <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-mxm-content-secondary [hyphens:auto] [text-align:justify]">
         {proactive
           ? "The monitor flagged a non-payment before anyone opened a ticket — zooming out reveals who else is hit."
           : "A customer opened a ticket — zooming out reveals who else is hit and never said a word."}
@@ -40,10 +46,10 @@ export function SilentCascade({ row, onOpen }: { row: DiagnosisListRow; onOpen: 
           <Stat n={row.affected} label="affected" />
           <Stat n={row.silent} label="silent · never spoke" accent />
           <div>
-            <div className="text-3xl font-semibold tabular-nums text-mxm-content">
+            <div className="text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-none tracking-tight tabular-nums text-mxm-content">
               R$ {row.revenue_lost != null ? fmtNum(row.revenue_lost) : "—"}
             </div>
-            <div className="text-xs text-mxm-content-secondary">at risk</div>
+            <div className="mt-1.5 text-xs text-mxm-content-secondary">at risk</div>
           </div>
           <Button
             variant="ghost"

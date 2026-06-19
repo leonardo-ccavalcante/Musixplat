@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
+import { ProvenanceLegend } from "@/components/ui/ProvenanceLegend";
 import { trpc } from "@/lib/trpc";
 import { fmtNum } from "@/lib/utils";
+import type { DiagnosisListRow } from "@shared/contracts_05b";
+import { printDossierMemo, mailtoDossier, type DossierData } from "./dossierMemo";
 
-// The 11-field handoff dossier (#8) in display order. The screen shows EVERY field (even when partial),
-// marking the gaps honestly — the gate's job is to block INCOMPLETE handoff, not to hide what it has.
 const FIELD_LABELS: ReadonlyArray<readonly [string, string]> = [
   ["f1_tipo_raiz", "Type & root"],
   ["f2_evidence", "Evidence (issue-tree)"],
@@ -21,16 +24,13 @@ const FIELD_LABELS: ReadonlyArray<readonly [string, string]> = [
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const numOrDash = (v: unknown): string => (typeof v === "number" ? fmtNum(v) : v == null ? "—" : String(v));
 
-// Defensive one-line summary per field — never throws on a malformed/partial payload (§3.10 / §4).
 function summarize(field: string, v: unknown): string {
   try {
     switch (field) {
       case "f1_tipo_raiz":
         return isObj(v) ? `${v.area_type ?? "—"} · ${v.hypothesis_root ?? "—"} (conf ${numOrDash(v.confidence)})` : "—";
-      case "f2_evidence": {
-        const paths = isObj(v) && Array.isArray(v.paths) ? v.paths.length : 0;
-        return `${paths} ranked path(s)`;
-      }
+      case "f2_evidence":
+        return `${isObj(v) && Array.isArray(v.paths) ? v.paths.length : 0} ranked path(s)`;
       case "f3_who":
         return Array.isArray(v) ? `${v.length} affected · ${v.filter((a) => isObj(a) && a.silent).length} silent` : "—";
       case "f4_where_concentrated":
@@ -41,8 +41,6 @@ function summarize(field: string, v: unknown): string {
           : "—";
       case "f6_recurrence":
         return isObj(v) ? `${numOrDash(v.frequency)}× since ${String(v.first_seen_ts ?? "").slice(0, 10) || "—"}` : "—";
-      case "f7_similar_cases":
-        return Array.isArray(v) ? `${v.length} similar case(s)` : "—";
       case "f8_auditable_hypothesis":
         return isObj(v) ? `${v.hypothesis_root ?? "—"} (conf ${numOrDash(v.confidence)})` : "—";
       case "f9_suggested_route":
@@ -59,41 +57,130 @@ function summarize(field: string, v: unknown): string {
   }
 }
 
-function DossierBody({ data }: { data: { emitted: boolean; gaps: string[]; fields: Record<string, unknown> | null } }) {
-  const gaps = new Set(data.gaps);
-  const ready = FIELD_LABELS.filter(([f]) => !gaps.has(f)).length;
+// Clickable KB precedent links — the dossier's "similar cases" open the actual case (BR-B3 grounding).
+function SimilarCases({ ids, onOpen }: { ids: unknown; onOpen: (id: string) => void }) {
+  const list = Array.isArray(ids) ? ids.map(String) : [];
+  if (list.length === 0) return <span className="text-mxm-content">—</span>;
+  return (
+    <span className="flex flex-wrap gap-x-2 gap-y-1">
+      {list.map((id) => (
+        <button
+          key={id}
+          onClick={() => onOpen(id)}
+          className="rounded border border-mxm-border px-1.5 text-mxm-brand underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
+        >
+          case {id.slice(0, 8)}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+// In-modal KB case panel — opens when a similar-case link is clicked; Back returns to the dossier.
+function KbCasePanel({ kbCaseId, onBack }: { kbCaseId: string; onBack: () => void }) {
+  const q = trpc.diagnosis.getKnowledgeCase.useQuery({ kbCaseId });
+  const row = (label: string, v: unknown) => (
+    <div className="grid grid-cols-[8rem_1fr] gap-3 py-1.5">
+      <dt className="text-xs text-mxm-content-secondary">{label}</dt>
+      <dd className="break-words text-xs text-mxm-content">{v == null || v === "" ? "—" : String(v)}</dd>
+    </div>
+  );
   return (
     <div className="space-y-3">
-      <div
-        role="status"
-        className={`rounded-mxm border px-3 py-2 text-sm ${
-          data.emitted ? "border-mxm-green text-mxm-green" : "border-mxm-amber text-mxm-amber"
-        }`}
-      >
-        {data.emitted
-          ? "✓ Complete — ready to hand off to the next feature (11/11)"
-          : `Partial — ${ready}/11 ready · won't emit until complete (gap: ${data.gaps.join(", ")})`}
+      <button onClick={onBack} className="text-xs text-mxm-brand hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand">
+        ← Back to dossier
+      </button>
+      <h3 className="text-sm font-semibold text-mxm-content">Knowledge case · {kbCaseId.slice(0, 8)}</h3>
+      {q.isLoading ? (
+        <p role="status" aria-live="polite" className="text-sm text-mxm-content-secondary">Loading case…</p>
+      ) : q.isError ? (
+        <p role="alert" className="text-sm text-mxm-red">Failed to load case</p>
+      ) : q.data ? (
+        <dl className="divide-y divide-mxm-border">
+          {row("Area", q.data.area_type)}
+          {row("Pattern", q.data.pattern)}
+          {row("Outcome", q.data.outcome)}
+          {row("Resolution", q.data.resolution)}
+          {row("Not-resolved reason", q.data.not_resolved_reason)}
+          {row("Historical probability", q.data.probability)}
+          {row("Discarded branches", Array.isArray(q.data.discarded_branches) ? q.data.discarded_branches.length + " tried" : "—")}
+          {row("Recorded", String(q.data.created_at).slice(0, 10))}
+        </dl>
+      ) : null}
+    </div>
+  );
+}
+
+function DossierBody({ row, data }: { row: DiagnosisListRow; data: DossierData }) {
+  const [kbCaseId, setKbCaseId] = useState<string | null>(null);
+  const email = trpc.diagnosis.emailDossier.useMutation();
+  const today = new Date().toISOString().slice(0, 10);
+  const gaps = new Set(data.gaps);
+  const ready = FIELD_LABELS.filter(([f]) => !gaps.has(f)).length;
+
+  function onEmail() {
+    const to = window.prompt("Email the dossier to:") ?? "";
+    const fallback = () => {
+      window.location.href = mailtoDossier(row, data, today, to);
+    };
+    if (!to) return fallback();
+    // Try the (stub) server send; it fails-closed to not-delivered ⇒ fall back to the working mailto.
+    email.mutate({ problemId: row.problem_id, to }, { onSuccess: (r) => !r.delivered && fallback(), onError: fallback });
+  }
+
+  if (kbCaseId) return <KbCasePanel kbCaseId={kbCaseId} onBack={() => setKbCaseId(null)} />;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div
+          role="status"
+          className={`flex-1 rounded-mxm border px-3 py-2 text-sm ${
+            data.emitted ? "border-mxm-green text-mxm-green" : "border-mxm-amber text-mxm-amber"
+          }`}
+        >
+          {data.emitted
+            ? "✓ Complete — ready to hand off (11/11)"
+            : `Partial — ${ready}/11 ready · won't emit until complete (gap: ${data.gaps.join(", ")})`}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => printDossierMemo(row, data, today)} title="Open a print-ready memo (Save as PDF)">
+            Download PDF
+          </Button>
+          <Button variant="ghost" onClick={onEmail} aria-busy={email.isPending}>
+            Email
+          </Button>
+        </div>
       </div>
+
       <dl className="divide-y divide-mxm-border">
         {FIELD_LABELS.map(([f, label]) => (
           <div key={f} className="grid grid-cols-[9.5rem_1fr] gap-3 py-2">
             <dt className="text-xs text-mxm-content-secondary">{label}</dt>
             <dd className="break-words text-xs text-mxm-content">
-              {summarize(f, data.fields?.[f])}
-              {gaps.has(f) && <span className="ml-1 text-mxm-amber">· incomplete</span>}
+              {f === "f7_similar_cases" ? (
+                <SimilarCases ids={data.fields?.f7_similar_cases} onOpen={setKbCaseId} />
+              ) : (
+                <>
+                  {summarize(f, data.fields?.[f])}
+                  {gaps.has(f) && <span className="ml-1 text-mxm-amber">· incomplete</span>}
+                </>
+              )}
             </dd>
           </div>
         ))}
       </dl>
+
+      <ProvenanceLegend className="border-t border-mxm-border pt-3" />
     </div>
   );
 }
 
-// US-B6.3.1 — read-only dossier viewer. Opens when problemId is set; tenant + ownership enforced server-side.
-export function DossierModal({ problemId, onClose }: { problemId: string | null; onClose: () => void }) {
-  const q = trpc.diagnosis.getDossier.useQuery({ problemId: problemId ?? "" }, { enabled: !!problemId });
+// US-B6.3.1 — read-only dossier viewer (PDF memo + email + clickable KB precedents + provenance legend).
+export function DossierModal({ row, onClose }: { row: DiagnosisListRow | null; onClose: () => void }) {
+  const q = trpc.diagnosis.getDossier.useQuery({ problemId: row?.problem_id ?? "" }, { enabled: !!row });
   return (
-    <Modal open={!!problemId} onClose={onClose} title="Dossier #8 — handoff">
+    <Modal open={!!row} onClose={onClose} title="Dossier #8 — handoff">
       {q.isLoading ? (
         <p role="status" aria-live="polite" className="text-sm text-mxm-content-secondary">
           Loading dossier…
@@ -102,8 +189,8 @@ export function DossierModal({ problemId, onClose }: { problemId: string | null;
         <p role="alert" className="text-sm text-mxm-red">
           Failed to load dossier
         </p>
-      ) : q.data ? (
-        <DossierBody data={q.data} />
+      ) : q.data && row ? (
+        <DossierBody row={row} data={q.data} />
       ) : null}
     </Modal>
   );

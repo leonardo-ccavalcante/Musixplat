@@ -90,3 +90,26 @@ describe("05B:US-B6.3.1 — diagnosis.getDossier (11-field gate, honest partial,
     await expect(caller("POOL-OTHER").diagnosis.getDossier({ problemId })).rejects.toThrow();
   });
 });
+
+describe("05B getKnowledgeCase + emailDossier (KB precedent read + email stub)", () => {
+  it("getKnowledgeCase opens a precedent; a foreign pool is blocked (BR-B6)", async () => {
+    const r = await pool.query<{ kb_case_id: string }>(`
+      insert into tenant."Knowledge_Case"(tenant_id, area_type, pattern, outcome, resolution, reviewed)
+      values ('POOL-DIAG','finance','payment_not_executed','resolved','gateway retry + reissue', true)
+      returning kb_case_id::text as kb_case_id;`);
+    const id = r.rows[0]!.kb_case_id;
+    const kase = await caller("POOL-DIAG").diagnosis.getKnowledgeCase({ kbCaseId: id });
+    expect(kase.outcome).toBe("resolved");
+    expect(kase.pattern).toBe("payment_not_executed");
+    await expect(caller("POOL-OTHER").diagnosis.getKnowledgeCase({ kbCaseId: id })).rejects.toThrow();
+  });
+
+  it("emailDossier is an honest stub (delivered:false) + enforces ownership", async () => {
+    const problemId = await seedAndDiagnose();
+    const res = await caller("POOL-DIAG").diagnosis.emailDossier({ problemId, to: "ops@example.com" });
+    expect(res.delivered).toBe(false); // fail-closed: no email service ⇒ client uses mailto
+    await expect(
+      caller("POOL-OTHER").diagnosis.emailDossier({ problemId, to: "ops@example.com" }),
+    ).rejects.toThrow();
+  });
+});
