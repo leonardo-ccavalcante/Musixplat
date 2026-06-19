@@ -4,7 +4,13 @@ import { env } from "../_core/env.js";
 // Single pool. RLS Postgres policies are written but deferred (04 §13); the ACTIVE
 // cross-pool enforcement is the server-side tRPC guard, which filters every query by the
 // server-resolved tenant_id (never client-supplied). See queryForTenant.
-export const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 10 });
+// Remote Postgres (Supabase pooler in prod) requires TLS; local docker (127.0.0.1) does not.
+const isLocalDb = /(\/\/|@)(127\.0\.0\.1|localhost)[:/]/.test(env.DATABASE_URL);
+export const pool = new pg.Pool({
+  connectionString: env.DATABASE_URL,
+  max: 10,
+  ssl: isLocalDb ? undefined : { rejectUnauthorized: false },
+});
 
 export type Sql = typeof pool;
 
