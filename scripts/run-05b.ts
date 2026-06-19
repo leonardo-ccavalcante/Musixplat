@@ -85,7 +85,11 @@ async function main(): Promise<void> {
 
   // REACTIVE — a complainant opens a ticket ⇒ reportProblem (real US-B1.1.1 gate + B.1.3 dedup) ⇒ diagnose.
   const caller = appRouter.createCaller(devCtx());
-  const reported = await caller.diagnosis.reportProblem({ restaurantId: "R-PAY-001", criticality: "critical" });
+  const reported = await caller.diagnosis.reportProblem({
+    restaurantId: "R-PAY-001",
+    conversationId: "R-PAY-001:conv1", // the episode that triggered it ⇒ origin = reactive
+    criticality: "critical",
+  });
   const r1 = await runDiagnosis(reported.problem_id, POOL, reasoning);
   console.warn(
     `  reactive  ${reported.problem_id.slice(0, 8)} → area=${r1.areaType} affected=${r1.affected} ` +
