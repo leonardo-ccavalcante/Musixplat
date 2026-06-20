@@ -9,10 +9,10 @@ describe("F-3.1/F-3.2 MoneyPanel", () => {
     expect(screen.getByText(/seal: confirmed/i)).toBeInTheDocument();
   });
 
-  it("renders no-signal as unreliable without a fabricated value", () => {
+  it("renders no-signal as an honest empty state without a fabricated value", () => {
     render(<MoneyPanel summary={{ hasSignal: false, value: null, seal: "unreliable", freshness: null }} />);
 
-    expect(screen.getByText(/no signal: unreliable/i)).toBeInTheDocument();
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText(/no attributable impact yet/i)).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument(); // never a fabricated gross/estimate (§14)
   });
 });
