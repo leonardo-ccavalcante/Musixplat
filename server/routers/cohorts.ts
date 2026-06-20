@@ -85,6 +85,8 @@ export const cohortsRouter = router({
   }),
 
   // Demo operability — clear the business base so the operator can load a fresh dataset live.
+  // INTENTIONALLY global (ALL tenants/pools): this is the operator's "clear entire database" demo-reset
+  // action, a deliberate exception to the per-tenant RLS scoping used everywhere else. Not an oversight.
   // Truncates ONLY business + cohort-result tables; PRESERVES catalog (knobs by name, rule versions,
   // named queries, NBA/intent catalogs) and gov.User — wiping those would break the producers (§3.8).
   // Destructive + demo-scoped: guarded by a confirm dialog client-side; tenantProcedure = authed.

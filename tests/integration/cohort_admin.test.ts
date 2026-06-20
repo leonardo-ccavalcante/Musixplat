@@ -22,6 +22,9 @@ describe("cohorts.clearBusinessData", () => {
     expect(await count(pool, 'tenant."Weekly_Connection"')).toBe(0);
     expect(await count(pool, 'cohort."Cohort"')).toBe(0);
     expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBe(0);
+    expect(await count(pool, 'cohort."Subgroup"')).toBe(0);
+    expect(await count(pool, 'cohort."Prioritized_NBA_Event"')).toBe(0);
+    expect(await count(pool, 'tenant."Conversation_Episode"')).toBe(0);
     expect(await count(pool, 'catalog."Config_Knobs"')).toBeGreaterThan(0);
     expect(await count(pool, 'catalog."Cohort_Rule_Version"')).toBeGreaterThan(0);
     expect(await count(pool, 'gov."User"')).toBeGreaterThan(0);
