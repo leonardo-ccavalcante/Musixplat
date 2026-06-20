@@ -10,6 +10,7 @@ import { TicketsPanel, type IntentCount } from "@/features/cohorts/TicketsPanel"
 import { ChangelogTimeline, type RuleVersion } from "@/features/cohorts/ChangelogTimeline";
 import { SandboxPanel } from "@/features/cohorts/SandboxPanel";
 import { CohortModal } from "@/features/cohorts/CohortModal";
+import { CsvUploadModal } from "@/features/cohorts/CsvUploadModal";
 import type { DeltaRow, CohortCell } from "@shared/contracts";
 
 // Screen 01 — Cohorts Explorer (awareness, DESIGN-STANDARD §0). The HERO is the cohort-health heatmap;
@@ -183,15 +184,7 @@ export function CohortsExplorerPage() {
       )}
 
       <CohortModal cell={selected} onClose={() => setSelected(null)} />
-      {/* Task 8: replace this stub with <CsvUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} /> */}
-      {uploadOpen && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="rounded-mxm bg-mxm-bg-elevated p-6 text-mxm-content">
-            <p>CSV upload — coming in Task 8.</p>
-            <Button type="button" variant="ghost" onClick={() => setUploadOpen(false)} className="mt-4">Close</Button>
-          </div>
-        </div>
-      )}
+      <CsvUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={() => void invalidateAll()} />
     </main>
   );
 }
