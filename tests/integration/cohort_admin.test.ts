@@ -30,3 +30,16 @@ describe("cohorts.clearBusinessData", () => {
     expect(await count(pool, 'gov."User"')).toBeGreaterThan(0);
   }, 60_000);
 });
+
+describe("cohorts.generateExample", () => {
+  it("clears then generates a dimensioned base; Run Flow then ranks (gates pass)", async () => {
+    const g = await caller().cohorts.generateExample({ restaurants: 1500 });
+    expect(g.restaurants).toBe(1500);
+    expect(await count(pool, 'tenant."Restaurant"')).toBe(1500);
+    expect(await count(pool, `tenant."Restaurant" where tenure_months is not null`)).toBe(0); // §14 pre-run
+    const r = await caller().cohorts.run();
+    expect(r.cohorts).toBeGreaterThan(0);
+    const ranked = await count(pool, 'cohort."Cohort_Membership_Snapshot" where percentile_in_cohort is not null');
+    expect(ranked).toBeGreaterThan(0);
+  }, 120_000);
+});

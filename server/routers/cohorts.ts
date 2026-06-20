@@ -83,6 +83,21 @@ export const cohortsRouter = router({
     return { weeks: [w.prevWeek, w.week], cohorts: c[0]?.n ?? 0, memberships: m[0]?.n ?? 0 };
   }),
 
+  // Demo operability — generate a deterministic, gate-passing example base (reuses the seed generator,
+  // DRY). Clears business data first so it's a clean load. restaurants bounded [50, 5000]; default 5000.
+  // det_int ⇒ reproducible; all RESULTS stay NULL until Run Flow (§14). The generated rows are anchored
+  // to a fixed ref date, but the run window derives from the data anyway (so cohortization aligns).
+  generateExample: tenantProcedure
+    .input(z.object({ restaurants: z.number().int().min(50).max(5000).default(5000) }))
+    .mutation(async ({ input }): Promise<{ restaurants: number }> => {
+      await query(`truncate
+        cohort."Prioritized_NBA_Event", cohort."Cohort_Membership_Snapshot", cohort."Subgroup", cohort."Cohort",
+        tenant."Weekly_Connection", tenant."Conversation_Episode", tenant."Order", tenant."Restaurant"
+        restart identity cascade;`);
+      await query(`select public.fn_generate_business_base($1, date '2026-06-17')`, [input.restaurants]);
+      return { restaurants: input.restaurants };
+    }),
+
   // Demo operability — clear the business base so the operator can load a fresh dataset live.
   // INTENTIONALLY global (ALL tenants/pools): this is the operator's "clear entire database" demo-reset
   // action, a deliberate exception to the per-tenant RLS scoping used everywhere else. Not an oversight.
