@@ -113,6 +113,23 @@ from (values
 ) as v(code, standard_knob, verdict_sense, signal_scale, standard_negate)
 where c.code = v.code;
 
+-- 02:DETAIL-A1 — definition fields (playbook = the path; created_at = the day the closed catalog was
+-- defined, mig 20260618). English (§0). Reference data, not a §14 result.
+update catalog."NBA_Catalogo" c set
+  created_at = '2026-06-18'::timestamptz,
+  playbook   = v.playbook
+from (values
+  ('A1','1) Detect a connection drop (connected ÷ committed hours below the minimum). 2) Nudge the restaurant to reconnect during committed hours. 3) Re-check connection next week.'),
+  ('A2','1) Compare the restaurant''s price against same-cohort peers. 2) Propose a price adjustment (propose only). 3) Human decides.'),
+  ('A3','1) Detect low attractiveness driven by price. 2) Propose a promo/bonus. 3) A HUMAN releases the money (financial hard-no, BR-2).'),
+  ('A4','1) Detect low menu quality (photo/description). 2) Open a menu-quality checklist. 3) Re-check.'),
+  ('A5','1) Detect a demand drop in the zone (not the restaurant''s fault). 2) Signal local growth/marketing. 3) Track the trend.'),
+  ('A6','1) Detect high restaurant-side cancellations. 2) Open an ops ticket for the cancel cause. 3) Re-check.'),
+  ('A7','1) Detect a customer-side cancellation pattern (risk/fraud). 2) Escalate to human risk/fraud review (money at stake). 3) Human decides.'),
+  ('A8','No attributable cause — observe. Fail-closed: never invent a cause.')
+) as v(code, playbook)
+where c.code = v.code;
+
 -- ── Catalog: Named_Query defs (deterministic SQL, never LLM, 04 §2). ──
 insert into catalog."Named_Query"(def_version, formula, periodicity, group_by, source_ref, unit) values
   ('nq_rank_recurrence_v1',

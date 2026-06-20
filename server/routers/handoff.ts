@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
-import { handoffInput } from "@shared/contracts";
+import { handoffInput } from "../../shared/contracts.js";
 import { query } from "../db/pool.js";
 
 interface EventRow {

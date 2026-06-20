@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
@@ -53,6 +54,14 @@ export function NbaModal({
             <p className="text-xs uppercase tracking-wide text-mxm-content-tertiary">Recommended action</p>
             <p className="mt-0.5 font-medium text-mxm-content">{row.action_type ?? "—"}</p>
             <p className="text-xs text-mxm-content-secondary">cohort {row.cohort_id}</p>
+            {row.action_type && (
+              <Link
+                href={`/cockpit/action/${row.action_type}`}
+                className="mt-1 inline-block text-xs text-mxm-brand hover:underline"
+              >
+                See this action&apos;s track record →
+              </Link>
+            )}
           </div>
 
           <div className="rounded-mxm border border-mxm-border p-3">

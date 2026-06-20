@@ -95,6 +95,22 @@ describe("02:1A — NBA engine proposes a lever (deterministic gap-rank) + fires
     expect(m[0]?.effective_level).toBe("LOW");
   });
 
+  it("e6: stamps the diagnosis evidence (verdict + n_min_ok + k_anon_ok) on the proposal [V]", async () => {
+    const rid = await pick("m_connection < 0.50"); // a real breach exists
+    const cohort = await cohortOf(rid);
+    const res = await proposeNba({ restaurantId: rid, cohortId: cohort, week: W1 });
+    expect(res.levered).toBe(true);
+
+    const p = await rows<{ diagnosis_verdict: string | null; n_min_ok: boolean | null; k_anon_ok: boolean | null }>(
+      pool,
+      `select diagnosis_verdict, n_min_ok, k_anon_ok from gov."NBA_Proposal" where nba_id=$1`,
+      [res.nbaId],
+    );
+    expect(["below", "above"]).toContain(p[0]?.diagnosis_verdict); // a chosen lever is a breach
+    expect(p[0]?.n_min_ok).not.toBeNull(); // evidence booleans are stamped from fn_nba_test (not invented)
+    expect(p[0]?.k_anon_ok).not.toBeNull();
+  });
+
   it("e2: deterministic — same brutos ⇒ same proposed action_type", async () => {
     const rid = await pick("m_connection < 0.50");
     const cohort = await cohortOf(rid);

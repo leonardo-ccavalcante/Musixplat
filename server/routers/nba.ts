@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
-import { nbaTestInput, nbaTestAllInput, type nbaVerdict } from "../../shared/contracts.js";
+import { nbaTestInput, nbaTestAllInput, nbaDetailInput, type nbaVerdict } from "../../shared/contracts.js";
 
 // 03:NBA-TEST exposure — read-only verdicts for the cockpit / AGENTE. The measurement is SQL
 // (cohort.fn_nba_test, §14); this wrapper only resolves tenant_id server-side and GATES cross-tenant
@@ -27,5 +28,36 @@ export const nbaRouter = router({
        where exists (select 1 from tenant."Restaurant" r where r.restaurant_id=$1 and r.tenant_id=$3)`,
       [input.restaurant_id, input.week, ctx.tenantId],
     );
+  }),
+
+  // 02:DETAIL-C — the action-detail surface. Auth-gated (tenantProcedure), but the history is COMPANY-WIDE
+  // (no tenant filter): action reliability is validated knowledge about the policy, flows across pools
+  // (04 §7/§8; Leo 2026-06-19). Only aggregates are exposed (no per-restaurant raw) ⇒ no k-anon frontier.
+  detail: tenantProcedure.input(nbaDetailInput).query(async ({ input }) => {
+    const def = await query<{
+      code: string; label: string; funnel_stage: string; financial_class: string;
+      root_cause_signal: string | null; threshold_knob: string | null; action_hint: string;
+      playbook: string | null; created_at: string | null; current_version: string | null;
+    }>(
+      `select c.code, c.label, c.funnel_stage, c.financial_class::text as financial_class,
+              c.root_cause_signal, c.threshold_knob, c.action_hint, c.playbook,
+              c.created_at::text as created_at,
+              (select value from catalog."Config_Knobs" where key='cohort_rule_version_current') as current_version
+       from catalog."NBA_Catalogo" c where c.code=$1`,
+      [input.action_code],
+    );
+    if (!def[0]) throw new TRPCError({ code: "NOT_FOUND", message: "unknown action_code" });
+
+    const hist = await query<{
+      action_code: string; run_count: number; last_run_at: string | null;
+      solid_count: number; unconfirmed_count: number; no_data_count: number; acerto_rate: number | null;
+    }>(
+      `select action_code, run_count::int as run_count, last_run_at::text as last_run_at,
+              solid_count::int as solid_count, unconfirmed_count::int as unconfirmed_count,
+              no_data_count::int as no_data_count, acerto_rate::float8 as acerto_rate
+       from cohort.fn_nba_action_history($1)`,
+      [input.action_code],
+    );
+    return { definition: def[0], history: hist[0]! };
   }),
 });

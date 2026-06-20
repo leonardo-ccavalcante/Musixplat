@@ -101,18 +101,29 @@ export async function proposeNba(
         gap: sel.lever.gap,
       })
     : null;
-  // root_cause is templated interpretation ⇒ [C]. before_after_expected currently carries ONLY the
-  // measured diagnosis snapshot (dimension/measured/standard/gap straight from fn_nba_test) ⇒ [V];
-  // tagging it [C] would misreport measured data as projection (§3.10). The projected "after" is a
-  // later piece — when added, that portion ascends to [C].
-  const provenance = JSON.stringify({ root_cause: "[C]", before_after_expected: "[V]" });
+  // root_cause is templated interpretation ⇒ [C]. before_after_expected carries the measured diagnosis
+  // snapshot (dimension/measured/standard/gap straight from fn_nba_test) ⇒ [V] (tagging it [C] would
+  // misreport measured data as projection, §3.10; the projected "after" is a later piece, ascends to [C]
+  // then). diagnosis_verdict/n_min_ok/k_anon_ok also come straight from fn_nba_test ⇒ [V] (02:DETAIL-A2).
+  const provenance = JSON.stringify({
+    root_cause: "[C]",
+    before_after_expected: "[V]",
+    diagnosis_verdict: "[V]",
+    n_min_ok: "[V]",
+    k_anon_ok: "[V]",
+  });
 
   const ins = await q<{ nba_id: string }>(
     `insert into gov."NBA_Proposal"(action_type, cohort_id, root_cause, nba_request,
-        before_after_expected, financial_class, cohort_rule_version, provenance_by_field)
-     values ($1,$2,$3,$4::public.autonomy_level,$5::jsonb,$6::public.financial_class,$7,$8::jsonb)
+        before_after_expected, financial_class, cohort_rule_version, provenance_by_field,
+        diagnosis_verdict, n_min_ok, k_anon_ok)
+     values ($1,$2,$3,$4::public.autonomy_level,$5::jsonb,$6::public.financial_class,$7,$8::jsonb,$9,$10,$11)
      returning nba_id`,
-    [code, cohortId, sel.rootCause, cat.default_nba_request, beforeAfter, cat.financial_class, version, provenance],
+    [
+      code, cohortId, sel.rootCause, cat.default_nba_request, beforeAfter, cat.financial_class, version, provenance,
+      // no lever (A8) ⇒ no_data + null evidence (fail-closed §14 — never a fabricated boolean)
+      sel.lever?.verdict ?? "no_data", sel.lever?.n_min_ok ?? null, sel.lever?.k_anon_ok ?? null,
+    ],
   );
   const nbaId = ins[0]!.nba_id;
 

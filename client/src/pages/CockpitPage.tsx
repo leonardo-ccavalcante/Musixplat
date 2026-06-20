@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CockpitBoard } from "@/features/cockpit/CockpitBoard";
 import { NbaModal } from "@/features/cockpit/NbaModal";
+import { useDevLogin } from "@/features/cockpit/useDevLogin";
 import { type RowAction, type RowState } from "@/features/cockpit/CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
@@ -10,32 +11,9 @@ import type { NbaCockpitRow } from "@shared/contracts";
 // AUTO rows; the human releases/pauses the rest (02:1C), and every decision is traced. dev-login mints the
 // POOL-001 operator session (stands in for Manus OAuth locally); tenant_id is resolved server-side.
 export function CockpitPage() {
-  const [ready, setReady] = useState(false);
+  const ready = useDevLogin();
   const [openNba, setOpenNba] = useState<NbaCockpitRow | null>(null);
   const [actionState, setActionState] = useState<Record<string, RowState | undefined>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    async function login(attempt = 0): Promise<void> {
-      try {
-        const r = await fetch("/auth/dev-login", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ user_id: "U-OP-001" }),
-        });
-        if (!r.ok) throw new Error(String(r.status));
-        if (!cancelled) setReady(true);
-      } catch {
-        if (!cancelled && attempt < 15) setTimeout(() => void login(attempt + 1), 500);
-        else if (!cancelled) setReady(true);
-      }
-    }
-    void login();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const utils = trpc.useUtils();
   const list = trpc.cockpit.list.useQuery(undefined, { enabled: ready });
