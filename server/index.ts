@@ -11,9 +11,9 @@ import { query } from "./db/pool.js";
 assertProdSecrets();
 
 const app = express();
-// Knowledge-base uploads send the file as base64 inside the tRPC JSON envelope; base64 inflates ~37%.
-// The Express default (100 kB) rejects any real PDF with 413 before it reaches the parser, so lift the
-// ceiling to a sane document size. Oversized files still fail closed (413) — never a silent truncation.
+// 25mb body limit (default is 100kb): the cohort CSV onboarding uploads a base64-encoded CSV that can
+// reach a few MB for a full base (~10k rows ≈ 1.5MB base64). Without this the upload 413s and the client
+// gets an HTML error page ("Unexpected token '<'") instead of a tRPC response.
 app.use(express.json({ limit: "25mb" }));
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));

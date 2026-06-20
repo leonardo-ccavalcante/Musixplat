@@ -1,19 +1,22 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CohortMatrix } from "@/features/cohorts/CohortMatrix";
-import { DeltaPanel } from "@/features/cohorts/DeltaPanel";
-import { TopVsBase, type Baseline } from "@/features/cohorts/TopVsBase";
+import { OpportunitiesPanel } from "@/features/cohorts/OpportunitiesPanel";
 import { MoneyPanel, type MoneySummary } from "@/features/cohorts/MoneyPanel";
 import { TicketsPanel, type IntentCount } from "@/features/cohorts/TicketsPanel";
 import { ChangelogTimeline, type RuleVersion } from "@/features/cohorts/ChangelogTimeline";
 import { SandboxPanel } from "@/features/cohorts/SandboxPanel";
 import { CohortModal } from "@/features/cohorts/CohortModal";
+import { CsvUploadModal } from "@/features/cohorts/CsvUploadModal";
 import type { DeltaRow, CohortCell } from "@shared/contracts";
 
-// Screen 01 — Cohorts Explorer. Composes the slice-01 panels over P01 results (read-only),
-// the F-5.2 handoff (in the drill modal), and the EPIC-6 sandbox.
+// Screen 01 — Cohorts Explorer (awareness, DESIGN-STANDARD §0). The HERO is the cohort-health heatmap;
+// "where to act" and the supporting signals recede to a secondary band; rule-version history + the
+// sandbox live behind an Advanced disclosure (§2). Read-only over P01 results; the drill modal carries
+// the F-5.2 handoff. Numbers are PRODUCED server-side — the UI only triggers + reads (§14).
 export function CohortsExplorerPage() {
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<CohortCell | null>(null);
@@ -45,27 +48,55 @@ export function CohortsExplorerPage() {
 
   const utils = trpc.useUtils();
   const run = trpc.cohorts.run.useMutation();
-  const [runMsg, setRunMsg] = useState<{ status: "idle" | "running" | "done" | "error"; text?: string }>({
-    status: "idle",
-  });
+  const clearDb = trpc.cohorts.clearBusinessData.useMutation();
+  const genExample = trpc.cohorts.generateExample.useMutation();
+  const [runMsg, setRunMsg] = useState<{ status: "idle" | "running" | "done" | "error"; text?: string }>({ status: "idle" });
+  const [uploadOpen, setUploadOpen] = useState(false);
   const running = runMsg.status === "running";
 
-  // 01 operability — drive the P01 batch from the screen (no `pnpm db:p01`). Numbers are PRODUCED server-side
-  // by the producers; the UI only triggers + reads. Fail-closed: a failure surfaces honestly, never green-fake.
+  async function invalidateAll(): Promise<void> {
+    await Promise.all([
+      utils.cohorts.list.invalidate(),
+      utils.cohorts.deltas.invalidate(),
+      utils.cohorts.intentCounts.invalidate(),
+      utils.cohorts.changelog.invalidate(),
+      utils.money.summary.invalidate(),
+    ]);
+  }
+
+  // 01 operability — drive the P01 batch from the screen. Numbers are PRODUCED by the producers; the UI
+  // only triggers + reads. Fail-closed: a failure surfaces honestly, never green-fake.
   async function runFlow(): Promise<void> {
     setRunMsg({ status: "running" });
     try {
       const r = await run.mutateAsync();
-      await Promise.all([
-        utils.cohorts.list.invalidate(),
-        utils.cohorts.deltas.invalidate(),
-        utils.cohorts.intentCounts.invalidate(),
-        utils.cohorts.changelog.invalidate(),
-        utils.money.summary.invalidate(),
-      ]);
+      await invalidateAll();
       setRunMsg({ status: "done", text: `Computed · ${r.cohorts} cohorts · ${r.memberships} memberships · weeks ${r.weeks.join(", ")}` });
     } catch (e) {
       setRunMsg({ status: "error", text: e instanceof Error ? e.message : "P01 run failed (fail-closed)" });
+    }
+  }
+
+  async function onClear(): Promise<void> {
+    if (!window.confirm("Clear ALL business data (restaurants, orders, cohorts)? Catalog/config is kept.")) return;
+    setRunMsg({ status: "running" });
+    try {
+      await clearDb.mutateAsync();
+      await invalidateAll();
+      setRunMsg({ status: "done", text: "Business data cleared — upload a CSV or generate an example base." });
+    } catch (e) {
+      setRunMsg({ status: "error", text: e instanceof Error ? e.message : "Clear failed" });
+    }
+  }
+
+  async function onGenerate(): Promise<void> {
+    setRunMsg({ status: "running" });
+    try {
+      const g = await genExample.mutateAsync({ restaurants: 5000 });
+      await invalidateAll();
+      setRunMsg({ status: "done", text: `Example base generated · ${g.restaurants} restaurants. Now press Run flow.` });
+    } catch (e) {
+      setRunMsg({ status: "error", text: e instanceof Error ? e.message : "Generate failed" });
     }
   }
 
@@ -74,27 +105,32 @@ export function CohortsExplorerPage() {
   const money = trpc.money.summary.useQuery(undefined, { enabled: ready });
   const tickets = trpc.cohorts.intentCounts.useQuery(undefined, { enabled: ready });
   const changelog = trpc.cohorts.changelog.useQuery(undefined, { enabled: ready });
-  const compare = trpc.cohorts.compare.useQuery(
-    { cohort_id: selected?.cohort_id ?? "" },
-    { enabled: ready && !!selected },
-  );
+
+  const deltaRows = (deltas.data ?? []) as DeltaRow[];
+  const cohortCells = (cells.data ?? []) as CohortCell[];
 
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">
       <header className="mb-6">
         <h1 className="text-xl font-semibold text-mxm-content">Cohorts Explorer</h1>
         <p className="text-sm text-mxm-content-secondary">
-          Top-vs-base comparison, prioritized deltas, and handoff to NBA.
+          How your cohorts are doing, where the opportunities are, and how to act.
         </p>
         {ready && (
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={() => void runFlow()} disabled={running} className="text-mxm-content-inverted">
+            <Button type="button" onClick={() => void runFlow()} disabled={running} variant="ghost">
               {running ? "Running P01…" : "Run flow"}
             </Button>
-            <span
-              aria-live="polite"
-              className={runMsg.status === "error" ? "text-sm text-mxm-red" : "text-sm text-mxm-content-secondary"}
-            >
+            <Button type="button" variant="primary" onClick={() => void onGenerate()} disabled={running}>
+              Generate example base
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setUploadOpen(true)} disabled={running}>
+              Upload CSV
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void onClear()} disabled={running} className="text-mxm-red">
+              Clear database
+            </Button>
+            <span aria-live="polite" className={runMsg.status === "error" ? "text-sm text-mxm-red" : "text-sm text-mxm-content-secondary"}>
               {runMsg.status === "running" && "Computing cohorts → ranking → deltas…"}
               {runMsg.status === "done" && runMsg.text}
               {runMsg.status === "error" && `Fail-closed: ${runMsg.text}`}
@@ -106,47 +142,49 @@ export function CohortsExplorerPage() {
       {!ready ? (
         <LoadingState label="Signing in…" />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="lg:col-span-2">
-            {cells.isLoading ? (
+        <div className="space-y-6">
+          {/* HERO — cohort-health heatmap */}
+          {cells.isLoading ? (
+            <LoadingState />
+          ) : cells.isError ? (
+            <ErrorState />
+          ) : (
+            <CohortMatrix cells={cohortCells} deltas={deltaRows} onOpen={setSelected} />
+          )}
+
+          {/* SECONDARY — where to act + supporting signals */}
+          <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+            {deltas.isLoading ? (
               <LoadingState />
-            ) : cells.isError ? (
-              <ErrorState />
             ) : (
-              <CohortMatrix cells={(cells.data ?? []) as CohortCell[]} onOpen={setSelected} />
+              <OpportunitiesPanel deltas={deltaRows} cells={cohortCells} onOpen={setSelected} />
             )}
+            <div className="space-y-4">
+              {money.isLoading ? (
+                <LoadingState />
+              ) : (
+                <MoneyPanel summary={(money.data ?? { hasSignal: false, value: null, seal: "unreliable", freshness: null }) as MoneySummary} />
+              )}
+              {tickets.isLoading ? <LoadingState /> : <TicketsPanel counts={(tickets.data ?? []) as IntentCount[]} />}
+            </div>
           </div>
 
-          {deltas.isLoading ? <LoadingState /> : <DeltaPanel rows={(deltas.data ?? []) as DeltaRow[]} />}
-
-          <TopVsBase
-            baseline={(compare.data?.baseline ?? null) as Baseline}
-            suppressed={compare.data?.suppressed ?? false}
-          />
-
-          {money.isLoading ? (
-            <LoadingState />
-          ) : (
-            <MoneyPanel summary={(money.data ?? { hasSignal: false, value: null, seal: "unreliable", freshness: null }) as MoneySummary} />
-          )}
-
-          {tickets.isLoading ? (
-            <LoadingState />
-          ) : (
-            <TicketsPanel counts={(tickets.data ?? []) as IntentCount[]} />
-          )}
-
-          {changelog.isLoading ? (
-            <LoadingState />
-          ) : (
-            <ChangelogTimeline versions={(changelog.data ?? []) as RuleVersion[]} />
-          )}
-
-          <SandboxPanel />
+          {/* ADVANCED — summoned (rule versions + sandbox) */}
+          <Disclosure title="Advanced — rule versions & sandbox">
+            <div className="grid gap-4 lg:grid-cols-2">
+              {changelog.isLoading ? (
+                <LoadingState />
+              ) : (
+                <ChangelogTimeline versions={(changelog.data ?? []) as RuleVersion[]} />
+              )}
+              <SandboxPanel />
+            </div>
+          </Disclosure>
         </div>
       )}
 
       <CohortModal cell={selected} onClose={() => setSelected(null)} />
+      <CsvUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={() => void invalidateAll()} />
     </main>
   );
 }

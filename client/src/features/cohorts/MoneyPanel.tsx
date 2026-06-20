@@ -29,8 +29,10 @@ export function MoneyPanel({ summary }: { summary: MoneySummary }) {
       ) : (
         <div>
           <p className="text-2xl text-mxm-content-tertiary">—</p>
-          <p className={`text-xs ${SEAL_CLS[summary.seal]}`} role="status">
-            no signal: {summary.seal} (no gross/estimate shown)
+          {/* honest empty (§4): name the cause, don't read as broken. Only attributable [V] impact shows;
+              a provisional capacity projection ([C]) is never rendered as a money number (§3.3/§14). */}
+          <p className="text-xs text-mxm-content-secondary" role="status">
+            No attributable impact yet — shown only once outcomes are attributed, never a provisional estimate.
           </p>
         </div>
       )}

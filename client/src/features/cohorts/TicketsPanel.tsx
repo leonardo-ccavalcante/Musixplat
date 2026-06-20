@@ -57,7 +57,7 @@ export function TicketsPanel({ counts }: { counts: IntentCount[] }) {
               ariaLabel="Filter by intent"
             />
           </div>
-          <div className="space-y-2">
+          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
             {visible.map((g, i) => (
               <Disclosure key={`${g.intent}|${visible.length}`} title={g.intent} count={g.total} defaultOpen={i === 0}>
                 <table className="w-full text-sm">

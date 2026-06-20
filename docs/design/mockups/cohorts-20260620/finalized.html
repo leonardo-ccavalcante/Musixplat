@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cohorts Explorer — redesign mockup</title>
+<style>
+  /* ---- Brand tokens (verbatim from client/src/index.css, dark-only) ---- */
+  :root{
+    --mxm-backgroundPrimary:#131313;
+    --mxm-backgroundPrimaryElevated:#1f1f1f;
+    --mxm-backgroundSecondary:#343434;
+    --mxm-contentPrimary:#ffffff;
+    --mxm-contentSecondary:#bdbdbd;
+    --mxm-contentTertiary:#9e9e9e;
+    --mxm-paletteBrand100:#fc532e;     /* coral — ONLY the opportunity marker / drill commit */
+    --mxm-paletteGreen100:#00cc99;
+    --mxm-systemRed100:#f54b40;        /* suppressed (privacy) */
+    --mxm-systemGreen100:#4caf50;      /* ok */
+    --mxm-systemAmber100:#f0a83b;      /* collapsed (too few) */
+    --mxm-borderPrimary:#343434;
+    --mxm-radius:12px;
+
+    --space-gutter:clamp(1rem,2vw,2rem);
+    --space-section:clamp(1.75rem,3.5vw,3rem);
+    --dur-micro:80ms; --dur-short:160ms; --dur-base:240ms;
+    --ease-out:cubic-bezier(.2,.7,.3,1); --ease-spring:cubic-bezier(.2,1.3,.4,1);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--mxm-backgroundPrimary);color:var(--mxm-contentPrimary)}
+  body{
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:clamp(.875rem,.8rem + .4vw,1rem);line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .tabnum{font-variant-numeric:tabular-nums}
+  h1,h2,h3{margin:0;font-weight:600;line-height:1.2}
+  button{font:inherit;color:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--mxm-paletteBrand100);outline-offset:2px;border-radius:6px}
+
+  .wrap{max-inline-size:1200px;margin-inline:auto;padding:var(--space-gutter)}
+
+  /* ---- Header (operability chrome, quiet — not the hero) ---- */
+  .topbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem;justify-content:space-between;
+    padding-block-end:1rem;border-block-end:1px solid var(--mxm-borderPrimary)}
+  .topbar h1{font-size:clamp(1.15rem,1rem + .8vw,1.5rem)}
+  .topbar p{margin:.25rem 0 0;color:var(--mxm-contentSecondary);font-size:.875rem}
+  .run{display:flex;align-items:center;gap:.75rem}
+  .btn-ghost{background:transparent;border:1px solid var(--mxm-borderPrimary);
+    color:var(--mxm-contentSecondary);padding:.5rem .9rem;border-radius:10px;
+    min-block-size:36px;transition:background var(--dur-short) var(--ease-out),border-color var(--dur-short)}
+  .btn-ghost:hover{background:rgba(255,255,255,.05);border-color:var(--mxm-backgroundSecondary)}
+  .run-status{color:var(--mxm-contentTertiary);font-size:.8125rem}
+  .run-status .dot{display:inline-block;inline-size:7px;block-size:7px;border-radius:50%;
+    background:var(--mxm-systemGreen100);margin-inline-end:.4rem;vertical-align:middle}
+
+  /* ===== HERO — the heatmap (dominant) ===== */
+  .hero{margin-block-start:var(--space-section)}
+  .hero-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.75rem 1.25rem;margin-block-end:1rem}
+  .hero-head h2{font-size:clamp(1.05rem,.95rem + .6vw,1.25rem)}
+  .hero-head .sub{color:var(--mxm-contentSecondary);font-size:.875rem}
+
+  /* status filter chips (quiet) */
+  .chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-inline-start:auto}
+  .chip{display:inline-flex;align-items:center;gap:.4rem;padding:.32rem .7rem;border-radius:999px;
+    border:1px solid var(--mxm-borderPrimary);background:transparent;color:var(--mxm-contentSecondary);
+    font-size:.78rem;min-block-size:28px;transition:background var(--dur-short),border-color var(--dur-short)}
+  .chip:hover{background:rgba(255,255,255,.05)}
+  .chip[aria-pressed="true"]{border-color:var(--mxm-contentTertiary);color:var(--mxm-contentPrimary);background:rgba(255,255,255,.06)}
+  .chip .c-dot{inline-size:8px;block-size:8px;border-radius:2px}
+  .chip .c-n{color:var(--mxm-contentTertiary);font-variant-numeric:tabular-nums}
+
+  /* legend (color + icon + text — a11y, never color-only) */
+  .legend{display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;margin-block:.25rem 1.25rem;font-size:.78rem;color:var(--mxm-contentTertiary)}
+  .legend span{display:inline-flex;align-items:center;gap:.4rem}
+  .lg-ico{font-size:.8rem;line-height:1}
+
+  /* tier blocks */
+  .tier{margin-block-end:1.75rem}
+  .tier-head{display:flex;align-items:center;gap:.6rem;margin-block-end:.6rem}
+  .tier-head .name{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--mxm-contentTertiary)}
+  .tier-head .count{font-size:.72rem;color:var(--mxm-contentTertiary);font-variant-numeric:tabular-nums}
+  .tier-head .rule{flex:1;block-size:1px;background:var(--mxm-borderPrimary)}
+
+  /* the matrix grid: corner + zone columns, cuisine rows */
+  .heatmap{display:grid;grid-template-columns:minmax(58px,auto) repeat(5,minmax(92px,1fr));gap:6px}
+  .hm-corner{}
+  .hm-colhead{font-size:.72rem;color:var(--mxm-contentTertiary);text-align:center;padding-block-end:.15rem;
+    align-self:end;text-transform:capitalize}
+  .hm-rowhead{font-size:.78rem;color:var(--mxm-contentSecondary);align-self:center;text-align:end;
+    padding-inline-end:.5rem;text-transform:capitalize;white-space:nowrap}
+
+  .cell{position:relative;border:1px solid var(--mxm-borderPrimary);border-radius:10px;
+    padding:.5rem .55rem;text-align:start;background:var(--mxm-backgroundPrimaryElevated);min-block-size:64px;
+    display:flex;flex-direction:column;gap:.15rem;transition:transform var(--dur-short) var(--ease-out),background var(--dur-short);
+    animation:cellIn var(--dur-base) var(--ease-out) both}
+  .cell:hover{background:#252525;transform:translateY(-1px)}
+  .cell .ctx{display:none;font-size:.68rem;color:var(--mxm-contentTertiary);text-transform:capitalize} /* mobile only */
+  .cell .stat{display:flex;align-items:center;gap:.35rem;font-size:.78rem;font-weight:600}
+  .cell .stat .ico{font-size:.8rem;line-height:1}
+  .cell .n{font-size:.72rem;color:var(--mxm-contentTertiary);font-variant-numeric:tabular-nums}
+  .cell .fresh{display:inline-flex;align-items:center;gap:.3rem;font-size:.66rem;color:var(--mxm-contentTertiary)}
+  .cell .fresh .fdot{inline-size:6px;block-size:6px;border-radius:50%;background:var(--mxm-systemGreen100)}
+  .cell.stale .fresh .fdot{background:var(--mxm-systemAmber100)}
+
+  /* status fills (color + icon + text together) */
+  .s-ok{--st:var(--mxm-systemGreen100)}
+  .s-collapsed{--st:var(--mxm-systemAmber100)}
+  .s-suppressed{--st:var(--mxm-systemRed100)}
+  .s-pending{--st:var(--mxm-contentTertiary)}
+  .cell.s-ok,.cell.s-collapsed,.cell.s-suppressed{background:color-mix(in srgb,var(--st) 9%,var(--mxm-backgroundPrimaryElevated));
+    border-color:color-mix(in srgb,var(--st) 28%,var(--mxm-borderPrimary))}
+  .cell .stat .ico,.cell.s-ok .stat,.cell.s-collapsed .stat,.cell.s-suppressed .stat{color:var(--st)}
+  .cell.s-pending{opacity:.72;cursor:default}
+  .cell.s-pending:hover{transform:none;background:var(--mxm-backgroundPrimaryElevated)}
+
+  /* empty intersection — faint, distinct from pending */
+  .hm-empty{border:1px dashed color-mix(in srgb,var(--mxm-borderPrimary) 70%,transparent);
+    border-radius:10px;min-block-size:64px;display:grid;place-items:center;color:#3a3a3a;font-size:1rem}
+
+  /* opportunity overlay — the ONLY coral on the resting screen (= where to act) */
+  .cell.opp{border-color:color-mix(in srgb,var(--mxm-paletteBrand100) 55%,var(--mxm-borderPrimary))}
+  .cell .notch{position:absolute;inset-block-start:0;inset-inline-end:0;inline-size:0;block-size:0;
+    border-block-start:18px solid var(--mxm-paletteBrand100);border-inline-start:18px solid transparent;
+    border-start-end-radius:9px}
+  .cell .gap{align-self:flex-start;margin-block-start:.1rem;font-size:.7rem;font-weight:700;color:var(--mxm-paletteBrand100);
+    border:1px solid color-mix(in srgb,var(--mxm-paletteBrand100) 45%,transparent);border-radius:6px;padding:.02rem .3rem;
+    font-variant-numeric:tabular-nums}
+
+  @keyframes cellIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* ===== SECONDARY band — demoted (base surface, muted, smaller) ===== */
+  .secondary{margin-block-start:var(--space-section);display:grid;gap:1rem;
+    grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+  .sec-card{border:1px solid var(--mxm-borderPrimary);border-radius:var(--mxm-radius);padding:1rem 1.1rem;background:transparent}
+  .sec-card h3{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mxm-contentTertiary);margin-block-end:.75rem}
+
+  .opp-list{display:flex;flex-direction:column}
+  .opp-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.6rem .8rem;
+    padding:.6rem 0;border-block-end:1px solid var(--mxm-borderPrimary);text-align:start;background:transparent;width:100%}
+  .opp-row:last-child{border-block-end:0}
+  .opp-row:hover{background:rgba(255,255,255,.04)}
+  .opp-rank{inline-size:20px;block-size:20px;border-radius:6px;display:grid;place-items:center;
+    font-size:.68rem;color:var(--mxm-contentTertiary);border:1px solid var(--mxm-borderPrimary);font-variant-numeric:tabular-nums}
+  .opp-main{min-inline-size:0}
+  .opp-main .who{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .opp-main .who .rest{color:var(--mxm-contentSecondary);font-weight:400}
+  .opp-why{font-size:.76rem;color:var(--mxm-contentTertiary)}
+  .opp-gap{font-size:.8rem;font-weight:700;color:var(--mxm-paletteBrand100);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .opp-gap small{display:block;font-weight:400;color:var(--mxm-contentTertiary);font-size:.62rem;text-align:end}
+
+  .stats{display:flex;flex-direction:column;gap:.9rem}
+  .stat-chip{border:1px solid var(--mxm-borderPrimary);border-radius:10px;padding:.7rem .8rem}
+  .stat-chip .label{font-size:.74rem;color:var(--mxm-contentTertiary);display:flex;justify-content:space-between;gap:.5rem}
+  .stat-chip .val{font-size:1.1rem;font-weight:600;font-variant-numeric:tabular-nums;margin-block-start:.2rem}
+  .seal{font-size:.64rem;padding:.05rem .35rem;border-radius:5px;border:1px solid var(--mxm-borderPrimary);color:var(--mxm-contentTertiary)}
+  .prov{font-size:.64rem;color:var(--mxm-contentTertiary)}
+  .ticket-row{display:flex;justify-content:space-between;font-size:.8rem;padding:.2rem 0;color:var(--mxm-contentSecondary)}
+  .ticket-row .tn{font-variant-numeric:tabular-nums;color:var(--mxm-contentPrimary)}
+
+  /* ===== ADVANCED — summoned disclosure (collapsed at rest) ===== */
+  .advanced{margin-block-start:1.25rem;border-block-start:1px solid var(--mxm-borderPrimary);padding-block-start:1rem}
+  .adv-toggle{display:flex;align-items:center;gap:.5rem;background:transparent;border:0;color:var(--mxm-contentSecondary);
+    font-size:.82rem;padding:.4rem 0}
+  .adv-toggle .caret{transition:transform var(--dur-short) var(--ease-out)}
+  .adv-toggle[aria-expanded="true"] .caret{transform:rotate(90deg)}
+  .adv-body{display:none;gap:1rem;margin-block-start:.9rem;grid-template-columns:1fr 1fr}
+  .adv-body.open{display:grid}
+  .adv-body .sec-card{background:var(--mxm-backgroundPrimaryElevated)}
+  .chip-line{display:flex;gap:.4rem;flex-wrap:wrap;margin-block-start:.4rem}
+  .ver{font-size:.72rem;border:1px solid var(--mxm-borderPrimary);border-radius:6px;padding:.15rem .45rem;color:var(--mxm-contentTertiary)}
+  .ver.active{color:var(--mxm-paletteGreen100);border-color:color-mix(in srgb,var(--mxm-paletteGreen100) 40%,var(--mxm-borderPrimary))}
+
+  /* collapsible tier head */
+  .tier-head{display:flex;inline-size:100%;align-items:center;gap:.6rem;background:transparent;border:0;
+    padding:.35rem 0;cursor:pointer;text-align:start}
+  .tier-head:hover .name{color:var(--mxm-contentSecondary)}
+  .tier-head .tcaret{font-size:.7rem;color:var(--mxm-contentTertiary);transition:transform var(--dur-short) var(--ease-out)}
+  .tier-head[aria-expanded="false"] .tcaret{transform:rotate(-90deg)}
+  .heatmap.collapsed{display:none}
+
+  /* opportunities — show all, grouped by cohort */
+  .opp-more{margin-block-start:.7rem;border-block-start:1px solid var(--mxm-borderPrimary);padding-block-start:.5rem}
+  .opp-more-btn{display:flex;align-items:center;gap:.45rem;background:transparent;border:0;color:var(--mxm-contentSecondary);font-size:.8rem;padding:.35rem 0}
+  .opp-more-btn .caret{transition:transform var(--dur-short) var(--ease-out)}
+  .opp-more-btn[aria-expanded="true"] .caret{transform:rotate(90deg)}
+  .opp-all{display:none;margin-block-start:.4rem}
+  .opp-all.open{display:block}
+  .opp-group{margin-block-start:.7rem}
+  .opp-group:first-child{margin-block-start:0}
+  .opp-group .gh{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;font-size:.74rem;
+    color:var(--mxm-contentSecondary);padding-block-end:.25rem;border-block-end:1px solid var(--mxm-borderPrimary)}
+  .opp-group .gh .gmax{color:var(--mxm-paletteBrand100);font-weight:700;font-variant-numeric:tabular-nums}
+  .opp-sub{display:grid;grid-template-columns:1fr auto;gap:.3rem .8rem;align-items:center;padding:.32rem .2rem;
+    font-size:.78rem;color:var(--mxm-contentTertiary);inline-size:100%;background:transparent;border:0;text-align:start;border-radius:6px}
+  .opp-sub:hover{background:rgba(255,255,255,.04)}
+  .opp-sub .sg{color:var(--mxm-paletteBrand100);font-weight:600;font-variant-numeric:tabular-nums}
+
+  /* NBA preview (Cockpit destination) */
+  .nba-sect{border:1px solid var(--mxm-borderPrimary);border-radius:8px;padding:.6rem .7rem;margin-block-start:.7rem}
+  .nba-sect .lab{font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mxm-contentTertiary)}
+  .nba-sect .val{margin-block-start:.15rem}
+  .nba-badge{display:inline-flex;align-items:center;gap:.35rem;font-size:.7rem;padding:.1rem .45rem;border-radius:5px;
+    border:1px solid var(--mxm-systemAmber100);color:var(--mxm-systemAmber100)}
+  .handoff-ok{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(--mxm-paletteGreen100);margin-block-start:.2rem}
+  .nba-foot{margin-block-start:1rem;display:flex;gap:.8rem;flex-wrap:wrap;align-items:center}
+  .btn-link{background:transparent;border:0;color:var(--mxm-paletteBrand100);font-size:.8rem;padding:.5rem 0;text-decoration:none;cursor:pointer}
+  .btn-link:hover{text-decoration:underline}
+
+  /* ===== Drill modal ===== */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;padding:1rem;z-index:50;
+    animation:fade var(--dur-short) var(--ease-out)}
+  .scrim.open{display:grid}
+  .modal{background:var(--mxm-backgroundPrimaryElevated);border:1px solid var(--mxm-borderPrimary);
+    border-radius:16px;max-inline-size:560px;inline-size:100%;max-block-size:88vh;overflow:auto;
+    padding:1.25rem 1.35rem;animation:pop var(--dur-base) var(--ease-spring)}
+  .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-block-end:.25rem}
+  .modal-head h3{font-size:1.05rem}
+  .modal .meta{color:var(--mxm-contentTertiary);font-size:.78rem;margin-block-start:.15rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+  .pill{font-size:.66rem;border-radius:5px;padding:.08rem .4rem;border:1px solid}
+  .pill.v{color:var(--mxm-paletteGreen100);border-color:color-mix(in srgb,var(--mxm-paletteGreen100) 40%,var(--mxm-borderPrimary))}
+  .x{border:0;background:transparent;color:var(--mxm-contentSecondary);font-size:1.1rem;min-inline-size:28px;min-block-size:28px;border-radius:6px}
+  .x:hover{background:rgba(255,255,255,.06)}
+  .m-sect{margin-block-start:1rem}
+  .m-sect h4{font-size:.7rem;letter-spacing:.07em;text-transform:uppercase;color:var(--mxm-contentTertiary);margin:0 0 .5rem}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+  .kpi{border:1px solid var(--mxm-borderPrimary);border-radius:8px;padding:.5rem .6rem}
+  .kpi .k{font-size:.7rem;color:var(--mxm-contentTertiary)}
+  .kpi .v{font-size:.95rem;font-weight:600;font-variant-numeric:tabular-nums;margin-block-start:.1rem}
+  .kpi .v .base{font-size:.72rem;font-weight:400;color:var(--mxm-contentTertiary)}
+  .bars{display:flex;flex-direction:column;gap:.4rem}
+  .bar{display:grid;grid-template-columns:84px 1fr auto;align-items:center;gap:.5rem;font-size:.76rem;color:var(--mxm-contentSecondary)}
+  .bar .track{block-size:6px;border-radius:999px;background:var(--mxm-backgroundSecondary);overflow:hidden}
+  .bar .fill{block-size:100%;background:var(--mxm-contentTertiary);border-radius:999px}
+  .m-foot{margin-block-start:1.25rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+  .m-foot .note{font-size:.72rem;color:var(--mxm-contentTertiary)}
+  .btn-primary{background:var(--mxm-paletteBrand100);color:#131313;border:0;border-radius:10px;font-weight:600;
+    padding:.6rem 1rem;min-block-size:40px;transition:transform var(--dur-micro) var(--ease-spring),filter var(--dur-short)}
+  .btn-primary:hover{filter:brightness(1.05)}
+  .btn-primary:active{transform:scale(.97)}
+
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  @keyframes pop{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+
+  .mocknote{margin-block-start:var(--space-section);border-block-start:1px dashed var(--mxm-borderPrimary);
+    padding-block-start:1rem;color:var(--mxm-contentTertiary);font-size:.74rem}
+
+  /* ---- responsive: no 2D scroll (§9.18). heatmap collapses to 2-up cards ---- */
+  @media (max-width:760px){
+    .heatmap{grid-template-columns:1fr 1fr}
+    .hm-corner,.hm-colhead,.hm-rowhead{display:none}
+    .hm-empty{display:none}
+    .cell .ctx{display:block}
+    .secondary{grid-template-columns:1fr}
+    .adv-body.open{grid-template-columns:1fr}
+    .chips{margin-inline-start:0}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important;transition:none !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header — operability chrome, quiet. No hero CTA. -->
+  <header class="topbar">
+    <div>
+      <h1>Cohorts Explorer</h1>
+      <p>How your cohorts are doing, where the opportunities are, and how to act.</p>
+    </div>
+    <div class="run">
+      <button class="btn-ghost" type="button">Run flow</button>
+      <span class="run-status" aria-live="polite"><span class="dot"></span>Computed · 47 cohorts · weeks 2026-06-08, 2026-06-15</span>
+    </div>
+  </header>
+
+  <!-- ===== HERO: the heatmap ===== -->
+  <main>
+  <section class="hero" aria-label="Cohort health heatmap">
+    <div class="hero-head">
+      <h2>Cohort health</h2>
+      <span class="sub">cuisine × zone, per tier — color = status, coral = where to act</span>
+      <div class="chips" role="group" aria-label="Filter by status">
+        <button class="chip" aria-pressed="false"><span class="c-dot" style="background:var(--mxm-systemGreen100)"></span>OK <span class="c-n">31</span></button>
+        <button class="chip" aria-pressed="false"><span class="c-dot" style="background:var(--mxm-systemAmber100)"></span>Too few <span class="c-n">7</span></button>
+        <button class="chip" aria-pressed="false"><span class="c-dot" style="background:var(--mxm-systemRed100)"></span>Hidden <span class="c-n">5</span></button>
+        <button class="chip" aria-pressed="false"><span class="c-dot" style="background:var(--mxm-contentTertiary)"></span>No data <span class="c-n">4</span></button>
+      </div>
+    </div>
+
+    <div class="legend" aria-hidden="false">
+      <span><span class="lg-ico" style="color:var(--mxm-systemGreen100)">●</span> OK</span>
+      <span><span class="lg-ico" style="color:var(--mxm-systemAmber100)">◐</span> Too few accounts</span>
+      <span><span class="lg-ico" style="color:var(--mxm-systemRed100)">▢</span> Hidden (privacy)</span>
+      <span><span class="lg-ico" style="color:var(--mxm-contentTertiary)">○</span> No data</span>
+      <span><span class="lg-ico" style="color:var(--mxm-paletteBrand100)">◤</span> Prioritized opportunity (gap to top)</span>
+    </div>
+
+    <!-- Tier: Managed · Brand (sparse) -->
+    <div class="tier">
+      <button class="tier-head" aria-expanded="true" aria-controls="hm-brand"><span class="tcaret" aria-hidden="true">▾</span><span class="name">Managed · Brand</span><span class="count">3</span><span class="rule"></span></button>
+      <div class="heatmap" id="hm-brand" role="grid" aria-label="Managed Brand cohorts">
+        <div class="hm-corner"></div>
+        <div class="hm-colhead">Downtown</div><div class="hm-colhead">North</div><div class="hm-colhead">South</div><div class="hm-colhead">East</div><div class="hm-colhead">West</div>
+
+        <div class="hm-rowhead">Sushi</div>
+        <button class="cell s-ok opp" data-c="Sushi" data-z="Downtown" data-t="Brand" data-rest="Tokyo Bay" data-why="quality dropped vs the cohort's top decile" data-gap="12">
+          <span class="notch" aria-hidden="true"></span>
+          <span class="ctx">Sushi · Downtown</span>
+          <span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span>
+          <span class="n tabnum">n = 24</span>
+          <span class="gap tabnum">+12 pts</span>
+        </button>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+
+        <div class="hm-rowhead">Pizza</div>
+        <button class="cell s-ok" data-c="Pizza" data-z="Downtown" data-t="Brand" data-rest="Bella Pizza" data-why="" data-gap="">
+          <span class="ctx">Pizza · Downtown</span>
+          <span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 19</span>
+          <span class="fresh"><span class="fdot"></span>fresh</span>
+        </button>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+
+        <div class="hm-rowhead">Burger</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <button class="cell s-ok" data-c="Burger" data-z="North" data-t="Brand" data-rest="Smash Co" data-why="" data-gap="">
+          <span class="ctx">Burger · North</span>
+          <span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 16</span>
+          <span class="fresh"><span class="fdot"></span>fresh</span>
+        </button>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+      </div>
+    </div>
+
+    <!-- Tier: Managed · Midmarket (sparse) -->
+    <div class="tier">
+      <button class="tier-head" aria-expanded="true" aria-controls="hm-mid"><span class="tcaret" aria-hidden="true">▾</span><span class="name">Managed · Midmarket</span><span class="count">4</span><span class="rule"></span></button>
+      <div class="heatmap" id="hm-mid" role="grid" aria-label="Managed Midmarket cohorts">
+        <div class="hm-corner"></div>
+        <div class="hm-colhead">Downtown</div><div class="hm-colhead">North</div><div class="hm-colhead">South</div><div class="hm-colhead">East</div><div class="hm-colhead">West</div>
+
+        <div class="hm-rowhead">Sushi</div>
+        <button class="cell s-ok" data-c="Sushi" data-z="Downtown" data-t="Midmarket" data-rest="Sushi Zen" data-why="" data-gap="">
+          <span class="ctx">Sushi · Downtown</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 38</span><span class="fresh"><span class="fdot"></span>fresh</span>
+        </button>
+        <div class="hm-empty" aria-hidden="true">·</div><div class="hm-empty" aria-hidden="true">·</div><div class="hm-empty" aria-hidden="true">·</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+
+        <div class="hm-rowhead">Pizza</div>
+        <button class="cell s-ok" data-c="Pizza" data-z="Downtown" data-t="Midmarket" data-rest="Napoli Express" data-why="" data-gap="">
+          <span class="ctx">Pizza · Downtown</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 44</span><span class="fresh"><span class="fdot"></span>fresh</span>
+        </button>
+        <div class="hm-empty" aria-hidden="true">·</div><div class="hm-empty" aria-hidden="true">·</div><div class="hm-empty" aria-hidden="true">·</div>
+        <button class="cell s-ok opp" data-c="Pizza" data-z="West" data-t="Midmarket" data-rest="Forno Nove" data-why="cancellations climbing week over week" data-gap="9">
+          <span class="notch" aria-hidden="true"></span><span class="ctx">Pizza · West</span>
+          <span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 29</span><span class="gap tabnum">+9 pts</span>
+        </button>
+
+        <div class="hm-rowhead">Burger</div>
+        <div class="hm-empty" aria-hidden="true">·</div>
+        <button class="cell s-ok" data-c="Burger" data-z="North" data-t="Midmarket" data-rest="The Grill House" data-why="" data-gap="">
+          <span class="ctx">Burger · North</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 31</span><span class="fresh"><span class="fdot"></span>fresh</span>
+        </button>
+        <div class="hm-empty" aria-hidden="true">·</div><div class="hm-empty" aria-hidden="true">·</div><div class="hm-empty" aria-hidden="true">·</div>
+      </div>
+    </div>
+
+    <!-- Tier: Long-tail (dense — 95%) -->
+    <div class="tier">
+      <button class="tier-head" aria-expanded="true" aria-controls="hm-long"><span class="tcaret" aria-hidden="true">▾</span><span class="name">Long-tail</span><span class="count">40</span><span class="rule"></span></button>
+      <div class="heatmap" id="hm-long" role="grid" aria-label="Long-tail cohorts">
+        <div class="hm-corner"></div>
+        <div class="hm-colhead">Downtown</div><div class="hm-colhead">North</div><div class="hm-colhead">South</div><div class="hm-colhead">East</div><div class="hm-colhead">West</div>
+
+        <div class="hm-rowhead">Sushi</div>
+        <button class="cell s-ok opp" data-c="Sushi" data-z="Downtown" data-t="Long-tail" data-rest="Sakura House" data-why="orders fell sharply vs prior window" data-gap="18">
+          <span class="notch" aria-hidden="true"></span><span class="ctx">Sushi · Downtown</span>
+          <span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 120</span><span class="gap tabnum">+18 pts</span>
+        </button>
+        <button class="cell s-ok" data-c="Sushi" data-z="North" data-t="Long-tail" data-rest="Tokyo Bay" data-why="" data-gap=""><span class="ctx">Sushi · North</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 88</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+        <button class="cell s-suppressed" data-c="Sushi" data-z="South" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Sushi · South</span><span class="stat"><span class="ico" aria-hidden="true">▢</span>Hidden</span><span class="n tabnum">n = —</span></button>
+        <button class="cell s-collapsed" data-c="Sushi" data-z="East" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Sushi · East</span><span class="stat"><span class="ico" aria-hidden="true">◐</span>Too few</span><span class="n tabnum">n = 3</span></button>
+        <button class="cell s-ok" data-c="Sushi" data-z="West" data-t="Long-tail" data-rest="Sushi Zen" data-why="" data-gap=""><span class="ctx">Sushi · West</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 54</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+
+        <div class="hm-rowhead">Pizza</div>
+        <button class="cell s-ok opp" data-c="Pizza" data-z="Downtown" data-t="Long-tail" data-rest="Napoli Express" data-why="orders dipped vs the top decile" data-gap="7">
+          <span class="notch" aria-hidden="true"></span><span class="ctx">Pizza · Downtown</span>
+          <span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 210</span><span class="gap tabnum">+7 pts</span>
+        </button>
+        <button class="cell s-ok" data-c="Pizza" data-z="North" data-t="Long-tail" data-rest="Bella Pizza" data-why="" data-gap=""><span class="ctx">Pizza · North</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 95</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+        <button class="cell s-ok" data-c="Pizza" data-z="South" data-t="Long-tail" data-rest="Forno Nove" data-why="" data-gap=""><span class="ctx">Pizza · South</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 72</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+        <button class="cell s-suppressed" data-c="Pizza" data-z="East" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Pizza · East</span><span class="stat"><span class="ico" aria-hidden="true">▢</span>Hidden</span><span class="n tabnum">n = —</span></button>
+        <button class="cell s-collapsed stale" data-c="Pizza" data-z="West" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Pizza · West</span><span class="stat"><span class="ico" aria-hidden="true">◐</span>Too few</span><span class="n tabnum">n = 4</span><span class="fresh"><span class="fdot"></span>5d old</span></button>
+
+        <div class="hm-rowhead">Burger</div>
+        <button class="cell s-ok" data-c="Burger" data-z="Downtown" data-t="Long-tail" data-rest="Smash Co" data-why="" data-gap=""><span class="ctx">Burger · Downtown</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 156</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+        <button class="cell s-collapsed" data-c="Burger" data-z="North" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Burger · North</span><span class="stat"><span class="ico" aria-hidden="true">◐</span>Too few</span><span class="n tabnum">n = 2</span></button>
+        <button class="cell s-ok opp" data-c="Burger" data-z="South" data-t="Long-tail" data-rest="Patty Palace" data-why="connection rate slipped — churn risk" data-gap="15">
+          <span class="notch" aria-hidden="true"></span><span class="ctx">Burger · South</span>
+          <span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 61</span><span class="gap tabnum">+15 pts</span>
+        </button>
+        <button class="cell s-pending" data-c="Burger" data-z="East" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Burger · East</span><span class="stat"><span class="ico" aria-hidden="true">○</span>No data</span><span class="n tabnum">n = —</span></button>
+        <button class="cell s-ok" data-c="Burger" data-z="West" data-t="Long-tail" data-rest="The Grill House" data-why="" data-gap=""><span class="ctx">Burger · West</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 49</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+
+        <div class="hm-rowhead">Healthy</div>
+        <button class="cell s-ok" data-c="Healthy" data-z="Downtown" data-t="Long-tail" data-rest="Green Bowl" data-why="" data-gap=""><span class="ctx">Healthy · Downtown</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 44</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+        <button class="cell s-suppressed" data-c="Healthy" data-z="North" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Healthy · North</span><span class="stat"><span class="ico" aria-hidden="true">▢</span>Hidden</span><span class="n tabnum">n = —</span></button>
+        <button class="cell s-pending" data-c="Healthy" data-z="South" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Healthy · South</span><span class="stat"><span class="ico" aria-hidden="true">○</span>No data</span><span class="n tabnum">n = —</span></button>
+        <button class="cell s-collapsed" data-c="Healthy" data-z="East" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Healthy · East</span><span class="stat"><span class="ico" aria-hidden="true">◐</span>Too few</span><span class="n tabnum">n = 3</span></button>
+        <button class="cell s-ok" data-c="Healthy" data-z="West" data-t="Long-tail" data-rest="Fresh Fix" data-why="" data-gap=""><span class="ctx">Healthy · West</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 31</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+
+        <div class="hm-rowhead">Desserts</div>
+        <button class="cell s-ok" data-c="Desserts" data-z="Downtown" data-t="Long-tail" data-rest="Sweet Lab" data-why="" data-gap=""><span class="ctx">Desserts · Downtown</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 38</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+        <button class="cell s-pending" data-c="Desserts" data-z="North" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Desserts · North</span><span class="stat"><span class="ico" aria-hidden="true">○</span>No data</span><span class="n tabnum">n = —</span></button>
+        <button class="cell s-collapsed" data-c="Desserts" data-z="South" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Desserts · South</span><span class="stat"><span class="ico" aria-hidden="true">◐</span>Too few</span><span class="n tabnum">n = 2</span></button>
+        <button class="cell s-ok" data-c="Desserts" data-z="East" data-t="Long-tail" data-rest="Dolce Vita" data-why="" data-gap=""><span class="ctx">Desserts · East</span><span class="stat"><span class="ico" aria-hidden="true">●</span>OK</span><span class="n tabnum">n = 22</span><span class="fresh"><span class="fdot"></span>fresh</span></button>
+        <button class="cell s-suppressed" data-c="Desserts" data-z="West" data-t="Long-tail" data-rest="" data-why="" data-gap=""><span class="ctx">Desserts · West</span><span class="stat"><span class="ico" aria-hidden="true">▢</span>Hidden</span><span class="n tabnum">n = —</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECONDARY band — demoted ===== -->
+  <section class="secondary" aria-label="Supporting signals">
+    <div class="sec-card">
+      <h3>Top opportunities — where to act</h3>
+      <div class="opp-list">
+        <button class="opp-row" data-c="Sushi" data-z="Downtown" data-t="Long-tail" data-rest="Sakura House" data-why="orders fell sharply vs prior window" data-gap="18">
+          <span class="opp-rank">1</span>
+          <span class="opp-main"><span class="who">Sushi · Downtown <span class="rest">— Sakura House</span></span><span class="opp-why" data-pretext>Orders fell sharply vs the prior window — biggest gap in the long-tail.</span></span>
+          <span class="opp-gap">+18 pts<small>gap to top · at risk</small></span>
+        </button>
+        <button class="opp-row" data-c="Burger" data-z="South" data-t="Long-tail" data-rest="Patty Palace" data-why="connection rate slipped — churn risk" data-gap="15">
+          <span class="opp-rank">2</span>
+          <span class="opp-main"><span class="who">Burger · South <span class="rest">— Patty Palace</span></span><span class="opp-why" data-pretext>Connection rate slipped two weeks running — early churn signal.</span></span>
+          <span class="opp-gap">+15 pts<small>gap to top · churn</small></span>
+        </button>
+        <button class="opp-row" data-c="Sushi" data-z="Downtown" data-t="Brand" data-rest="Tokyo Bay" data-why="quality dropped vs the cohort's top decile" data-gap="12">
+          <span class="opp-rank">3</span>
+          <span class="opp-main"><span class="who">Sushi · Downtown <span class="rest">— Tokyo Bay</span></span><span class="opp-why" data-pretext>Quality score dropped vs the cohort's top decile.</span></span>
+          <span class="opp-gap">+12 pts<small>gap to top · at risk</small></span>
+        </button>
+        <button class="opp-row" data-c="Pizza" data-z="West" data-t="Midmarket" data-rest="Forno Nove" data-why="cancellations climbing week over week" data-gap="9">
+          <span class="opp-rank">4</span>
+          <span class="opp-main"><span class="who">Pizza · West <span class="rest">— Forno Nove</span></span><span class="opp-why" data-pretext>Cancellations climbing week over week.</span></span>
+          <span class="opp-gap">+9 pts<small>gap to top · down</small></span>
+        </button>
+        <button class="opp-row" data-c="Pizza" data-z="Downtown" data-t="Long-tail" data-rest="Napoli Express" data-why="orders dipped vs the top decile" data-gap="7">
+          <span class="opp-rank">5</span>
+          <span class="opp-main"><span class="who">Pizza · Downtown <span class="rest">— Napoli Express</span></span><span class="opp-why" data-pretext>Orders dipped slightly vs the top decile.</span></span>
+          <span class="opp-gap">+7 pts<small>gap to top · down</small></span>
+        </button>
+      </div>
+      <div class="opp-more">
+        <button class="opp-more-btn" aria-expanded="false" aria-controls="oppAll" id="oppAllBtn"><span class="caret" aria-hidden="true">▸</span> Show all opportunities, by cohort (10)</button>
+        <div class="opp-all" id="oppAll">
+          <div class="opp-group">
+            <div class="gh"><span>Sushi · Downtown · Long-tail</span><span class="gmax">+18 pts</span></div>
+            <button class="opp-sub" data-c="Sushi" data-z="Downtown" data-t="Long-tail"><span>Sakura House — orders ↓</span><span class="sg">+18</span></button>
+            <button class="opp-sub" data-c="Sushi" data-z="Downtown" data-t="Long-tail"><span>Tokyo Bay — quality ↓</span><span class="sg">+6</span></button>
+          </div>
+          <div class="opp-group">
+            <div class="gh"><span>Burger · South · Long-tail</span><span class="gmax">+15 pts</span></div>
+            <button class="opp-sub" data-c="Burger" data-z="South" data-t="Long-tail"><span>Patty Palace — connection ↓</span><span class="sg">+15</span></button>
+            <button class="opp-sub" data-c="Burger" data-z="South" data-t="Long-tail"><span>Smash Co — cancellations ↑</span><span class="sg">+5</span></button>
+          </div>
+          <div class="opp-group">
+            <div class="gh"><span>Sushi · Downtown · Brand</span><span class="gmax">+12 pts</span></div>
+            <button class="opp-sub" data-c="Sushi" data-z="Downtown" data-t="Brand"><span>Tokyo Bay — quality ↓</span><span class="sg">+12</span></button>
+          </div>
+          <div class="opp-group">
+            <div class="gh"><span>Pizza · West · Midmarket</span><span class="gmax">+9 pts</span></div>
+            <button class="opp-sub" data-c="Pizza" data-z="West" data-t="Midmarket"><span>Forno Nove — cancellations ↑</span><span class="sg">+9</span></button>
+          </div>
+          <div class="opp-group">
+            <div class="gh"><span>Pizza · Downtown · Long-tail</span><span class="gmax">+7 pts</span></div>
+            <button class="opp-sub" data-c="Pizza" data-z="Downtown" data-t="Long-tail"><span>Napoli Express — orders ↓</span><span class="sg">+7</span></button>
+            <button class="opp-sub" data-c="Pizza" data-z="Downtown" data-t="Long-tail"><span>Bella Pizza — connection ↓</span><span class="sg">+3</span></button>
+          </div>
+          <div class="opp-group">
+            <div class="gh"><span>Healthy · Downtown · Long-tail</span><span class="gmax">+6 pts</span></div>
+            <button class="opp-sub" data-c="Healthy" data-z="Downtown" data-t="Long-tail"><span>Green Bowl — orders ↓</span><span class="sg">+6</span></button>
+          </div>
+          <div class="opp-group">
+            <div class="gh"><span>Burger · Downtown · Long-tail</span><span class="gmax">+4 pts</span></div>
+            <button class="opp-sub" data-c="Burger" data-z="Downtown" data-t="Long-tail"><span>Smash Co — quality ↓</span><span class="sg">+4</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat-chip">
+        <div class="label"><span>Revenue exposure · flagged cohorts</span><span class="seal">held for review</span></div>
+        <div class="val tabnum">$42.6k<span style="font-size:.8rem;color:var(--mxm-contentTertiary)"> / wk</span></div>
+        <div class="prov">[C] projection · proposal only — never auto-released</div>
+      </div>
+      <div class="stat-chip">
+        <div class="label"><span>Support intents · this week</span><span class="prov">[V]</span></div>
+        <div class="ticket-row"><span>Orders</span><span class="tn">312</span></div>
+        <div class="ticket-row"><span>Cancellations</span><span class="tn">87</span></div>
+        <div class="ticket-row"><span>Quality</span><span class="tn">54</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ADVANCED — collapsed at rest ===== -->
+  <section class="advanced">
+    <button class="adv-toggle" aria-expanded="false" id="advBtn"><span class="caret">▸</span> Advanced — rule versions &amp; sandbox</button>
+    <div class="adv-body" id="advBody">
+      <div class="sec-card">
+        <h3>Rule version</h3>
+        <p style="color:var(--mxm-contentSecondary);font-size:.8rem;margin:.2rem 0 0">Baselines are stamped per version — numbers never mix across them.</p>
+        <div class="chip-line">
+          <span class="ver active">v3 · active</span><span class="ver">v2</span><span class="ver">v1</span>
+        </div>
+      </div>
+      <div class="sec-card">
+        <h3>Sandbox</h3>
+        <p style="color:var(--mxm-contentSecondary);font-size:.8rem;margin:.2rem 0 0">Try a what-if re-segmentation. Ephemeral — never persisted, never affects production cohorts.</p>
+        <button class="btn-ghost" style="margin-block-start:.6rem" type="button">Open sandbox</button>
+      </div>
+    </div>
+  </section>
+  </main>
+
+  <p class="mocknote">Mockup · plan-driven from <code>docs/design/cohorts-redesign-brief.md</code> · tokens verbatim from <code>client/src/index.css</code> · all numbers illustrative (no producer ran). Click any OK/flagged cell or opportunity row to preview the drill modal.</p>
+</div>
+
+<!-- ===== Drill modal ===== -->
+<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="modal" id="modal">
+    <div class="modal-head">
+      <div>
+        <h3 id="mTitle">Sushi · Downtown · Long-tail</h3>
+        <div class="meta"><span class="pill v">Confirmed [V]</span><span>n = 120 accounts</span><span>updated 2026-06-15</span></div>
+      </div>
+      <button class="x" id="xBtn" aria-label="Close">✕</button>
+    </div>
+
+    <div class="m-sect">
+      <h4>Top vs base</h4>
+      <div class="kpis">
+        <div class="kpi"><div class="k">Avg orders / wk</div><div class="v tabnum">38 <span class="base">vs base 24</span></div></div>
+        <div class="kpi"><div class="k">Avg ticket</div><div class="v tabnum">$26.40 <span class="base">vs $23.10</span></div></div>
+        <div class="kpi"><div class="k">Connection ratio</div><div class="v tabnum">0.81 <span class="base">vs 0.69</span></div></div>
+        <div class="kpi"><div class="k">Cancel rate</div><div class="v tabnum">3.2% <span class="base">vs 5.1%</span></div></div>
+      </div>
+    </div>
+
+    <div class="m-sect">
+      <h4>Upside attribution <span style="text-transform:none;letter-spacing:0;color:var(--mxm-contentTertiary)">— [C] projection</span></h4>
+      <div class="bars">
+        <div class="bar"><span>Connection</span><span class="track"><span class="fill" style="width:40%"></span></span><span class="tabnum">40%</span></div>
+        <div class="bar"><span>Quality</span><span class="track"><span class="fill" style="width:35%"></span></span><span class="tabnum">35%</span></div>
+        <div class="bar"><span>Cancellations</span><span class="track"><span class="fill" style="width:25%"></span></span><span class="tabnum">25%</span></div>
+      </div>
+    </div>
+
+    <div class="m-foot">
+      <span class="note">Lift if matched to top decile: <strong style="color:var(--mxm-contentPrimary)">+18% orders</strong> · [C]</span>
+      <button class="btn-primary" type="button" id="sendNba">Send to NBA →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== NBA preview — the Autonomy Cockpit destination of "Send to NBA" ===== -->
+<div class="scrim" id="nbaScrim" role="dialog" aria-modal="true" aria-labelledby="nbaTitle">
+  <div class="modal" id="nbaModal">
+    <div class="modal-head">
+      <div>
+        <h3 id="nbaTitle">Next Best Action · Sushi · Downtown</h3>
+        <div class="handoff-ok"><span aria-hidden="true">✓</span> Handed off — now queued in the Autonomy Cockpit</div>
+      </div>
+      <button class="x" id="nbaX" aria-label="Close">✕</button>
+    </div>
+
+    <div class="nba-sect">
+      <div class="lab">Recommended action</div>
+      <div class="val" style="font-weight:600">Connection coaching — outreach to the restaurant</div>
+      <div style="font-size:.75rem;color:var(--mxm-contentTertiary);margin-block-start:.15rem">cohort sushi · downtown · long-tail — restaurant Sakura House</div>
+    </div>
+
+    <div class="nba-sect">
+      <div class="lab">Root cause</div>
+      <div class="val">Orders ↓ — connection ratio slipped vs the cohort's top decile</div>
+    </div>
+
+    <div class="nba-sect">
+      <div class="lab">The path it indicates · [C] projection</div>
+      <div class="val tabnum">connection 0.69 → 0.81 · gap 0.12 → +18% orders</div>
+    </div>
+
+    <div class="nba-sect">
+      <div class="lab">Autonomy</div>
+      <div class="val" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap"><span class="tabnum">MEDIUM</span><span class="nba-badge">needs human</span></div>
+      <p style="font-size:.74rem;color:var(--mxm-contentSecondary);margin:.4rem 0 0">Autonomy is above LOW — escalated to you to release at the granted level or clamp it down. Financial class · indirect.</p>
+    </div>
+
+    <div class="nba-sect">
+      <div class="lab">What it fires · artifacts</div>
+      <ul style="margin:.3rem 0 0;padding-inline-start:1.1rem;color:var(--mxm-contentSecondary);font-size:.8rem">
+        <li>A connection-coaching outreach to the restaurant owner</li>
+        <li>A 2-week check-in on connection ratio + orders</li>
+      </ul>
+    </div>
+
+    <div class="nba-foot">
+      <button class="btn-primary" type="button">Release</button>
+      <button class="btn-link" type="button">See this action's track record →</button>
+      <button class="btn-link" type="button" style="margin-inline-start:auto">Go to Cockpit →</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // ---- Drill modal (focus-trap + Esc + focus-return) ----
+  const scrim = document.getElementById('scrim');
+  const modal = document.getElementById('modal');
+  const mTitle = document.getElementById('mTitle');
+  const mMeta = modal.querySelector('.meta');
+  let lastFocus = null;
+
+  function openModal(el){
+    lastFocus = el;
+    const c = el.dataset.c, z = el.dataset.z, t = el.dataset.t;
+    if(c){ mTitle.textContent = `${c} · ${z} · ${t}`; }
+    scrim.classList.add('open');
+    document.getElementById('xBtn').focus();
+    document.addEventListener('keydown', onKey);
+  }
+  function closeModal(){
+    scrim.classList.remove('open');
+    document.removeEventListener('keydown', onKey);
+    if(lastFocus) lastFocus.focus();
+  }
+  function onKey(e){
+    if(e.key === 'Escape') closeModal();
+    if(e.key === 'Tab'){ // trap
+      const f = modal.querySelectorAll('button');
+      const first = f[0], last = f[f.length-1];
+      if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+    }
+  }
+  document.getElementById('xBtn').addEventListener('click', closeModal);
+  scrim.addEventListener('click', e => { if(e.target === scrim) closeModal(); });
+  document.querySelectorAll('.cell:not(.s-pending), .opp-row').forEach(el => {
+    el.addEventListener('click', () => openModal(el));
+  });
+
+  // ---- Advanced disclosure ----
+  const advBtn = document.getElementById('advBtn'), advBody = document.getElementById('advBody');
+  advBtn.addEventListener('click', () => {
+    const open = advBtn.getAttribute('aria-expanded') === 'true';
+    advBtn.setAttribute('aria-expanded', String(!open));
+    advBody.classList.toggle('open', !open);
+  });
+
+  // ---- Filter chips (visual toggle for the mockup) ----
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    c.setAttribute('aria-pressed', String(c.getAttribute('aria-pressed') !== 'true'));
+  }));
+
+  // ---- Collapsible tier blocks (collapse Brand/Midmarket to focus Long-tail) ----
+  document.querySelectorAll('.tier-head').forEach(h => h.addEventListener('click', () => {
+    const open = h.getAttribute('aria-expanded') === 'true';
+    h.setAttribute('aria-expanded', String(!open));
+    const hm = document.getElementById(h.getAttribute('aria-controls'));
+    if(hm) hm.classList.toggle('collapsed', open);
+  }));
+
+  // ---- Top opportunities: show all, grouped by cohort ----
+  const oppAllBtn = document.getElementById('oppAllBtn'), oppAll = document.getElementById('oppAll');
+  oppAllBtn.addEventListener('click', () => {
+    const open = oppAllBtn.getAttribute('aria-expanded') === 'true';
+    oppAllBtn.setAttribute('aria-expanded', String(!open));
+    oppAll.classList.toggle('open', !open);
+  });
+  document.querySelectorAll('.opp-sub').forEach(el => el.addEventListener('click', () => openModal(el)));
+
+  // ---- Send to NBA → close drill, open the Cockpit-destination preview ----
+  const nbaScrim = document.getElementById('nbaScrim');
+  function closeNba(){ nbaScrim.classList.remove('open'); if(lastFocus) lastFocus.focus(); }
+  document.getElementById('sendNba').addEventListener('click', () => {
+    const t = mTitle.textContent; closeModal();
+    nbaScrim.classList.add('open');
+    document.getElementById('nbaTitle').textContent = 'Next Best Action · ' + (t || 'Sushi · Downtown');
+    document.getElementById('nbaX').focus();
+  });
+  document.getElementById('nbaX').addEventListener('click', closeNba);
+  nbaScrim.addEventListener('click', e => { if(e.target === nbaScrim) closeNba(); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && nbaScrim.classList.contains('open')) closeNba(); });
+
+  // ---- Pretext: height-compute the variable opportunity descriptions on resize ----
+  // (Card/grid tier → prepare() + layout(); defensive so the page works offline.)
+  try{
+    const { prepare, layout } = await import('https://esm.sh/@chenglou/pretext');
+    await document.fonts.ready;
+    const els = document.querySelectorAll('[data-pretext]');
+    const prepared = new Map();
+    for(const el of els){ prepared.set(el, prepare(el.textContent, getComputedStyle(el).font)); }
+    const relayout = () => { for(const [el, h] of prepared){
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
+      el.style.minHeight = layout(h, el.clientWidth, lh).height + 'px';
+    }};
+    new ResizeObserver(relayout).observe(document.body);
+    relayout();
+  }catch(_){ /* offline: CSS handles the text fine */ }
+</script>
+</body>
+</html>
