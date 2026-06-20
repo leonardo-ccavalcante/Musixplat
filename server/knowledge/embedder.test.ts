@@ -5,8 +5,29 @@ import {
   EMBED_DIM,
   embedWithRetry,
   isTransientEmbedError,
+  openaiEmbedder,
+  MAX_EMBED_BATCH,
   type Embedder,
 } from "./embedder.js";
+
+// Records each request's input size; echoes one 1-D vector per input ([index]) so order is checkable.
+function recordingClient(): {
+  client: { embeddings: { create(a: { model: string; input: string[] }): Promise<{ data: { embedding: number[] }[] }> } };
+  calls: () => number[];
+} {
+  const sizes: number[] = [];
+  return {
+    client: {
+      embeddings: {
+        async create({ input }) {
+          sizes.push(input.length);
+          return { data: input.map((t) => ({ embedding: [Number(t)] })) };
+        },
+      },
+    },
+    calls: () => sizes,
+  };
+}
 
 // A fake embedder that throws `err` on its first `failTimes` calls, then returns a 1-D vector per text.
 function flaky(failTimes: number, err: unknown): { emb: Embedder; calls: () => number } {
@@ -61,6 +82,25 @@ describe("isTransientEmbedError", () => {
     expect(isTransientEmbedError({ status: 403 })).toBe(false); // quota / forbidden
     expect(isTransientEmbedError({ status: 400 })).toBe(false); // bad input
     expect(isTransientEmbedError(new Error("nope"))).toBe(false);
+  });
+});
+
+describe("openaiEmbedder batching (large docs must not exceed OpenAI's per-request input cap)", () => {
+  it("splits more than MAX_EMBED_BATCH inputs across requests, preserving order", async () => {
+    const { client, calls } = recordingClient();
+    const n = MAX_EMBED_BATCH * 2 + 88; // 2 full batches + a remainder
+    const texts = Array.from({ length: n }, (_, i) => String(i));
+    const out = await openaiEmbedder(client as never).embed(texts);
+    expect(out).toHaveLength(n);
+    expect(out.map((v) => v[0])).toEqual(texts.map(Number)); // order preserved across batches
+    expect(Math.max(...calls())).toBeLessThanOrEqual(MAX_EMBED_BATCH); // never a request over the cap
+    expect(calls()).toEqual([MAX_EMBED_BATCH, MAX_EMBED_BATCH, 88]);
+  });
+
+  it("sends a single request when inputs fit in one batch", async () => {
+    const { client, calls } = recordingClient();
+    await openaiEmbedder(client as never).embed(["a", "b", "c"]);
+    expect(calls()).toEqual([3]);
   });
 });
 

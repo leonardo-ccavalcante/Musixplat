@@ -20,14 +20,25 @@ export const deterministicEmbedder: Embedder = {
   },
 };
 
+// OpenAI caps a single embeddings request at 2048 inputs (and a total token budget). A large document
+// chunks into thousands of pieces, so send them in bounded batches — 256 × ~300 tok/chunk stays well
+// under both limits — and concatenate IN ORDER. Without this a big doc would hit a terminal 400 and
+// fail closed forever ("index_failed" that never recovers). API mechanics, not a business knob → const.
+export const MAX_EMBED_BATCH = 256;
+
 export function openaiEmbedder(
   client: { embeddings: { create(a: { model: string; input: string[] }): Promise<{ data: { embedding: number[] }[] }> } },
   model = "text-embedding-3-small",
 ): Embedder {
   return {
     async embed(texts) {
-      const res = await client.embeddings.create({ model, input: texts });
-      return res.data.map((d) => d.embedding);
+      const out: number[][] = [];
+      for (let i = 0; i < texts.length; i += MAX_EMBED_BATCH) {
+        const batch = texts.slice(i, i + MAX_EMBED_BATCH);
+        const res = await client.embeddings.create({ model, input: batch });
+        out.push(...res.data.map((d) => d.embedding));
+      }
+      return out;
     },
   };
 }
