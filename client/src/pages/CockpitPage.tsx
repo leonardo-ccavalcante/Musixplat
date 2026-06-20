@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
@@ -29,13 +30,19 @@ export function CockpitPage() {
   const [catalogOpen, setCatalogOpen] = useState(false);
 
   const utils = trpc.useUtils();
+  const [, setLocation] = useLocation();
   const list = trpc.cockpit.list.useQuery(undefined, { enabled: ready });
   const week = trpc.cockpit.weekSummary.useQuery(undefined, { enabled: ready });
   const release = trpc.cockpit.release.useMutation();
 
   const onAction = (row: NbaCockpitRow, action: RowAction) => {
-    // override only DOWN: release at the granted level, pause clamps to LOW (server re-validates, BR-1).
-    const resulting_level = action === "PAUSE" ? "LOW" : row.effective_level ?? "LOW";
+    // RELEASE opens the dispatch screen (review reach + artifact, then Send writes the trace there, 02:1a).
+    if (action === "RELEASE") {
+      setLocation(`/cockpit/dispatch/${row.nba_id}`);
+      return;
+    }
+    // PAUSE stays inline: clamp to LOW (override only down; server re-validates, BR-1).
+    const resulting_level = "LOW";
     setActionState((s) => ({ ...s, [row.nba_id]: { status: "pending" } }));
     release.mutate(
       { nba_id: row.nba_id, action, resulting_level },
@@ -43,7 +50,7 @@ export function CockpitPage() {
         onSuccess: (res) => {
           setActionState((s) => ({
             ...s,
-            [row.nba_id]: { status: "done", msg: `${action === "RELEASE" ? "Released" : "Paused"} ✓ trace ${res.traceId.slice(0, 8)}` },
+            [row.nba_id]: { status: "done", msg: `Paused ✓ trace ${res.traceId.slice(0, 8)}` },
           }));
           void utils.cockpit.list.invalidate();
           void utils.cockpit.weekSummary.invalidate(); // the trace just changed — refresh "your week"
