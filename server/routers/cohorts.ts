@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
-import { query } from "../db/pool.js";
+import { query, withTx } from "../db/pool.js";
 import { assertSingleVersion } from "../_core/antimix.js";
 import { runP01, deriveRunWindow } from "../jobs/p01.js";
 import type { CohortsRunResult } from "../../shared/contracts.js";
+import { parseCsv } from "../cohorts/parseCsv.js";
 
 // Read-only projections of P01 results. All tenant-scoped server-side (RLS guard); cohort-zone
 // reads honor k-anon (k_suppression_applied) and anti-mix (single cohort_rule_version).
@@ -191,6 +192,53 @@ export const cohortsRouter = router({
        from catalog."Cohort_Rule_Version" order by effective_date`,
     );
   }),
+
+  // Demo onboarding — upload one Order-grain CSV. Server dedups restaurants, bulk-inserts orders, and
+  // SYNTHESIZES neutral Weekly_Connection (connected=committed) so the v2 rank's connection INNER JOIN
+  // is satisfied (else every percentile NULLs out). Atomic (withTx): a bad row rejects the whole file
+  // (fail-closed §7). Only brutos inserted; all RESULTS stay NULL until Run Flow (§14). tenant_id is taken
+  // from the CSV per the agreed contract (demo); cross-pool data is allowed here (single operator demo).
+  uploadCsv: tenantProcedure
+    .input(z.object({ filename: z.string().min(1), contentBase64: z.string().min(1) }))
+    .mutation(async ({ input }): Promise<{ restaurants: number; orders: number }> => {
+      const text = Buffer.from(input.contentBase64, "base64").toString("utf8");
+      const rows = parseCsv(text);
+
+      const restMap = new Map<string, (typeof rows)[number]>();
+      for (const r of rows) if (!restMap.has(r.restaurant_id)) restMap.set(r.restaurant_id, r);
+      const rests = [...restMap.values()];
+
+      await withTx(async (c) => {
+        for (const r of rests) {
+          await c.query(
+            `insert into tenant."Restaurant"
+               (restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week, status)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,'active')`,
+            [r.restaurant_id, r.tenant_id, r.tier_base, r.segment, r.signup_date, r.zone, r.cuisine, r.committed_hours_week],
+          );
+        }
+        for (const o of rows) {
+          await c.query(
+            `insert into tenant."Order"
+               (restaurant_id, order_date, gross_value, fee, payment_status, cancelled_by, discount_pct, has_photo, has_description, zone, cuisine, channel, provenance)
+             values ($1,$2,$3,coalesce($4,0),$5,$6,coalesce($7,0),$8,$9,$10,$11,'csv','[V]')`,
+            [o.restaurant_id, o.order_date, o.gross_value, o.fee ?? null, o.payment_status,
+             o.cancelled_by ?? null, o.discount_pct ?? null, o.has_photo ?? null, o.has_description ?? null, o.zone, o.cuisine],
+          );
+        }
+        await c.query(
+          `insert into tenant."Weekly_Connection"(restaurant_id, week, connected_hours, committed_hours)
+           select r.restaurant_id,
+                  (date_trunc('week', m.maxd)::date - (w * 7)),
+                  r.committed_hours_week, r.committed_hours_week
+           from tenant."Restaurant" r
+           cross join (select max(order_date) maxd from tenant."Order") m
+           cross join generate_series(0, 12) w
+           on conflict (restaurant_id, week) do nothing`,
+        );
+      });
+      return { restaurants: rests.length, orders: rows.length };
+    }),
 
   // F-3.3 / F-3.4 — raw ticket distribution intent × cohort, tenant-scoped, k-anon respected.
   intentCounts: tenantProcedure.query(async ({ ctx }) => {
