@@ -4,6 +4,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
 import { FilterChips, type ChipOption } from "@/components/ui/FilterChips";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { fmtNum } from "@/lib/utils";
 
 // F-2.1 — the HERO of the awareness screen: a 2D heatmap (rows = cuisine × cols = zone, one block per
@@ -45,7 +46,7 @@ function buildOppMap(deltas: DeltaRow[]): Map<string, Opp> {
   return new Map([...byCohort.entries()].sort((a, b) => rankOpp(a[1], b[1])).slice(0, TOP_OPPORTUNITIES));
 }
 
-function Cell({ c, opp, onOpen }: { c: CohortCell; opp?: Opp; onOpen?: (c: CohortCell) => void }) {
+function Cell({ c, opp, onOpen, showCtx }: { c: CohortCell; opp?: Opp; onOpen?: (c: CohortCell) => void; showCtx?: boolean }) {
   const m = META[c.status];
   const n = c.status === "suppressed" ? "—" : (c.n_accounts ?? "—"); // k-anon: never reveal a small n
   const tint =
@@ -60,6 +61,7 @@ function Cell({ c, opp, onOpen }: { c: CohortCell; opp?: Opp; onOpen?: (c: Cohor
   const body = (
     <>
       {opp && <span aria-hidden="true" className="absolute right-0 top-0 h-0 w-0 border-l-[16px] border-t-[16px] border-l-transparent" style={{ borderTopColor: "var(--mxm-paletteBrand100)", borderStartEndRadius: "9px" }} />}
+      {showCtx && <span className="block text-[0.68rem] capitalize text-mxm-content-tertiary">{c.cuisine ?? "—"} · {c.zone ?? "—"}</span>}
       <span className={`flex items-center gap-1 text-xs font-semibold ${m.cls}`}>
         <span aria-hidden="true">{m.icon}</span> {m.label}
       </span>
@@ -99,6 +101,7 @@ function TierBlock({
   onOpen,
   open,
   onToggle,
+  mobile,
 }: {
   tier: string;
   cells: CohortCell[];
@@ -106,6 +109,7 @@ function TierBlock({
   onOpen?: (c: CohortCell) => void;
   open: boolean;
   onToggle: () => void;
+  mobile: boolean;
 }) {
   const zones = uniqSort(cells.map((c) => c.zone));
   const cuisines = uniqSort(cells.map((c) => c.cuisine));
@@ -125,27 +129,38 @@ function TierBlock({
         <span className="ml-1 h-px flex-1 bg-mxm-border" />
       </button>
 
-      {open && (
-        <div className="grid gap-1.5" style={{ gridTemplateColumns: cols }}>
-          <div />
-          {zones.map((z) => (
-            <div key={z} className="self-end pb-0.5 text-center text-[0.72rem] capitalize text-mxm-content-tertiary">{z}</div>
-          ))}
-          {cuisines.map((cu) => (
-            <Fragment key={cu}>
-              <div className="self-center pr-2 text-right text-xs capitalize text-mxm-content-secondary">{cu}</div>
-              {zones.map((z) => {
-                const c = byKey.get(`${cu}|${z}`);
-                return c ? (
-                  <Cell key={z} c={c} opp={oppMap.get(c.cohort_id)} onOpen={onOpen} />
-                ) : (
-                  <div key={z} aria-hidden="true" className="grid min-h-[64px] place-items-center rounded-mxm border border-dashed border-mxm-border text-mxm-border">·</div>
-                );
-              })}
-            </Fragment>
-          ))}
-        </div>
-      )}
+      {open &&
+        (mobile ? (
+          // <sm: full-width cells with their own context — readable, no shrunk 2D grid (§9.18 / FINDING-002)
+          <div className="space-y-1.5">
+            {cells
+              .slice()
+              .sort((a, b) => (a.cuisine ?? "").localeCompare(b.cuisine ?? "") || (a.zone ?? "").localeCompare(b.zone ?? ""))
+              .map((c) => (
+                <Cell key={c.cohort_id} c={c} opp={oppMap.get(c.cohort_id)} onOpen={onOpen} showCtx />
+              ))}
+          </div>
+        ) : (
+          <div className="grid gap-1.5" style={{ gridTemplateColumns: cols }}>
+            <div />
+            {zones.map((z) => (
+              <div key={z} className="self-end pb-0.5 text-center text-[0.72rem] capitalize text-mxm-content-tertiary">{z}</div>
+            ))}
+            {cuisines.map((cu) => (
+              <Fragment key={cu}>
+                <div className="self-center pr-2 text-right text-xs capitalize text-mxm-content-secondary">{cu}</div>
+                {zones.map((z) => {
+                  const c = byKey.get(`${cu}|${z}`);
+                  return c ? (
+                    <Cell key={z} c={c} opp={oppMap.get(c.cohort_id)} onOpen={onOpen} />
+                  ) : (
+                    <div key={z} aria-hidden="true" className="grid min-h-[64px] place-items-center rounded-mxm border border-dashed border-mxm-border text-mxm-border">·</div>
+                  );
+                })}
+              </Fragment>
+            ))}
+          </div>
+        ))}
     </section>
   );
 }
@@ -161,6 +176,7 @@ export function CohortMatrix({
 }) {
   const [active, setActive] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const mobile = useIsMobile();
   const oppMap = useMemo(() => buildOppMap(deltas), [deltas]);
 
   const toggleStatus = (s: string) =>
@@ -230,6 +246,7 @@ export function CohortMatrix({
             onOpen={onOpen}
             open={!collapsed.has(t)}
             onToggle={() => toggleTier(t)}
+            mobile={mobile}
           />
         ))
       )}
