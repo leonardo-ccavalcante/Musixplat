@@ -1,0 +1,20 @@
+{
+  "source_mockup": null,
+  "source_plan": "docs/design/cohorts-redesign-brief.md",
+  "mode": "plan-driven",
+  "html_file": "docs/design/mockups/cohorts-20260620/finalized.html",
+  "pretext_tier": "card-grid (prepare + layout)",
+  "framework": "vanilla",
+  "iterations": 2,
+  "date": "2026-06-20",
+  "screen": "cohorts",
+  "branch": "design/cohorts",
+  "approved": true,
+  "approved_changes": [
+    "heatmap-hero (2D cuisine x zone per tier) replacing nested folds",
+    "3 altitudes (hero / secondary band / drill modal / advanced disclosure)",
+    "collapsible tier blocks",
+    "send-to-NBA leads to the cockpit destination",
+    "top-opportunities show-all grouped by cohort desc by impact"
+  ]
+}
