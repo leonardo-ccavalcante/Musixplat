@@ -208,8 +208,6 @@ export const cohortsRouter = router({
     .mutation(async ({ input }): Promise<{ restaurants: number; orders: number }> => {
       // TODO(demo-only): before promoting beyond the demo, assert every row.tenant_id === ctx.tenantId
       // (anti-spoofing, §3 rule 4). Cross-pool CSV rows are intentionally allowed for the single-operator demo.
-      // TODO(scale): if uploaded CSVs grow to thousands of rows, replace the per-row insert loops below with
-      // a single unnest()-based bulk insert (the row-by-row loop is fine at the demo's hundreds-of-rows scale).
       const text = Buffer.from(input.contentBase64, "base64").toString("utf8");
       const rows = parseCsv(text);
 
@@ -218,26 +216,36 @@ export const cohortsRouter = router({
       const rests = [...restMap.values()];
 
       await withTx(async (c) => {
-        for (const r of rests) {
-          await c.query(
-            `insert into tenant."Restaurant"
-               (restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week, status)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,'active')`,
-            [r.restaurant_id, r.tenant_id, r.tier_base, r.segment, r.signup_date, r.zone, r.cuisine, r.committed_hours_week],
-          );
-        }
-        for (const o of rows) {
-          await c.query(
-            // fee/discount default in JS (NOT `coalesce($n,0)`): a coalesce with the integer literal 0 makes
-            // PG infer the param as INTEGER, which rejects decimals like "12.57". Binding the param straight
-            // to its numeric column lets PG infer numeric.
-            `insert into tenant."Order"
-               (restaurant_id, order_date, gross_value, fee, payment_status, cancelled_by, discount_pct, has_photo, has_description, zone, cuisine, channel, provenance)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'csv','[V]')`,
-            [o.restaurant_id, o.order_date, o.gross_value, o.fee ?? 0, o.payment_status,
-             o.cancelled_by ?? null, o.discount_pct ?? 0, o.has_photo ?? null, o.has_description ?? null, o.zone, o.cuisine],
-          );
-        }
+        // Bulk insert via unnest() — ONE round-trip per table (was a per-row loop that took >5min and
+        // tripped the gateway timeout at 100k rows → client saw a non-JSON "upstream error"). Column arrays
+        // are cast explicitly: ::numeric[] keeps decimals like 12.57 (no integer inference); enum/::boolean[]
+        // casts preserve NULLs. Validation + cross-row conflict already happened in parseCsv (fail-closed).
+        await c.query(
+          `insert into tenant."Restaurant"
+             (restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week, status)
+           select u.rid, u.tid, u.tb::public.tier_base, u.seg::public.segment, u.sd::date, u.zn, u.cz, u.chw, 'active'
+           from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::numeric[])
+             as u(rid, tid, tb, seg, sd, zn, cz, chw)`,
+          [
+            rests.map((r) => r.restaurant_id), rests.map((r) => r.tenant_id), rests.map((r) => r.tier_base),
+            rests.map((r) => r.segment), rests.map((r) => r.signup_date), rests.map((r) => r.zone),
+            rests.map((r) => r.cuisine), rests.map((r) => r.committed_hours_week),
+          ],
+        );
+        await c.query(
+          `insert into tenant."Order"
+             (restaurant_id, order_date, gross_value, fee, payment_status, cancelled_by, discount_pct, has_photo, has_description, zone, cuisine, channel, provenance)
+           select u.rid, u.od::date, u.gv, u.fee, u.ps::public.payment_status, u.cb::public.cancelled_by,
+                  u.dp, u.hp, u.hd, u.zn, u.cz, 'csv', '[V]'
+           from unnest($1::text[], $2::text[], $3::numeric[], $4::numeric[], $5::text[], $6::text[], $7::numeric[], $8::boolean[], $9::boolean[], $10::text[], $11::text[])
+             as u(rid, od, gv, fee, ps, cb, dp, hp, hd, zn, cz)`,
+          [
+            rows.map((o) => o.restaurant_id), rows.map((o) => o.order_date), rows.map((o) => o.gross_value),
+            rows.map((o) => o.fee ?? 0), rows.map((o) => o.payment_status), rows.map((o) => o.cancelled_by ?? null),
+            rows.map((o) => o.discount_pct ?? 0), rows.map((o) => o.has_photo ?? null), rows.map((o) => o.has_description ?? null),
+            rows.map((o) => o.zone), rows.map((o) => o.cuisine),
+          ],
+        );
         await c.query(
           `insert into tenant."Weekly_Connection"(restaurant_id, week, connected_hours, committed_hours)
            select r.restaurant_id,

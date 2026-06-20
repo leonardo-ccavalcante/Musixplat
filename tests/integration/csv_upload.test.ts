@@ -43,6 +43,21 @@ describe("cohorts.uploadCsv", () => {
     expect(stored.rows[0]!.discount_pct).toBe("5.50");
   });
 
+  it("bulk-inserts a large batch in one round-trip (regression: per-row loop timed out at 100k scale)", async () => {
+    const before = await count(pool, 'tenant."Order"');
+    const N = 1000, R = 100; // many orders across many restaurants → exercises the unnest() bulk path
+    const lines = [HEADER];
+    for (let i = 0; i < N; i++) {
+      lines.push(`POOL-001,RB${i % R},long_tail,long_tail,2024-01-01,downtown,pizza,50,2026-03-01,100,12.57,ok,,0,true,true`);
+    }
+    const r = await caller().cohorts.uploadCsv({ filename: "big.csv", contentBase64: b64(lines.join("\n")) });
+    expect(r.restaurants).toBe(R);
+    expect(r.orders).toBe(N);
+    expect(await count(pool, 'tenant."Order"')).toBe(before + N);
+    const fee = await pool.query<{ fee: string }>(`select fee::text from tenant."Order" where restaurant_id='RB0' limit 1`);
+    expect(fee.rows[0]!.fee).toBe("12.57"); // decimals survive the bulk numeric[] cast
+  });
+
   it("rejects a bad enum value citing the row + column (fail-closed, nothing inserted)", async () => {
     const before = await count(pool, 'tenant."Order"');
     const bad = [HEADER, `POOL-001,RBAD,WRONG_TIER,long_tail,2024-01-01,downtown,pizza,50,2026-03-01,100,20,ok,,0,true,true`].join("\n");
