@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 import { assertSingleVersion } from "../_core/antimix.js";
-import { runP01 } from "../jobs/p01.js";
+import { runP01, deriveRunWindow } from "../jobs/p01.js";
 import type { CohortsRunResult } from "../../shared/contracts.js";
 
 // Read-only projections of P01 results. All tenant-scoped server-side (RLS guard); cohort-zone
@@ -56,22 +56,21 @@ function status(c: CohortRow): "pending" | "suppressed" | "collapsed" | "ok" {
   return "ok";
 }
 
-// Demo windows the in-product trigger computes (deterministic ref date; the 2nd week enables the delta).
-const RUN_WEEKS = ["2026-05-25", "2026-06-15"] as const;
-const RUN_REF_DATE = "2026-06-17";
-
 export const cohortsRouter = router({
   // 01 operability — the PRODUCT triggers the P01 batch in-product (mirrors diagnosis.run, Gate 1), so a
   // human can drive the Cohorts Explorer with no `pnpm db:p01` terminal. runP01 is deterministic and writes
   // via UPSERT, so a re-run never duplicates (idempotent). Numbers are PRODUCED by the SQL producers over the
   // seeded population, then READ back here — never seeded as results (§14). tenantProcedure = authed.
+  // Window is derived from max(order_date) so ANY uploaded dataset cohortizes regardless of its dates.
   run: tenantProcedure.mutation(async (): Promise<CohortsRunResult> => {
     // Prototype: relax k-anon to 1 so the long-tail cuisine×zone×tier cells render instead of suppressing
     // (they fall under production k=5). k_anon_threshold is a NAMED knob (§3.8) so this tunes WITHOUT code;
     // the suppression mechanism stays intact and is still tested at k=5. Mirrors scripts/run-p01.ts.
     await query(`update catalog."Config_Knobs" set value='1' where key='k_anon_threshold'`);
-    await runP01({ week: RUN_WEEKS[0], refDate: RUN_REF_DATE });
-    await runP01({ week: RUN_WEEKS[1], refDate: RUN_REF_DATE, prevSemana: RUN_WEEKS[0] });
+    const w = await deriveRunWindow();
+    if (!w) return { weeks: [], cohorts: 0, memberships: 0 }; // empty base ⇒ honest zero (fail-closed)
+    await runP01({ week: w.prevWeek, refDate: w.refDate });
+    await runP01({ week: w.week, refDate: w.refDate, prevSemana: w.prevWeek });
     const v = await current();
     const c = await query<{ n: number }>(
       `select count(*)::int n from cohort."Cohort" where cohort_rule_version=$1 and n_accounts is not null`,
@@ -81,7 +80,7 @@ export const cohortsRouter = router({
       `select count(*)::int n from cohort."Cohort_Membership_Snapshot" where cohort_rule_version=$1`,
       [v],
     );
-    return { weeks: [...RUN_WEEKS], cohorts: c[0]?.n ?? 0, memberships: m[0]?.n ?? 0 };
+    return { weeks: [w.prevWeek, w.week], cohorts: c[0]?.n ?? 0, memberships: m[0]?.n ?? 0 };
   }),
 
   // Demo operability — clear the business base so the operator can load a fresh dataset live.

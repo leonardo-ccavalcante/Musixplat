@@ -1,9 +1,23 @@
-import { withTx } from "../db/pool.js";
+import { withTx, query } from "../db/pool.js";
 
 export interface P01Options {
   week: string; // ISO date — the week being computed
   refDate: string; // ISO date — "as of" for tenure (deterministic, never wall-clock)
   prevSemana?: string; // ISO date — previous week, enables the delta diff (F-2.2)
+}
+
+export interface RunWindow { week: string; prevWeek: string; refDate: string; }
+
+// Derive the P01 window from the data itself so ANY uploaded base works regardless of its dates
+// (root cause: the window was hardcoded). refDate = week = the latest order date ("as of"); prevWeek
+// = week − 21d (mirrors the original 21-day gap so the F-2.2 delta still has two snapshots).
+// Fail-closed: no orders ⇒ null (caller no-ops, never invents a date).
+export async function deriveRunWindow(): Promise<RunWindow | null> {
+  const r = await query<{ d: string | null }>(`select max(order_date)::text d from tenant."Order"`);
+  const max = r[0]?.d ?? null;
+  if (!max) return null;
+  const prev = await query<{ d: string }>(`select ($1::date - 21)::text d`, [max]);
+  return { week: max, prevWeek: prev[0]!.d, refDate: max };
 }
 
 // P01 batch (04 §6). Orchestration in TS; every number is computed by a named SQL producer
