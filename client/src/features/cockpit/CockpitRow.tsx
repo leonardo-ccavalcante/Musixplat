@@ -1,6 +1,7 @@
 import { cn, fmtNum } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { AutonomyBadge } from "./AutonomyBadge";
+import { KbReviewBadge } from "./KbReviewBadge";
 import type { NbaCockpitRow } from "@shared/contracts";
 
 export type RowAction = "RELEASE" | "PAUSE";
@@ -28,18 +29,25 @@ function describe(j: unknown, rootCause: string | null): string {
 // rows have no Release (the AI already acts) but keep Pause (a human can always override DOWN). needs-human
 // rows expose Release + Pause (02:1C). Disabled while pending or once recorded (anti double-fire). muted =
 // the calm auto list (lower visual weight than the action queue).
+export interface KbReview {
+  shouldReview: boolean;
+  note: string | null;
+}
+
 export function CockpitRow({
   row,
   onAction,
   onOpen,
   state,
   muted,
+  kbReview,
 }: {
   row: NbaCockpitRow;
   onAction: (row: NbaCockpitRow, action: RowAction) => void;
   onOpen?: (row: NbaCockpitRow) => void;
   state?: RowState;
   muted?: boolean;
+  kbReview?: KbReview;
 }) {
   const busy = state?.status === "pending";
   const canAct = row.effective_level != null && state?.status !== "done";
@@ -62,6 +70,7 @@ export function CockpitRow({
         level <span className="text-mxm-content">{row.effective_level ?? "—"}</span>
       </div>
       <AutonomyBadge status={row.status} reason={row.reason} />
+      <KbReviewBadge shouldReview={kbReview?.shouldReview} note={kbReview?.note} />
       <div className="ml-auto flex items-center gap-2">
         {onOpen && (
           <Button variant="ghost" onClick={() => onOpen(row)}>

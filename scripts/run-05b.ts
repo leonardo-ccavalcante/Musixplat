@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { openaiChatClient } from "../server/_core/llm.js";
 import { pool, query } from "../server/db/pool.js";
 import { runDiagnosis } from "../server/diagnosis/orchestrator.js";
 import { deterministicReasoning, llmReasoning, type DiagnosisReasoning } from "../server/diagnosis/reasoning.js";
@@ -18,9 +18,9 @@ function devCtx(): Context {
 }
 
 async function main(): Promise<void> {
-  const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
-  const reasoning: DiagnosisReasoning = hasKey ? llmReasoning(new Anthropic()) : deterministicReasoning;
-  console.warn(`run-05b: AGENTE reasoning = ${hasKey ? "Claude (real LLM)" : "deterministic (no ANTHROPIC_API_KEY)"}`);
+  const hasKey = Boolean(process.env.OPENAI_API_KEY);
+  const reasoning: DiagnosisReasoning = hasKey ? llmReasoning(await openaiChatClient()) : deterministicReasoning;
+  console.warn(`run-05b: AGENTE reasoning = ${hasKey ? "OpenAI (real LLM)" : "deterministic (no OPENAI_API_KEY)"}`);
 
   await stagePayScenario();
 

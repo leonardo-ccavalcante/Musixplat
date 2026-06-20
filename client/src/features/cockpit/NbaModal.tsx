@@ -6,6 +6,14 @@ import { AutonomyBadge } from "./AutonomyBadge";
 import { fmtNum } from "@/lib/utils";
 import type { RowAction, RowState } from "./CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
+import type { SearchHit } from "@shared/contracts_knowledge";
+
+// P06 NBA tie-in — the KB impact signal, supplied by the page (presentational, no data fetch here).
+export interface KbImpact {
+  shouldReview: boolean;
+  evidence: SearchHit[];
+  note: string | null;
+}
 
 // 02 — open one NBA so the operator SEES it: the recommended action, the cohort, the root cause, THE PATH it
 // indicates (before_after_expected, a [C] projection), the autonomy verdict + WHY a human is on it, and the
@@ -37,14 +45,21 @@ export function NbaModal({
   onClose,
   onAction,
   state,
+  kbImpact,
 }: {
   row: NbaCockpitRow | null;
   onClose: () => void;
   onAction: (row: NbaCockpitRow, action: RowAction) => void;
   state?: RowState;
+  kbImpact?: KbImpact;
 }) {
   const busy = state?.status === "pending";
   const canAct = !!row && row.effective_level != null && state?.status !== "done";
+
+  // P06 NBA tie-in — the KB impact for the open row. TEXT signal only (§3.3/§3.6): it never moves a
+  // number / changes the level; it surfaces the cited Policy/Terms docs so the human reviews them
+  // before releasing. Supplied by the page; fail-closed (undefined ⇒ no panel).
+  const kb = kbImpact;
 
   return (
     <Modal open={!!row} onClose={onClose} title={row ? `Next Best Action · ${row.cohort_id}` : "Next Best Action"}>
@@ -89,6 +104,28 @@ export function NbaModal({
             )}
             <p className="mt-1.5 text-xs text-mxm-content-tertiary">financial class · {row.financial_class ?? "n/a"}</p>
           </div>
+
+          {kb?.shouldReview && (
+            <div className="rounded-mxm border border-mxm-amber p-3">
+              <p className="flex items-center gap-1 text-xs uppercase tracking-wide text-mxm-amber">
+                <span aria-hidden>✦</span> Review · KB
+              </p>
+              <p className="mt-0.5 text-xs text-mxm-content-secondary">{kb.note}</p>
+              <ul className="mt-2 space-y-1">
+                {kb.evidence.map((h) => (
+                  <li key={h.chunkId} className="flex items-baseline gap-2 text-xs">
+                    <span className="font-medium text-mxm-content">{h.filename}</span>
+                    <span className="rounded-mxm border border-mxm-border px-1.5 py-0.5 text-mxm-content-tertiary">
+                      {h.docType}
+                    </span>
+                    <span className="truncate text-mxm-content-secondary" title={h.content}>
+                      {h.content}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="border-t border-mxm-border pt-3">
             <p className="mb-2 text-xs uppercase tracking-wide text-mxm-content-tertiary">

@@ -12,6 +12,8 @@ import { routeStub } from "./routing.js";
 import { upsertCaseRepo } from "./case_repo.js";
 import { emitDossier, type DossierGateResult } from "./dossier.js";
 import { deterministicReasoning, type DiagnosisReasoning } from "./reasoning.js";
+import { searchKnowledge } from "../knowledge/store.js";
+import type { Embedder } from "../knowledge/embedder.js";
 import type { Criticality } from "../../shared/contracts_05b.js";
 
 // Deterministic candidate hypotheses per area (seed set; the provider only RANKS these, §8).
@@ -47,6 +49,7 @@ export async function runDiagnosis(
   problemId: string,
   tenantId: string,
   reasoning: DiagnosisReasoning = deterministicReasoning,
+  embedder?: Embedder, // DI: tests inject deterministicEmbedder (hermetic/free); prod passes none ⇒ OpenAI.
 ): Promise<DiagnosisResult> {
   const prob = (
     await query<{ conversation_id: string | null; criticality: Criticality | null }>(
@@ -136,6 +139,38 @@ export async function runDiagnosis(
       where problem_id = $1 and tenant_id = $4`,
     [problemId, top.hypothesis, JSON.stringify(sims.map((x) => x.kb_case_id)), tenantId],
   );
+
+  // B.6.5 semantic grounding over the UPLOADED knowledge base (P06). Augments — never replaces — the
+  // area_type/Knowledge_Case path above (that match stays the §3 fail-closed grounding floor). Text-only
+  // retrieval (§3.6): the producer fills kb_doc_refs at runtime (never seeded, §14), provenance [C].
+  // tenant scope is the server-resolved tenantId (§3.4). Fail-closed: no hit ⇒ kb_doc_refs stays [].
+  // Fail-closed (§3.7): a retrieval outage degrades to NO refs (kb_doc_refs stays []) — it must NEVER
+  // abort the diagnosis. The area_type/Knowledge_Case grounding above already stands on its own.
+  try {
+    const kbHits = await searchKnowledge(tenantId, top.hypothesis ?? text ?? cls.areaType, undefined, embedder);
+    if (kbHits.length) {
+      await query(
+        `update tenant."Diagnosed_Problem"
+            set kb_doc_refs = $2::jsonb,
+                provenance_by_field = provenance_by_field || jsonb_build_object('kb_doc_refs','[C]')
+          where problem_id = $1 and tenant_id = $3`,
+        [
+          problemId,
+          JSON.stringify(
+            kbHits.map((h) => ({
+              docId: h.docId,
+              filename: h.filename,
+              docType: h.docType,
+              similarity: h.similarity,
+            })),
+          ),
+          tenantId,
+        ],
+      );
+    }
+  } catch {
+    // swallow → conservative state (no refs); the deterministic spine continues uninterrupted.
+  }
 
   // B.7 impact (Named_Query) + priority (risk × impact vs cost). impact = revenue_lost (SQL).
   const imp = await computeRevenueLost(problemId);

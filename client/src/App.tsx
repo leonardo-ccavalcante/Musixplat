@@ -4,6 +4,7 @@ import { CohortsExplorerPage } from "./pages/CohortsExplorerPage";
 import { CockpitPage } from "./pages/CockpitPage";
 import { ActionDetailPage } from "@/pages/ActionDetailPage";
 import { DiagnosisPage } from "./pages/DiagnosisPage";
+import { KnowledgePage } from "./pages/KnowledgePage";
 import { HealthPage } from "./pages/HealthPage";
 
 // Active nav = coral (Design §8 "active: coral marker · ONE active style everywhere"). aria-current
@@ -37,6 +38,9 @@ export function App() {
         <NavLink href="/diagnosis" active={loc.startsWith("/diagnosis")}>
           Support · Diagnosis
         </NavLink>
+        <NavLink href="/knowledge" active={loc.startsWith("/knowledge")}>
+          Knowledge
+        </NavLink>
         <NavLink href="/health" active={loc.startsWith("/health")}>
           Health · 1:10
         </NavLink>
@@ -47,6 +51,7 @@ export function App() {
         <Route path="/cockpit/action/:code" component={ActionDetailPage} />
         <Route path="/cockpit" component={CockpitPage} />
         <Route path="/diagnosis" component={DiagnosisPage} />
+        <Route path="/knowledge" component={KnowledgePage} />
         <Route path="/health" component={HealthPage} />
         <Route>
           <main className="p-6 text-mxm-content-secondary">Not found</main>
