@@ -33,3 +33,6 @@ pnpm-debug.log*
 
 # local agent settings
 .claude/
+
+# DB backups (business data — never commit)
+backups/
