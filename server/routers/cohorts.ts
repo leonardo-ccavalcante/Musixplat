@@ -84,6 +84,22 @@ export const cohortsRouter = router({
     return { weeks: [...RUN_WEEKS], cohorts: c[0]?.n ?? 0, memberships: m[0]?.n ?? 0 };
   }),
 
+  // Demo operability — clear the business base so the operator can load a fresh dataset live.
+  // Truncates ONLY business + cohort-result tables; PRESERVES catalog (knobs by name, rule versions,
+  // named queries, NBA/intent catalogs) and gov.User — wiping those would break the producers (§3.8).
+  // Destructive + demo-scoped: guarded by a confirm dialog client-side; tenantProcedure = authed.
+  clearBusinessData: tenantProcedure.mutation(async (): Promise<{ cleared: true }> => {
+    await query(`
+      truncate
+        cohort."Prioritized_NBA_Event", cohort."Cohort_Membership_Snapshot",
+        cohort."Subgroup", cohort."Cohort",
+        tenant."Weekly_Connection", tenant."Conversation_Episode",
+        tenant."Order", tenant."Restaurant"
+      restart identity cascade;
+    `);
+    return { cleared: true };
+  }),
+
   // F-2.1 / F-4.1 — cohort cells + semaphore status.
   list: tenantProcedure.query(async ({ ctx }) => {
     const v = await current();
