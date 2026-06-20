@@ -109,6 +109,15 @@ describe("F-2.1 CohortMatrix — heatmap hero (2D cuisine × zone, per tier)", (
     expect(within(btn).getByText(/^gap /)).toBeInTheDocument();
   });
 
+  it("caps the opportunity overlay to the top opportunities (coral stays meaningful, §1)", () => {
+    const cells = Array.from({ length: 14 }, (_, i) =>
+      cell({ cohort_id: `c${i}`, status: "ok", cuisine: "sushi", zone: `z${i}`, tier_base: "long_tail" }),
+    );
+    const deltas = Array.from({ length: 14 }, (_, i) => delta({ cohort_id: `c${i}`, evento_id: `e${i}`, gap_to_top: (i + 1) / 20 }));
+    render(<CohortMatrix cells={cells} deltas={deltas} />);
+    expect(screen.getAllByText(/^gap /).length).toBe(12); // 14 candidates → capped at TOP_OPPORTUNITIES
+  });
+
   it("renders explicit empty state when no cohorts", () => {
     render(<CohortMatrix cells={[]} />);
     expect(screen.getByText(/No cohorts computed/)).toBeInTheDocument();

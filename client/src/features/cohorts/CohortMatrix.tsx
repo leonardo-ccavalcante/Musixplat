@@ -27,15 +27,22 @@ const TIER_LABEL: Record<string, string> = {
 };
 const uniqSort = (xs: (string | null)[]) => [...new Set(xs.filter((x): x is string => x != null))].sort();
 
+// Coral marks WHERE TO ACT, not everywhere — cap the overlay to the top opportunities so the accent
+// stays meaningful (DESIGN-STANDARD §1). The full ranking lives in OpportunitiesPanel.
+const TOP_OPPORTUNITIES = 12;
 type Opp = { gap: number | null; atRisk: boolean };
+function rankOpp(a: Opp, b: Opp): number {
+  if (a.atRisk !== b.atRisk) return a.atRisk ? -1 : 1;
+  return (b.gap ?? -Infinity) - (a.gap ?? -Infinity);
+}
 function buildOppMap(deltas: DeltaRow[]): Map<string, Opp> {
-  const m = new Map<string, Opp>();
+  const byCohort = new Map<string, Opp>();
   for (const d of deltas) {
-    const cur = m.get(d.cohort_id);
+    const cur = byCohort.get(d.cohort_id);
     const g = Math.max(cur?.gap ?? -Infinity, d.gap_to_top ?? -Infinity);
-    m.set(d.cohort_id, { gap: g === -Infinity ? null : g, atRisk: (cur?.atRisk ?? false) || d.delta_status === "at_risk" });
+    byCohort.set(d.cohort_id, { gap: g === -Infinity ? null : g, atRisk: (cur?.atRisk ?? false) || d.delta_status === "at_risk" });
   }
-  return m;
+  return new Map([...byCohort.entries()].sort((a, b) => rankOpp(a[1], b[1])).slice(0, TOP_OPPORTUNITIES));
 }
 
 function Cell({ c, opp, onOpen }: { c: CohortCell; opp?: Opp; onOpen?: (c: CohortCell) => void }) {
