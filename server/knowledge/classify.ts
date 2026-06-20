@@ -3,7 +3,7 @@
 //   - llmClassify(client): real Claude proposes ONE type from the closed MECE list; TEXT only (§3.6),
 //     never a number. Off-list / malformed ⇒ THROWS so classifyDocType fail-closes to deterministic.
 // classifyDocType degrades to deterministic on ANY LLM error — it NEVER throws to the caller (§3.7).
-import type Anthropic from "@anthropic-ai/sdk";
+import { chatText, openaiChatClient, type ChatClient } from "../_core/llm.js";
 
 // Closed MECE taxonomy (matches public.kb_doc_type SQL enum + docType Zod contract).
 export const DOC_TYPES = ["Policy", "Context", "FAQ", "Terms", "Runbook", "Other"] as const;
@@ -36,20 +36,14 @@ const isDocType = (v: unknown): v is DocType => DOC_TYPES.includes(v as DocType)
 const unfence = (s: string): string =>
   s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
-/** Real-Claude provider. TEXT only (§3.6). Off-list or malformed output THROWS ⇒ caller fail-closes. */
-export function llmClassify(client: Anthropic, model = "claude-sonnet-4-6") {
+/** Real-LLM provider (OpenAI). TEXT only (§3.6). Off-list or malformed output THROWS ⇒ caller fail-closes. */
+export function llmClassify(client: ChatClient) {
+  const system =
+    `Classify a company document into EXACTLY one of: ${DOC_TYPES.join(", ")}. ` +
+    'Reply ONLY compact JSON {"docType":"...","confidence":0..1}. No prose.';
   return async (text: string): Promise<DocClassification> => {
-    const res = await client.messages.create({
-      model,
-      max_tokens: 64,
-      system:
-        `Classify a company document into EXACTLY one of: ${DOC_TYPES.join(", ")}. ` +
-        'Reply ONLY compact JSON {"docType":"...","confidence":0..1}. No prose.',
-      messages: [{ role: "user", content: text.slice(0, 6000) }],
-    });
-    const block = res.content.find((b) => b.type === "text");
-    if (!block || block.type !== "text") throw new Error("llmClassify: no text block");
-    const out = JSON.parse(unfence(block.text)) as { docType: unknown; confidence: unknown };
+    const raw = await chatText(client, system, text.slice(0, 6000), 64);
+    const out = JSON.parse(unfence(raw)) as { docType: unknown; confidence: unknown };
     if (!isDocType(out.docType) || typeof out.confidence !== "number") {
       throw new Error("llmClassify: off-contract output"); // fail-closed, no guess
     }
@@ -57,13 +51,12 @@ export function llmClassify(client: Anthropic, model = "claude-sonnet-4-6") {
   };
 }
 
-/** Prod uses Claude when the key is present; on ANY error degrades to deterministic. Never throws (§3.7). */
+/** Prod uses OpenAI when the key is present; on ANY error degrades to deterministic. Never throws (§3.7). */
 export async function classifyDocType(text: string): Promise<DocClassification> {
-  // Tests NEVER call the paid LLM — deterministic under vitest (hermetic, free, stable). Prod uses Claude.
-  if (process.env.VITEST || !process.env.ANTHROPIC_API_KEY) return deterministicClassify(text);
+  // Tests NEVER call the paid LLM — deterministic under vitest (hermetic, free, stable). Prod uses OpenAI.
+  if (process.env.VITEST || !process.env.OPENAI_API_KEY) return deterministicClassify(text);
   try {
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    return await llmClassify(new Anthropic())(text);
+    return await llmClassify(await openaiChatClient())(text);
   } catch {
     return deterministicClassify(text); // degrade to deterministic, never throw to the caller
   }
