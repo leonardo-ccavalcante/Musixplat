@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { extractText } from "../knowledge/parsers.js";
-import { ingestDocument, searchKnowledge } from "../knowledge/store.js";
+import { ingestDocument, searchKnowledge, answerFromBase } from "../knowledge/store.js";
 import { query } from "../db/pool.js";
 import { uploadInput, confirmTypeInput, searchInput } from "../../shared/contracts_knowledge.js";
 
@@ -57,6 +57,12 @@ export const knowledgeRouter = router({
   search: tenantProcedure.input(searchInput).query(async ({ ctx, input }) => ({
     hits: await searchKnowledge(ctx.tenantId, input.query, input.topK),
   })),
+
+  // Ask: the Q&A chatbot — retrieval grounds a synthesized, source-cited answer (the "G" of RAG).
+  // Fail-closed: no relevant passage ⇒ grounded=false + null answer (never invented, §3.7). tenant scoped.
+  ask: tenantProcedure
+    .input(searchInput)
+    .query(async ({ ctx, input }) => answerFromBase(ctx.tenantId, input.query)),
 
   // NBA tie-in: does the knowledge base hold a Policy/Terms doc relevant to this NBA? This is a
   // TEXT signal only (§3.3/§3.6) — it NEVER moves a number or auto-changes the autonomy level; the

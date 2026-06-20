@@ -48,6 +48,17 @@ export type SearchHit = z.infer<typeof searchHit>;
 export const searchResult = z.object({ hits: z.array(searchHit) });
 export type SearchResult = z.infer<typeof searchResult>;
 
+// ask: the Q&A chatbot. Retrieval grounds a synthesized answer that CITES its source docs; the supporting
+// hits travel with it (cite-don't-assert, DESIGN-STANDARD §3). Fail-closed — no relevant passage ⇒
+// grounded=false + answer=null ("not in the base"), never an invented answer (§3.7).
+export const askResult = z.object({
+  grounded: z.boolean(),
+  answer: z.string().nullable(),
+  sources: z.array(z.object({ filename: z.string(), docType: docType.nullable() })),
+  hits: z.array(searchHit),
+});
+export type AskResult = z.infer<typeof askResult>;
+
 export const docRow = z.object({
   docId: z.string(),
   filename: z.string(),

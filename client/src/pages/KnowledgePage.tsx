@@ -5,7 +5,7 @@ import { ProvenanceLegend } from "@/components/ui/ProvenanceLegend";
 import { UploadModal } from "@/features/knowledge/UploadModal";
 import { DocList } from "@/features/knowledge/DocList";
 import { SearchTester } from "@/features/knowledge/SearchTester";
-import { uploadResult, type DocRow, type SearchHit, type UploadResult } from "@shared/contracts_knowledge";
+import { uploadResult, type DocRow, type AskResult, type UploadResult } from "@shared/contracts_knowledge";
 
 // P06 — the dedicated Knowledge Base console. Upload many formats → the AI PROPOSES a type ([I]) → the
 // human confirms ([V]) → it joins the base (pgvector, tenant scoped server-side, §3.4). The search
@@ -49,11 +49,11 @@ export function KnowledgePage() {
 
   // Search is run on submit (not on every keystroke) — keep the query in state and pass it to useQuery.
   const [query, setQuery] = useState("");
-  const searchQ = trpc.knowledge.search.useQuery(
+  const askQ = trpc.knowledge.ask.useQuery(
     { query },
     { enabled: ready && searched && query.length > 0 },
   );
-  const hits = useMemo(() => (searchQ.data?.hits ?? []) as SearchHit[], [searchQ.data]);
+  const ask = useMemo(() => (askQ.data ?? null) as AskResult | null, [askQ.data]);
 
   return (
     <main className="mx-auto max-w-3xl p-[clamp(1rem,2vw,2rem)]">
@@ -85,16 +85,17 @@ export function KnowledgePage() {
         <ProvenanceLegend />
       </section>
 
-      <section aria-label="Search" className="space-y-3">
-        <h2 className="text-sm font-semibold text-mxm-content">Search tester</h2>
+      <section aria-label="Ask the base" className="space-y-3">
+        <h2 className="text-sm font-semibold text-mxm-content">Ask the base</h2>
         <p className="max-w-[64ch] text-xs text-mxm-content-tertiary">
-          Run a query against the base to see whether it holds this shape — the retrieval, in view.
+          Ask a question — the assistant answers from your documents and cites the source. Nothing in the
+          base on the topic ⇒ it says so, never an invented answer.
         </p>
         <SearchTester
-          hits={hits}
-          hasSearched={searched && !!searchQ.data}
-          isLoading={searched && searchQ.isFetching}
-          isError={searchQ.isError}
+          result={ask}
+          hasSearched={searched && !!askQ.data}
+          isLoading={searched && askQ.isFetching}
+          isError={askQ.isError}
           onSearch={(q) => {
             setQuery(q);
             setSearched(true);
