@@ -36,3 +36,6 @@ pnpm-debug.log*
 
 # DB backups (business data — never commit)
 backups/
+
+# design-review evidence screenshots
+docs/**/*.png
