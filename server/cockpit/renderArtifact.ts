@@ -26,13 +26,16 @@ export interface RenderedArtifact {
   content: { action: string; cohort: string; root: string; path: string; how: string };
 }
 
-// One human-readable evidence line from the [C] projection; numbers are quoted, never computed.
+// Display rounding (mirrors lib/utils fmtNum): at most 2 decimals, no false precision (§3.6/§3.10).
+const fmt = (n: number): string => Number(n.toFixed(2)).toString();
+
+// One human-readable evidence line from the [C] projection; numbers are quoted (rounded), never computed.
 function pathText(j: unknown): string {
   if (j && typeof j === "object") {
     const o = j as { dimension?: unknown; measured?: unknown; standard?: unknown; gap?: unknown };
     if (typeof o.dimension === "string" && typeof o.measured === "number" && typeof o.standard === "number") {
-      const gap = typeof o.gap === "number" ? ` · gap ${o.gap}` : "";
-      return `${o.dimension}: ${o.measured} → ${o.standard}${gap}`;
+      const gap = typeof o.gap === "number" ? ` · gap ${fmt(o.gap)}` : "";
+      return `${o.dimension}: ${fmt(o.measured)} → ${fmt(o.standard)}${gap}`;
     }
   }
   return "no projected path";

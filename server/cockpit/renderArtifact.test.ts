@@ -19,6 +19,18 @@ describe("02:1a renderArtifact — deterministic, quotes produced fields (§14, 
     expect(a.content.how).toMatch(/human releases the money/);
   });
 
+  it("rounds path floats to 2 decimals (no false precision, §3.6/§3.10)", () => {
+    const a = renderArtifact({
+      action_type: "A7",
+      action_label: "Investigate fraud/risk",
+      cohort_id: "c",
+      root_cause: null,
+      before_after_expected: { dimension: "cancel_by_customer", measured: 0.0833333333, standard: 0.05, gap: 0.0333333333 },
+      playbook: null,
+    });
+    expect(a.content.path).toBe("cancel_by_customer: 0.08 → 0.05 · gap 0.03");
+  });
+
   it("unknown action ⇒ generic memo kind, never throws", () => {
     const a = renderArtifact({
       action_type: "Z9",
