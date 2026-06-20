@@ -9,11 +9,14 @@ jobs:
   gate:
     runs-on: ubuntu-latest
 
-    # Lightweight Postgres service (GitHub's Docker Hub mirror — no ECR rate limits, no full
-    # Supabase stack). Tests connect via direct pg (resetDb truncate+seed), not the Supabase CLI.
+    # Lightweight Postgres service with pgvector preinstalled. `pgvector/pgvector:pg15` is the
+    # pgvector project's official image — `postgres:15` + the `vector` extension control file/.so —
+    # so the P06 migration's `create extension vector` resolves with no runtime compile or custom
+    # image. Drop-in: same env, port 5432, pg_isready health check. Tests connect via direct pg
+    # (resetDb truncate+seed), not the Supabase CLI.
     services:
       postgres:
-        image: postgres:15
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
