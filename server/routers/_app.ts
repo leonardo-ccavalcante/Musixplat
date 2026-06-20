@@ -11,6 +11,7 @@ import { artifactRouter } from "./artifact.js";
 import { healthRouter } from "./health.js";
 import { intakeRouter } from "./intake.js";
 import { knowledgeRouter } from "./knowledge.js";
+import { costRouter } from "./cost.js";
 
 // Root tRPC router.
 export const appRouter = router({
@@ -27,6 +28,7 @@ export const appRouter = router({
   roi: healthRouter,
   intake: intakeRouter,
   knowledge: knowledgeRouter,
+  cost: costRouter,
 });
 
 export type AppRouter = typeof appRouter;

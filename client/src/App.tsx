@@ -6,6 +6,7 @@ import { ActionDetailPage } from "@/pages/ActionDetailPage";
 import { DiagnosisPage } from "./pages/DiagnosisPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { HealthPage } from "./pages/HealthPage";
+import { CostPage } from "./pages/CostPage";
 
 // Active nav = coral (Design §8 "active: coral marker · ONE active style everywhere"). aria-current
 // for wayfinding (the trunk test: which page am I on?). Inactive = muted, hover lifts to primary.
@@ -44,6 +45,9 @@ export function App() {
         <NavLink href="/health" active={loc.startsWith("/health")}>
           Health · 1:10
         </NavLink>
+        <NavLink href="/cost" active={loc.startsWith("/cost")}>
+          AI Cost
+        </NavLink>
       </nav>
       <Switch>
         <Route path="/" component={CohortsExplorerPage} />
@@ -53,6 +57,7 @@ export function App() {
         <Route path="/diagnosis" component={DiagnosisPage} />
         <Route path="/knowledge" component={KnowledgePage} />
         <Route path="/health" component={HealthPage} />
+        <Route path="/cost" component={CostPage} />
         <Route>
           <main className="p-6 text-mxm-content-secondary">Not found</main>
         </Route>

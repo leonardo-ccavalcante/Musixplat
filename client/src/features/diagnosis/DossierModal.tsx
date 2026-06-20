@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { ProvenanceLegend } from "@/components/ui/ProvenanceLegend";
 import { trpc } from "@/lib/trpc";
 import { fmtNum } from "@/lib/utils";
+import { formatUsd } from "@/lib/cost";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
 import { printDossierMemo, type DossierData } from "./dossierMemo";
 import { openEmailPreview } from "./dossierEmail";
@@ -112,6 +113,20 @@ function KbCasePanel({ kbCaseId, onBack }: { kbCaseId: string; onBack: () => voi
   );
 }
 
+// P07 — what the AI spent diagnosing THIS ticket (ref_id = problem_id). Read-only over gov.v_llm_cost;
+// "—" when the model has no configured price (never a fake $0). Quiet if no AI calls were logged.
+function TicketCost({ problemId }: { problemId: string }) {
+  const q = trpc.cost.ticket.useQuery({ refId: problemId });
+  if (q.isLoading || q.isError || !q.data || q.data.calls === 0) return null;
+  return (
+    <div className="rounded-mxm border border-mxm-border px-3 py-2 text-xs text-mxm-content-secondary">
+      AI cost for this ticket:{" "}
+      <span className="font-medium tabular-nums text-mxm-content">{formatUsd(q.data.costUsd)}</span>{" "}
+      · {q.data.calls} LLM call{q.data.calls === 1 ? "" : "s"}
+    </div>
+  );
+}
+
 function DossierBody({ row, data }: { row: DiagnosisListRow; data: DossierData }) {
   const [kbCaseId, setKbCaseId] = useState<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
@@ -142,6 +157,8 @@ function DossierBody({ row, data }: { row: DiagnosisListRow; data: DossierData }
           </Button>
         </div>
       </div>
+
+      <TicketCost problemId={row.problem_id} />
 
       <dl className="divide-y divide-mxm-border">
         {FIELD_LABELS.map(([f, label]) => (
