@@ -11,7 +11,10 @@ import { query } from "./db/pool.js";
 assertProdSecrets();
 
 const app = express();
-app.use(express.json());
+// Knowledge-base uploads send the file as base64 inside the tRPC JSON envelope; base64 inflates ~37%.
+// The Express default (100 kB) rejects any real PDF with 413 before it reaches the parser, so lift the
+// ceiling to a sane document size. Oversized files still fail closed (413) — never a silent truncation.
+app.use(express.json({ limit: "25mb" }));
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 

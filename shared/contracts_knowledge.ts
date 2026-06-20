@@ -13,13 +13,14 @@ export const uploadInput = z.object({
 });
 export type UploadInput = z.infer<typeof uploadInput>;
 
-// upload result: AI PROPOSES the type ([I] until a human confirms); parse_failed surfaces the reason
-// (fail-closed — never a silent success, §3.7).
+// upload result: AI PROPOSES the type ([I] until a human confirms). Two fail-closed outcomes, each with
+// a reason and no usable row written (§3.7): parse_failed (can't read the file) and index_failed (embed
+// failed after retries — e.g. AI quota/rate-limit). docId is null when nothing was stored (index_failed).
 export const uploadResult = z.object({
-  docId: z.string(),
+  docId: z.string().nullable(),
   proposedType: docType,
   confidence: z.number(),
-  status: z.enum(["proposed", "parse_failed"]),
+  status: z.enum(["proposed", "parse_failed", "index_failed"]),
   reason: z.string().nullable(),
 });
 export type UploadResult = z.infer<typeof uploadResult>;

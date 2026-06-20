@@ -38,7 +38,8 @@ type Phase =
   | { kind: "pick" }
   | { kind: "uploading" }
   | { kind: "confirm"; result: UploadResult; chosen: DocType }
-  | { kind: "failed"; reason: string }
+  | { kind: "failed"; reason: string } // could not parse the file (bad/empty content)
+  | { kind: "index_failed"; reason: string } // embed failed after retries — nothing stored, retryable
   | { kind: "error"; reason: string };
 
 // P06 — upload then the AI PROPOSES a doc-type ([I], text only — never a number, §3.6); the human
@@ -59,15 +60,17 @@ export function UploadModal({
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "pick" });
   const [confirming, setConfirming] = useState(false);
+  const [lastFile, setLastFile] = useState<File | null>(null); // retained so "Try again" can re-upload
 
   function close(): void {
     setPhase({ kind: "pick" }); // reset so a re-open starts clean
+    setLastFile(null);
     onClose();
   }
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Upload one file → the AI proposes a type. Two fail-closed outcomes surface their reason and store
+  // nothing usable: parse_failed (bad file) and index_failed (embed failed after retries — retryable).
+  async function runUpload(file: File): Promise<void> {
     setPhase({ kind: "uploading" });
     try {
       const contentBase64 = await toBase64(file);
@@ -78,6 +81,8 @@ export function UploadModal({
       });
       if (result.status === "parse_failed") {
         setPhase({ kind: "failed", reason: result.reason ?? "could not parse this file" });
+      } else if (result.status === "index_failed") {
+        setPhase({ kind: "index_failed", reason: result.reason ?? "could not index this file right now" });
       } else {
         setPhase({ kind: "confirm", result, chosen: result.proposedType });
       }
@@ -86,8 +91,15 @@ export function UploadModal({
     }
   }
 
+  function onFile(e: React.ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLastFile(file);
+    void runUpload(file);
+  }
+
   async function confirm(): Promise<void> {
-    if (phase.kind !== "confirm") return;
+    if (phase.kind !== "confirm" || !phase.result.docId) return; // docId is always set in "confirm"
     setConfirming(true);
     try {
       await onConfirm({ docId: phase.result.docId, docType: phase.chosen });
@@ -111,7 +123,7 @@ export function UploadModal({
             id="kb-file"
             type="file"
             accept=".pdf,.md,.markdown,.txt"
-            onChange={(e) => void onFile(e)}
+            onChange={onFile}
             disabled={phase.kind === "uploading"}
             className="mt-1.5 block w-full text-sm text-mxm-content-secondary file:mr-3 file:rounded-mxm file:border file:border-mxm-border file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
           />
@@ -130,6 +142,23 @@ export function UploadModal({
           <p role="alert" className="rounded-mxm border border-mxm-red px-3 py-2 text-sm text-mxm-red">
             Could not add this file: {phase.reason}. Nothing was stored as usable — try another file.
           </p>
+        )}
+
+        {phase.kind === "index_failed" && (
+          <div role="alert" className="space-y-2 rounded-mxm border border-mxm-red px-3 py-2 text-sm text-mxm-red">
+            <p>
+              Could not index this file: {phase.reason}. Nothing was stored — your base is unchanged, so
+              you can safely try again.
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => lastFile && void runUpload(lastFile)}
+              disabled={!lastFile}
+            >
+              Try again
+            </Button>
+          </div>
         )}
 
         {phase.kind === "error" && (

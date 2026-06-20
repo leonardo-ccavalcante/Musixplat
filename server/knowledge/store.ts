@@ -1,5 +1,5 @@
-import { query } from "../db/pool.js";
-import { resolveEmbedder, type Embedder } from "./embedder.js";
+import { query, withTx } from "../db/pool.js";
+import { resolveEmbedder, embedWithRetry, type Embedder } from "./embedder.js";
 import { chatText, openaiChatClient, type ChatClient } from "../_core/llm.js";
 import { chunk } from "./chunker.js";
 import { classifyDocType } from "./classify.js";
@@ -22,28 +22,36 @@ export async function ingestDocument(
   doc: { filename: string; mime: string; text: string; source?: string },
   embedder?: Embedder, // DI: tests inject deterministicEmbedder (hermetic/free); prod passes none ⇒ OpenAI.
 ): Promise<{ docId: string; docType: string; confidence: number }> {
-  const cls = await classifyDocType(doc.text); // AI PROPOSES the type (text only; never a number) — [I].
-  const ins = await query<{ doc_id: string }>(
-    `insert into tenant."Knowledge_Document"(tenant_id,filename,mime,source,raw_text,doc_type,doc_type_confidence,status,provenance_by_field)
-     values ($1,$2,$3,$4,$5,$6,$7,'proposed',jsonb_build_object('doc_type','[I]'))
-     returning doc_id`,
-    [tenantId, doc.filename, doc.mime, doc.source ?? "upload", doc.text, cls.docType, cls.confidence],
-  );
-  const docId = ins[0]!.doc_id;
+  // All fallible work that must NOT leave a trace on failure runs BEFORE any write: classify the type
+  // ([I], text only — never a number), split into chunks, and embed (bounded retry on transient errors;
+  // a terminal failure like a bad key/quota throws here). If anything throws, nothing was written —
+  // no orphan document (§3.7 fail-closed, operator rule "se o embed falhar, não colocar lixo no DB").
+  const cls = await classifyDocType(doc.text);
   const parts = chunk(doc.text, {
     size: await knob("kb_chunk_size"),
     overlap: await knob("kb_chunk_overlap"),
   });
   const emb = embedder ?? (await resolveEmbedder()); // prod: OpenAI; tests: injected deterministic.
-  const vecs = await emb.embed(parts); // §14 producer fills the embeddings at runtime (never seeded).
-  for (let i = 0; i < parts.length; i++) {
-    await query(
-      `insert into tenant."Knowledge_Chunk"(doc_id,tenant_id,chunk_index,content,embedding)
-       values ($1,$2,$3,$4,$5::vector)`,
-      [docId, tenantId, i, parts[i], vecLiteral(vecs[i]!)],
+  const vecs = await embedWithRetry(emb, parts); // §14 producer fills the embeddings at runtime.
+  // Atomic write: the document and every chunk land in ONE transaction, so a failure mid-insert rolls
+  // the document back too — the base never holds a document with zero chunks.
+  return withTx(async (c) => {
+    const ins = await c.query<{ doc_id: string }>(
+      `insert into tenant."Knowledge_Document"(tenant_id,filename,mime,source,raw_text,doc_type,doc_type_confidence,status,provenance_by_field)
+       values ($1,$2,$3,$4,$5,$6,$7,'proposed',jsonb_build_object('doc_type','[I]'))
+       returning doc_id`,
+      [tenantId, doc.filename, doc.mime, doc.source ?? "upload", doc.text, cls.docType, cls.confidence],
     );
-  }
-  return { docId, docType: cls.docType, confidence: cls.confidence };
+    const docId = ins.rows[0]!.doc_id;
+    for (let i = 0; i < parts.length; i++) {
+      await c.query(
+        `insert into tenant."Knowledge_Chunk"(doc_id,tenant_id,chunk_index,content,embedding)
+         values ($1,$2,$3,$4,$5::vector)`,
+        [docId, tenantId, i, parts[i], vecLiteral(vecs[i]!)],
+      );
+    }
+    return { docId, docType: cls.docType, confidence: cls.confidence };
+  });
 }
 
 export async function searchKnowledge(

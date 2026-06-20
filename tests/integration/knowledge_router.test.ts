@@ -83,7 +83,7 @@ describe("knowledge router", () => {
       mime: "text/plain",
       contentBase64: b64("These are the terms of service for the platform."),
     });
-    const res = await caller().knowledge.confirmType({ docId: up.docId, docType: "Terms" });
+    const res = await caller().knowledge.confirmType({ docId: up.docId!, docType: "Terms" });
     expect(res.ok).toBe(true);
     const doc = await rows<{ doc_type: string; status: string; provenance_by_field: { doc_type?: string } }>(
       pool,

@@ -85,4 +85,32 @@ describe("P06 UploadModal", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/unsupported file type/i);
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
+
+  it("index_failed ⇒ retryable reason + a Try again button that re-uploads the SAME file", async () => {
+    // First attempt fails to index (e.g. AI rate-limit); nothing stored. "Try again" re-runs the same
+    // file and the second attempt succeeds → the confirm step appears (the operator's retry-without-lixo).
+    let n = 0;
+    const results: UploadResult[] = [
+      {
+        docId: null,
+        proposedType: "Other",
+        confidence: 0,
+        status: "index_failed",
+        reason: "the AI service is rate-limiting right now",
+      },
+      { docId: "d3", proposedType: "Policy", confidence: 0.8, status: "proposed", reason: null },
+    ];
+    const onUpload = vi.fn(async (_input: UploadInput): Promise<UploadResult> => results[Math.min(n++, 1)]!);
+    render(<UploadModal open onClose={() => {}} onUpload={onUpload} onConfirm={vi.fn()} onDone={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/file/i), { target: { files: [file("p.md", "text/markdown")] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/rate-limiting/i);
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    const first = onUpload.mock.calls[0]![0] as UploadInput;
+    const second = onUpload.mock.calls[1]![0] as UploadInput;
+    expect(second.filename).toBe(first.filename); // re-uploaded the SAME file
+    expect(await screen.findByRole("combobox")).toBeInTheDocument(); // retry succeeded ⇒ confirm step
+  });
 });

@@ -5,6 +5,16 @@ import { ingestDocument, searchKnowledge, answerFromBase } from "../knowledge/st
 import { query } from "../db/pool.js";
 import { uploadInput, confirmTypeInput, searchInput } from "../../shared/contracts_knowledge.js";
 
+// Human-readable, retryable reason for an index (embed) failure. ingestDocument is atomic — nothing
+// was written — so the message tells the operator what to fix before re-uploading (never a silent 500).
+function indexFailReason(e: unknown): string {
+  const status = (e as { status?: number })?.status;
+  if (status === 429) return "the AI service is rate-limiting right now — wait a moment and try again";
+  if (status === 401 || status === 403)
+    return "the AI service rejected the request (API key or quota) — check configuration and try again";
+  return "could not index this file right now — please try again";
+}
+
 // P06 — Knowledge Base / RAG router. tenant_id is resolved server-side via ctx (§3.4, anti-spoofing);
 // the AI PROPOSES a doc-type (text only, [I]) and a human confirms it ([V]) — never a number (§3.6).
 export const knowledgeRouter = router({
@@ -27,18 +37,31 @@ export const knowledgeRouter = router({
         reason: parsed.reason,
       };
     }
-    const r = await ingestDocument(ctx.tenantId, {
-      filename: input.filename,
-      mime: input.mime,
-      text: parsed.text,
-    });
-    return {
-      docId: r.docId,
-      proposedType: r.docType,
-      confidence: r.confidence,
-      status: "proposed" as const,
-      reason: null,
-    };
+    try {
+      const r = await ingestDocument(ctx.tenantId, {
+        filename: input.filename,
+        mime: input.mime,
+        text: parsed.text,
+      });
+      return {
+        docId: r.docId,
+        proposedType: r.docType,
+        confidence: r.confidence,
+        status: "proposed" as const,
+        reason: null,
+      };
+    } catch (e) {
+      // Embedding/indexing failed after bounded retry (terminal — e.g. AI quota/rate-limit). ingest is
+      // atomic, so NOTHING was written: no orphan to clean up. Surface a clear, retryable reason so the
+      // operator can fix the cause and re-upload the same file cleanly (§3.7 fail-closed).
+      return {
+        docId: null,
+        proposedType: "Other" as const,
+        confidence: 0,
+        status: "index_failed" as const,
+        reason: indexFailReason(e),
+      };
+    }
   }),
 
   // Confirm: human accepts/overrides the proposed type ⇒ doc_type set, status=confirmed, provenance [I]→[V].
