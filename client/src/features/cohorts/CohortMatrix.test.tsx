@@ -1,6 +1,6 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { CohortCell } from "@shared/contracts";
+import type { CohortCell, DeltaRow } from "@shared/contracts";
 import { CohortMatrix } from "./CohortMatrix";
 
 const cell = (over: Partial<CohortCell> & Pick<CohortCell, "cohort_id" | "status">): CohortCell => ({
@@ -13,7 +13,18 @@ const cell = (over: Partial<CohortCell> & Pick<CohortCell, "cohort_id" | "status
   ...over,
 });
 
-describe("F-2.1 CohortMatrix — nested collapse + status filter", () => {
+const delta = (over: Partial<DeltaRow> & Pick<DeltaRow, "cohort_id">): DeltaRow => ({
+  evento_id: "e1",
+  restaurant_id: "r1",
+  week: "2026-06-15",
+  delta_status: "at_risk",
+  percentile_in_cohort: 0.2,
+  gap_to_top: 0.18,
+  percentile_delta: null,
+  ...over,
+});
+
+describe("F-2.1 CohortMatrix — heatmap hero (2D cuisine × zone, per tier)", () => {
   it("carries every status via a TEXT label on the cell (not color only)", () => {
     render(
       <CohortMatrix
@@ -25,14 +36,13 @@ describe("F-2.1 CohortMatrix — nested collapse + status filter", () => {
         ]}
       />,
     );
-    // interactive cells expose status in the accessible name; pending is inert text
     expect(screen.getByRole("button", { name: /: OK, n=/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /: Too few accounts, n=/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /: Hidden \(privacy\), n=/ })).toBeInTheDocument();
-    expect(screen.getAllByText("No data").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("No data").length).toBeGreaterThanOrEqual(1); // pending cell (+ legend)
   });
 
-  it("groups into nested tier → cuisine collapsibles", () => {
+  it("renders a block per tier (prettified) with cuisine row labels", () => {
     render(
       <CohortMatrix
         cells={[
@@ -41,10 +51,10 @@ describe("F-2.1 CohortMatrix — nested collapse + status filter", () => {
         ]}
       />,
     );
-    expect(screen.getByText("managed_brand")).toBeInTheDocument();
-    expect(screen.getByText("long_tail")).toBeInTheDocument();
-    expect(screen.getByText("brazilian")).toBeInTheDocument();
-    expect(screen.queryByText("managed_midmarket")).not.toBeInTheDocument();
+    expect(screen.getByText("Managed · Brand")).toBeInTheDocument();
+    expect(screen.getByText("Long-tail")).toBeInTheDocument();
+    expect(screen.getByText("brazilian")).toBeInTheDocument(); // cuisine row label
+    expect(screen.queryByText("Managed · Midmarket")).not.toBeInTheDocument();
   });
 
   it("clicking a cell calls onOpen with that cohort", () => {
@@ -75,6 +85,28 @@ describe("F-2.1 CohortMatrix — nested collapse + status filter", () => {
     fireEvent.click(screen.getByRole("button", { name: /^OK 1$/ })); // the status chip
     expect(screen.queryByRole("button", { name: /: Too few accounts, n=/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /: OK, n=/ })).toBeInTheDocument();
+  });
+
+  it("collapses a tier so the operator can focus another", () => {
+    render(
+      <CohortMatrix
+        cells={[
+          cell({ cohort_id: "m1", status: "ok", tier_base: "managed_brand", cuisine: "brazilian", zone: "coast" }),
+          cell({ cohort_id: "l1", status: "ok", tier_base: "long_tail", cuisine: "sushi", zone: "z1" }),
+        ]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /brazilian · coast · managed_brand: OK/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Managed · Brand/ })); // collapse the tier
+    expect(screen.queryByRole("button", { name: /brazilian · coast · managed_brand: OK/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sushi · z1 · long_tail: OK/ })).toBeInTheDocument();
+  });
+
+  it("flags a cohort that carries a prioritized delta (opportunity overlay, gap to top)", () => {
+    const c = cell({ cohort_id: "x", status: "ok", cuisine: "sushi", zone: "z1", tier_base: "long_tail" });
+    render(<CohortMatrix cells={[c]} deltas={[delta({ cohort_id: "x", gap_to_top: 0.18 })]} />);
+    const btn = screen.getByRole("button", { name: /sushi · z1 · long_tail: OK/ });
+    expect(within(btn).getByText(/^gap /)).toBeInTheDocument();
   });
 
   it("renders explicit empty state when no cohorts", () => {

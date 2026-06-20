@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { Button } from "@/components/ui/Button";
 import { trpc } from "@/lib/trpc";
 
@@ -23,8 +24,16 @@ export function HandoffButton({
         aria-busy={m.isPending}
         onClick={() => m.mutate({ restaurant_id, cohort_id, subgroup_id: subgroup_id ?? null, week })}
       >
-        {m.isPending ? "Sending…" : m.isSuccess ? "Sent ✓" : "Handoff to NBA"}
+        {m.isPending ? "Sending…" : m.isSuccess ? "Sent ✓" : "Send to NBA"}
       </Button>
+      {m.isSuccess && (
+        <Link
+          href="/cockpit"
+          className="text-xs text-mxm-brand hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
+        >
+          View in Cockpit →
+        </Link>
+      )}
       {m.isError && (
         <span role="alert" className="text-xs text-mxm-red">
           {m.error.message}
