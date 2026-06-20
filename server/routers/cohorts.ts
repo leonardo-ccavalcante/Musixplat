@@ -201,6 +201,10 @@ export const cohortsRouter = router({
   uploadCsv: tenantProcedure
     .input(z.object({ filename: z.string().min(1), contentBase64: z.string().min(1) }))
     .mutation(async ({ input }): Promise<{ restaurants: number; orders: number }> => {
+      // TODO(demo-only): before promoting beyond the demo, assert every row.tenant_id === ctx.tenantId
+      // (anti-spoofing, §3 rule 4). Cross-pool CSV rows are intentionally allowed for the single-operator demo.
+      // TODO(scale): if uploaded CSVs grow to thousands of rows, replace the per-row insert loops below with
+      // a single unnest()-based bulk insert (the row-by-row loop is fine at the demo's hundreds-of-rows scale).
       const text = Buffer.from(input.contentBase64, "base64").toString("utf8");
       const rows = parseCsv(text);
 
