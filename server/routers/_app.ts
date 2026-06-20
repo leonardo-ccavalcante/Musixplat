@@ -10,6 +10,7 @@ import { cockpitRouter } from "./cockpit.js";
 import { artifactRouter } from "./artifact.js";
 import { healthRouter } from "./health.js";
 import { intakeRouter } from "./intake.js";
+import { knowledgeRouter } from "./knowledge.js";
 
 // Root tRPC router.
 export const appRouter = router({
@@ -25,6 +26,7 @@ export const appRouter = router({
   artifact: artifactRouter,
   roi: healthRouter,
   intake: intakeRouter,
+  knowledge: knowledgeRouter,
 });
 
 export type AppRouter = typeof appRouter;
