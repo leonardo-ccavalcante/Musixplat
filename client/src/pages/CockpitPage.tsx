@@ -95,10 +95,10 @@ export function CockpitPage() {
           <div className="mb-3 mt-[clamp(1.5rem,3vw,2.25rem)] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <h2 id="queue-h" className="text-lg font-semibold text-mxm-content">The queue</h2>
-              <span className="flex items-center gap-2 text-xs text-mxm-content-secondary">
-                <button onClick={() => setAll(true)} className="hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand">Expand all</button>
+              <span className="flex items-center gap-1 text-xs text-mxm-content-secondary">
+                <button onClick={() => setAll(true)} className="inline-flex min-h-[24px] items-center rounded px-1 hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand">Expand all</button>
                 <span aria-hidden className="text-mxm-border">·</span>
-                <button onClick={() => setAll(false)} className="hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand">Collapse all</button>
+                <button onClick={() => setAll(false)} className="inline-flex min-h-[24px] items-center rounded px-1 hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand">Collapse all</button>
               </span>
             </div>
             <div role="group" aria-labelledby="queue-h" aria-label="Group the queue by" className="inline-flex items-center rounded-full border border-mxm-border bg-mxm-bg-elevated p-0.5">
