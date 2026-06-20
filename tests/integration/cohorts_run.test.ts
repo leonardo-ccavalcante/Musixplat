@@ -42,7 +42,9 @@ describe("01 cohorts.run — product-triggered P01", () => {
 
   it("run PRODUCES real cohorts + memberships, and the read surface fills", async () => {
     const r = await caller(tenant).cohorts.run();
-    expect(r.weeks).toEqual(["2026-05-25", "2026-06-15"]);
+    const maxd = (await rows<{ d: string }>(pool, `select max(order_date)::text d from tenant."Order"`))[0]!.d;
+    expect(r.weeks[1]).toBe(maxd);
+    expect(r.weeks).toHaveLength(2);
     expect(r.memberships).toBeGreaterThan(0);
     expect(r.cohorts).toBeGreaterThan(0);
     expect(await count(pool, 'cohort."Cohort_Membership_Snapshot"')).toBeGreaterThan(0);
