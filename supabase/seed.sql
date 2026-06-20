@@ -253,3 +253,12 @@ select r.restaurant_id || ':C' || c,
 from tenant."Restaurant" r
 cross join lateral generate_series(1, 1 + public.det_int(r.restaurant_id, 42, 5)) c
 where public.det_int(r.restaurant_id, 43, 100) < 35;
+
+-- ── P06 Knowledge Base / RAG: knobs BY NAME (CLAUDE.md §3.8, [C] config). ──
+insert into catalog."Config_Knobs"(key, value, provenance, owner) values
+  ('kb_chunk_size',              '1200', '[C]', 'p06'),
+  ('kb_chunk_overlap',           '150',  '[C]', 'p06'),
+  ('kb_retrieval_top_k',         '5',    '[C]', 'p06'),
+  ('kb_similarity_threshold',    '0.30', '[C]', 'p06'),
+  ('kb_classification_floor',    '0.55', '[C]', 'p06')
+on conflict (key) do nothing;
