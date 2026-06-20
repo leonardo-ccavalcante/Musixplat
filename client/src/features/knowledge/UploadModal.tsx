@@ -13,6 +13,13 @@ import {
 // The 6 MECE doc types (mirrors server/knowledge/classify.ts; the shared Zod enum is the single source).
 const TYPES: ReadonlyArray<DocType> = docType.options;
 
+// Humanize the classifier signal — a [C]-class cue, never a loud raw float (DESIGN-STANDARD §3).
+function confidenceLabel(c: number): string {
+  if (c >= 0.75) return "high confidence";
+  if (c >= 0.5) return "medium confidence";
+  return "low confidence";
+}
+
 // base64 of the raw bytes — FileReader keeps it browser-native (no Buffer in the client).
 function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -134,12 +141,19 @@ export function UploadModal({
         {phase.kind === "confirm" && (
           <div className="space-y-3 rounded-mxm border border-mxm-border px-3 py-3">
             <p className="text-sm text-mxm-content-secondary">
-              AI proposed{" "}
+              This looks like a{" "}
               <span className="inline-flex items-center gap-1 font-medium text-mxm-content">
                 {phase.result.proposedType}
                 <ProvenanceBadge prov="[I]" />
-              </span>{" "}
-              ({(phase.result.confidence * 100).toFixed(0)}% confident). Confirm or override:
+              </span>
+              <span
+                className="text-mxm-content-tertiary"
+                title={`classifier confidence ${(phase.result.confidence * 100).toFixed(0)}%`}
+              >
+                {" "}
+                · {confidenceLabel(phase.result.confidence)}
+              </span>
+              . Confirm it, or change the type:
             </p>
             <label htmlFor="kb-type" className="block text-xs text-mxm-content-secondary">
               Document type

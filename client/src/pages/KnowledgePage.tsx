@@ -56,7 +56,7 @@ export function KnowledgePage() {
   const hits = useMemo(() => (searchQ.data?.hits ?? []) as SearchHit[], [searchQ.data]);
 
   return (
-    <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">
+    <main className="mx-auto max-w-3xl p-[clamp(1rem,2vw,2rem)]">
       <header className="mb-6">
         <h1 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-mxm-content">
           Knowledge Base

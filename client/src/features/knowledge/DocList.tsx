@@ -12,6 +12,14 @@ function provFor(status: string): "[I]" | "[V]" | null {
   return null; // parse_failed (or anything else) ⇒ no produced type ⇒ no badge
 }
 
+// Human status label — the screen speaks the operator's language, never raw enum jargon (DESIGN-STANDARD §7).
+function statusLabel(status: string): string {
+  if (status === "confirmed") return "Confirmed";
+  if (status === "proposed") return "Suggested";
+  if (status === "parse_failed") return "Could not read";
+  return status;
+}
+
 export function DocList({
   rows,
   isLoading,
@@ -25,53 +33,44 @@ export function DocList({
   if (isError) return <ErrorState label="Failed to load documents" />;
   if (rows.length === 0) return <EmptyState>No documents yet — upload one to grow the base.</EmptyState>;
 
+  // Roomy card rows, not a data-grid (DESIGN-STANDARD §7 [OPERATOR CONFIRMED]: /knowledge is a narrative
+  // screen). Each card shows the filename, the type + its provenance ([I] suggested / [V] confirmed), and a
+  // human status — breathing room over density.
   return (
-    <div className="overflow-x-auto rounded-mxm border border-mxm-border">
-      <table className="w-full text-left text-sm">
-        <caption className="sr-only">Knowledge base documents</caption>
-        <thead className="border-b border-mxm-border text-xs text-mxm-content-secondary">
-          <tr>
-            <th scope="col" className="px-3 py-2 font-medium">
-              File
-            </th>
-            <th scope="col" className="px-3 py-2 font-medium">
-              Type
-            </th>
-            <th scope="col" className="px-3 py-2 font-medium">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-mxm-border">
-          {rows.map((r) => {
-            const prov = provFor(r.status);
-            return (
-              <tr key={r.docId}>
-                <td className="px-3 py-2 text-mxm-content">{r.filename}</td>
-                <td className="px-3 py-2">
-                  {r.docType ? (
-                    <span className="inline-flex items-center gap-1.5 text-mxm-content">
-                      {r.docType}
-                      {prov && <ProvenanceBadge prov={prov} />}
-                    </span>
-                  ) : (
-                    <span className="text-mxm-content-tertiary">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={
-                      r.status === "parse_failed" ? "text-mxm-red" : "text-mxm-content-secondary"
-                    }
-                  >
-                    {r.status}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <ul aria-label="Knowledge base documents" className="space-y-2.5">
+      {rows.map((r) => {
+        const prov = provFor(r.status);
+        const failed = r.status === "parse_failed";
+        return (
+          <li
+            key={r.docId}
+            className="flex items-start justify-between gap-4 rounded-mxm border border-mxm-border px-4 py-3.5"
+          >
+            <div className="min-w-0">
+              <p className="truncate font-medium text-mxm-content">{r.filename}</p>
+              <div className="mt-1 flex items-center gap-1.5 text-sm">
+                {r.docType ? (
+                  <>
+                    <span className="text-mxm-content-secondary">{r.docType}</span>
+                    {prov && <ProvenanceBadge prov={prov} />}
+                  </>
+                ) : (
+                  <span className="text-mxm-content-tertiary">Not added to the base</span>
+                )}
+              </div>
+            </div>
+            <span
+              className={
+                failed
+                  ? "shrink-0 text-xs font-medium text-mxm-red"
+                  : "shrink-0 text-xs text-mxm-content-tertiary"
+              }
+            >
+              {statusLabel(r.status)}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

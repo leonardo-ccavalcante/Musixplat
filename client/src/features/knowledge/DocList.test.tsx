@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DocList } from "./DocList";
 import type { DocRow } from "@shared/contracts_knowledge";
@@ -31,12 +31,12 @@ describe("P06 DocList", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/no documents/i);
   });
 
-  it("renders filename, type and status for each row", () => {
+  it("renders filename, type and a human status for each row (roomy cards, not a data-grid)", () => {
     render(<DocList rows={[row()]} isLoading={false} isError={false} />);
     expect(screen.getByText("refund-policy.pdf")).toBeInTheDocument();
     expect(screen.getByText("Policy")).toBeInTheDocument();
-    const table = screen.getByRole("table");
-    expect(within(table).getByText(/proposed/i)).toBeInTheDocument();
+    // proposed ⇒ humanized "Suggested" (DESIGN-STANDARD §7 — no raw enum jargon in the UI)
+    expect(screen.getByText(/suggested/i)).toBeInTheDocument();
   });
 
   it("proposed type ⇒ [I] provenance badge (AI inferred, not yet human-verified)", () => {
@@ -57,6 +57,6 @@ describe("P06 DocList", () => {
     );
     expect(screen.queryByText("[I]")).not.toBeInTheDocument();
     expect(screen.queryByText("[V]")).not.toBeInTheDocument();
-    expect(screen.getByText(/parse_failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/could not read/i)).toBeInTheDocument(); // humanized parse_failed (§7)
   });
 });

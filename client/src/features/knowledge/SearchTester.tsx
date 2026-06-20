@@ -3,6 +3,13 @@ import type { SearchHit } from "@shared/contracts_knowledge";
 import { Button } from "@/components/ui/Button";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 
+// Humanize the cosine score into a qualitative cue (DESIGN-STANDARD §3 — the raw float never the loud token).
+function matchLabel(sim: number): string {
+  if (sim >= 0.75) return "Strong match";
+  if (sim >= 0.5) return "Partial match";
+  return "Weak match";
+}
+
 // P06 — the search tester is the visible proof that "we run it against the base to see if we hold this
 // shape" (Leo). Submitting fires onSearch(query); the page runs `knowledge.search` (tenant scoped
 // server-side). A hit shows filename · docType · similarity · snippet — retrieval, in view (§5). A
@@ -67,8 +74,11 @@ export function SearchTester({
                     {h.docType}
                   </span>
                 )}
-                <span className="text-mxm-content-tertiary" title="cosine similarity">
-                  {(h.similarity * 100).toFixed(0)}% match
+                <span
+                  className="text-mxm-content-tertiary"
+                  title={`cosine similarity ${(h.similarity * 100).toFixed(0)}%`}
+                >
+                  {matchLabel(h.similarity)} · {(h.similarity * 100).toFixed(0)}%
                 </span>
               </div>
               <p className="mt-1.5 break-words text-sm text-mxm-content-secondary">{h.content}</p>
