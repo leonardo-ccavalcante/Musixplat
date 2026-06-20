@@ -60,4 +60,17 @@ export const nbaRouter = router({
     );
     return { definition: def[0], history: hist[0]! };
   }),
+
+  // 02:DETAIL — the whole A1–A8 catalog with each action's company-wide usage (run_count + on-target rate),
+  // for the cockpit's "What are these actions?" drawer. Company-wide aggregate (no tenant filter, like detail);
+  // a READ of fn_nba_action_history (§14: acerto_rate NULL when no breach-class proposal, never a 0-fake).
+  catalog: tenantProcedure.query(() =>
+    query<{ code: string; run_count: number; acerto_rate: number | null }>(
+      `select c.code, h.run_count::int as run_count, h.acerto_rate::float8 as acerto_rate
+       from catalog."NBA_Catalogo" c
+       cross join lateral cohort.fn_nba_action_history(c.code) h
+       order by c.code`,
+      [],
+    ),
+  ),
 });

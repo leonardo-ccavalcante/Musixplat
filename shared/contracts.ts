@@ -213,6 +213,17 @@ export type CockpitReleaseInput = z.infer<typeof cockpitReleaseInput>;
 export const cockpitWeekSummary = z.object({ released: z.number(), paused: z.number() });
 export type CockpitWeekSummary = z.infer<typeof cockpitWeekSummary>;
 
+// 02:DETAIL — per-action usage for the "What are these actions?" catalog drawer: how many proposals each
+// A-code has and its on-target rate. Company-wide aggregate of fn_nba_action_history (a READ, §14:
+// acerto_rate is NULL when there's no breach-class proposal, never a 0-fake). Lets the drawer show real
+// usage inline and avoid a dead-end link for actions not yet proposed.
+export const nbaCatalogUsage = z.object({
+  code: z.string(),
+  run_count: z.number(),
+  acerto_rate: z.number().nullable(),
+});
+export type NbaCatalogUsage = z.infer<typeof nbaCatalogUsage>;
+
 // 01 operability — cohorts.run summary. Counts are PRODUCED by the P01 batch (read back after it runs),
 // never seeded as results (§14). weeks = the demo windows computed (the second enables the delta diff).
 export interface CohortsRunResult {

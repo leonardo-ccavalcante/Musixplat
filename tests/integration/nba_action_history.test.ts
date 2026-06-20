@@ -80,3 +80,40 @@ describe("02:DETAIL-B — fn_nba_action_history (deterministic diagnostic hit ra
     expect(h.acerto_rate).toBeNull();
   });
 });
+
+describe("02:DETAIL — nba.catalog usage (one row per closed A-code; honest 0-run)", () => {
+  it("returns every catalog code with its usage; a never-proposed code is run_count 0 / acerto NULL", async () => {
+    const c = await pool.connect();
+    try {
+      await c.query("begin");
+      await c.query(`delete from gov."min_calculation"`);
+      await c.query(`delete from gov."NBA_Proposal"`);
+      const cohort = (await c.query<{ cohort_id: string }>(`select cohort_id from cohort."Cohort" order by cohort_id limit 1`)).rows[0]!.cohort_id;
+      // only A1 gets proposals (2 solid) ⇒ A1 used, every other code honestly empty.
+      const ins = `insert into gov."NBA_Proposal"(action_type, cohort_id, nba_request, cohort_rule_version, diagnosis_verdict, n_min_ok, k_anon_ok) values ('A1',$1,'LOW','v1','below',true,true)`;
+      await c.query(ins, [cohort]);
+      await c.query(ins, [cohort]);
+
+      // the exact query the nba.catalog endpoint runs
+      const cat = (
+        await c.query<{ code: string; run_count: number; acerto_rate: number | null }>(
+          `select c.code, h.run_count::int as run_count, h.acerto_rate::float8 as acerto_rate
+           from catalog."NBA_Catalogo" c
+           cross join lateral cohort.fn_nba_action_history(c.code) h
+           order by c.code`,
+        )
+      ).rows;
+
+      expect(cat.length).toBeGreaterThanOrEqual(8); // the closed A1–A8 set
+      const a1 = cat.find((x) => x.code === "A1")!;
+      expect(a1.run_count).toBe(2);
+      expect(a1.acerto_rate).toBe(1); // 2 solid / 2 breach
+      const a3 = cat.find((x) => x.code === "A3")!;
+      expect(a3.run_count).toBe(0);
+      expect(a3.acerto_rate).toBeNull(); // §14: never a 0-fake
+    } finally {
+      await c.query("rollback");
+      c.release();
+    }
+  });
+});
