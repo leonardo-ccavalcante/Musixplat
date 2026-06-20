@@ -6,6 +6,7 @@ import { assertSingleVersion } from "../_core/antimix.js";
 import { runP01, deriveRunWindow } from "../jobs/p01.js";
 import type { CohortsRunResult } from "../../shared/contracts.js";
 import { parseCsv } from "../cohorts/parseCsv.js";
+import { CSV_COLUMNS } from "../cohorts/csvSchema.js";
 
 // Read-only projections of P01 results. All tenant-scoped server-side (RLS guard); cohort-zone
 // reads honor k-anon (k_suppression_applied) and anti-mix (single cohort_rule_version).
@@ -243,6 +244,34 @@ export const cohortsRouter = router({
       });
       return { restaurants: rests.length, orders: rows.length };
     }),
+
+  // Demo onboarding — the downloadable CSV template: exact header + 2 example rows + a per-column type
+  // legend the modal renders so the operator knows what each field expects. Static (no DB).
+  csvTemplate: tenantProcedure.query(async () => {
+    const example = [
+      "POOL-001,R001,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-03-01,120.00,24.00,ok,,0,true,true",
+      "POOL-001,R001,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-03-08,90.00,18.00,failed,customer,0,false,true",
+    ];
+    const legend: Record<string, string> = {
+      tenant_id: "text — pool/RLS id, e.g. POOL-001",
+      restaurant_id: "text — groups rows into one restaurant",
+      tier_base: "enum — managed_brand | managed_midmarket | long_tail",
+      segment: "enum — managed | long_tail",
+      signup_date: "date YYYY-MM-DD — must be <= latest order_date",
+      zone: "text — cohort axis (e.g. downtown)",
+      cuisine: "text — cohort axis (e.g. pizza)",
+      committed_hours_week: "number — committed weekly hours (also connection denominator)",
+      order_date: "date YYYY-MM-DD",
+      gross_value: "number >= 0",
+      fee: "number >= 0 (optional, default 0)",
+      payment_status: "enum — ok | failed | pending",
+      cancelled_by: "enum — restaurant | customer (only when payment_status=failed; else blank)",
+      discount_pct: "number 0-100 (optional, default 0)",
+      has_photo: "boolean — true | false (optional)",
+      has_description: "boolean — true | false (optional)",
+    };
+    return { csv: [CSV_COLUMNS.join(","), ...example].join("\n"), legend };
+  }),
 
   // F-3.3 / F-3.4 — raw ticket distribution intent × cohort, tenant-scoped, k-anon respected.
   intentCounts: tenantProcedure.query(async ({ ctx }) => {

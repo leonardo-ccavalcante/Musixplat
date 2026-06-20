@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { CSV_COLUMNS } from "../../server/cohorts/csvSchema";
 import type pg from "pg";
 import { makePool, resetDb, count } from "../helpers/db";
 import { appRouter } from "../../server/routers/_app";
@@ -42,5 +43,17 @@ describe("cohorts.uploadCsv", () => {
       `POOL-001,RC1,long_tail,long_tail,2024-01-01,north,pizza,50,2026-03-02,100,20,ok,,0,true,true`].join("\n");
     await expect(caller().cohorts.uploadCsv({ filename: "c.csv", contentBase64: b64(conflict) }))
       .rejects.toThrow(/RC1.*conflict/i);
+  });
+});
+
+describe("cohorts.csvTemplate", () => {
+  it("returns a header with every required column + at least one example row + a legend", async () => {
+    const t = await caller().cohorts.csvTemplate();
+    const [header, ...rest] = t.csv.split("\n");
+    expect(header).toBe(CSV_COLUMNS.join(","));
+    expect(rest.length).toBeGreaterThanOrEqual(1);
+    expect(t.legend.tier_base).toMatch(/managed_brand/);
+    // every column documented in the legend:
+    for (const col of CSV_COLUMNS) expect(t.legend[col]).toBeTruthy();
   });
 });
