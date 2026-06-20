@@ -206,6 +206,13 @@ export const cockpitReleaseInput = z.object({
 });
 export type CockpitReleaseInput = z.infer<typeof cockpitReleaseInput>;
 
+// 02:F-1.2 — the cockpit's "your week" proof strip: how many proposals the operator released vs paused in
+// the last 7 days. Counted from gov."Release_Batch" (the trace of every human decision) — a READ, never a
+// fabricated number (§14). Pool-scoped server-side. No "auto-handled" count: the AI acting alone leaves no
+// trace in this prototype, so it is not shown rather than invented.
+export const cockpitWeekSummary = z.object({ released: z.number(), paused: z.number() });
+export type CockpitWeekSummary = z.infer<typeof cockpitWeekSummary>;
+
 // 01 operability — cohorts.run summary. Counts are PRODUCED by the P01 batch (read back after it runs),
 // never seeded as results (§14). weeks = the demo windows computed (the second enables the delta diff).
 export interface CohortsRunResult {

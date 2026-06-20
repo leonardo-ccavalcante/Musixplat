@@ -30,6 +30,7 @@ export function CockpitPage() {
 
   const utils = trpc.useUtils();
   const list = trpc.cockpit.list.useQuery(undefined, { enabled: ready });
+  const week = trpc.cockpit.weekSummary.useQuery(undefined, { enabled: ready });
   const release = trpc.cockpit.release.useMutation();
 
   const onAction = (row: NbaCockpitRow, action: RowAction) => {
@@ -45,6 +46,7 @@ export function CockpitPage() {
             [row.nba_id]: { status: "done", msg: `${action === "RELEASE" ? "Released" : "Paused"} ✓ trace ${res.traceId.slice(0, 8)}` },
           }));
           void utils.cockpit.list.invalidate();
+          void utils.cockpit.weekSummary.invalidate(); // the trace just changed — refresh "your week"
         },
         onError: (e) => setActionState((s) => ({ ...s, [row.nba_id]: { status: "error", msg: e.message } })),
       },
@@ -88,7 +90,7 @@ export function CockpitPage() {
         <ErrorState />
       ) : (
         <>
-          <CockpitHero counts={counts} onOpenCatalog={() => setCatalogOpen(true)} />
+          <CockpitHero counts={counts} week={week.data} onOpenCatalog={() => setCatalogOpen(true)} />
 
           <div className="mb-3 mt-[clamp(1.5rem,3vw,2.25rem)] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">

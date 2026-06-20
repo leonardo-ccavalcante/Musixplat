@@ -76,6 +76,26 @@ export async function listCockpitRows(tenantId: string, exec: Exec): Promise<Nba
   return raw.map(toRow);
 }
 
+// 02:F-1.2 — the "your week" proof strip: count human release/pause decisions in the last 7 days, scoped to
+// this pool (same cohort→pool presence rule as the list). A READ of gov."Release_Batch" (the decision trace),
+// never a fabricated number (§14). counts cast ::int so node-pg returns numbers, not bigint strings.
+const WEEK_SQL = `
+  select
+    count(*) filter (where rb.action = 'RELEASE')::int as released,
+    count(*) filter (where rb.action = 'PAUSE')::int   as paused
+  from gov."Release_Batch" rb
+  where rb.created_at >= now() - interval '7 days'
+    and exists (
+      select 1 from cohort."Cohort_Membership_Snapshot" cms
+      join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1
+      where cms.cohort_id = rb.cohort_id
+    )`;
+
+export async function weekSummary(tenantId: string, exec: Exec): Promise<{ released: number; paused: number }> {
+  const r = await exec<{ released: number; paused: number }>(WEEK_SQL, [tenantId]);
+  return { released: r[0]?.released ?? 0, paused: r[0]?.paused ?? 0 };
+}
+
 // 02:1C / F-1.2 / BR-1 / BR-9 / BR-LOG-3 — a human releases or pauses a proposal. Override is ONLY DOWN:
 // resulting_level <= effective_level (AUT-11). "Sin trace no acción": the Release_Batch + its Decision_Trace
 // are written in ONE tx — if the trace fails, the action does not persist. 4-eyes: the proposer (the AI that
@@ -164,6 +184,9 @@ export async function recordRelease(i: ReleaseInput, client: pg.PoolClient): Pro
 export const cockpitRouter = router({
   // 02:F-1.1 — the bandeja: every proposal in the pool with its autonomy verdict, AUTO-first.
   list: tenantProcedure.query(({ ctx }) => listCockpitRows(ctx.tenantId, query)),
+
+  // 02:F-1.2 — "your week": released vs paused in the last 7 days (read from the trace, §14).
+  weekSummary: tenantProcedure.query(({ ctx }) => weekSummary(ctx.tenantId, query)),
 
   // 02:1C / F-1.2 — human release/pause; writes Decision_Trace + Release_Batch atomically (no-trace-no-action).
   release: tenantProcedure.input(cockpitReleaseInput).mutation(({ ctx, input }) =>

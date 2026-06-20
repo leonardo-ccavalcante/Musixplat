@@ -3,7 +3,7 @@ import type pg from "pg";
 import { makePool, resetDb } from "../helpers/db";
 import { runP01 } from "../../server/jobs/p01";
 import { proposeNba } from "../../server/agente/nba_engine";
-import { cockpitStatus, listCockpitRows, type Exec } from "../../server/routers/cockpit";
+import { cockpitStatus, listCockpitRows, weekSummary, type Exec } from "../../server/routers/cockpit";
 
 // 02:EPIC-1 / F-1.1 — the cockpit read surface: proposals per cohort with AUTO vs needs-human + reason,
 // tenant-scoped (a foreign pool sees nothing). Mutations run in a ROLLED-BACK tx (§14 antifake: the
@@ -99,6 +99,44 @@ describe("02:F-1.1 — listCockpitRows over real proposals", () => {
       // Tenant isolation: a foreign pool never sees this proposal (RLS single-pool, no leak).
       const foreign = await listCockpitRows("tenant-does-not-exist", exec);
       expect(foreign.find((x) => x.nba_id === res.nbaId)).toBeUndefined();
+    } finally {
+      await c.query("rollback");
+      c.release();
+    }
+  });
+});
+
+describe("02:F-1.2 — weekSummary counts traced decisions (read, §14: 0 before any release)", () => {
+  it("0/0 on an empty trace; +1 released after a RELEASE in-pool; a foreign pool sees 0", async () => {
+    const c = await pool.connect();
+    try {
+      await c.query("begin");
+      const exec: Exec = (sql, params) => c.query(sql, params as unknown[]).then((r) => r.rows) as never;
+
+      const row = (
+        await c.query<{ tenant_id: string; cohort_id: string }>(
+          `select r.tenant_id, cms.cohort_id
+           from cohort."Cohort_Membership_Snapshot" cms
+           join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id
+           where cms.week=$1 order by cms.restaurant_id limit 1`,
+          [W1],
+        )
+      ).rows[0]!;
+      const users = (await c.query<{ user_id: string }>(`select user_id from gov."User" order by user_id limit 2`)).rows;
+
+      // anti-fake: nothing released yet ⇒ the producer (the trace) reports 0, never a seeded number.
+      expect(await weekSummary(row.tenant_id, exec)).toEqual({ released: 0, paused: 0 });
+
+      // a real human RELEASE writes a Release_Batch (the decision trace) for an in-pool cohort.
+      await c.query(
+        `insert into gov."Release_Batch"(release_id, cohort_id, action, proposer_id, operator_id)
+         values ('rb-week-test', $1, 'RELEASE', $2, $3)`,
+        [row.cohort_id, users[0]!.user_id, users[1]!.user_id],
+      );
+
+      expect(await weekSummary(row.tenant_id, exec)).toEqual({ released: 1, paused: 0 });
+      // tenant isolation: a foreign pool never counts this decision.
+      expect(await weekSummary("tenant-does-not-exist", exec)).toEqual({ released: 0, paused: 0 });
     } finally {
       await c.query("rollback");
       c.release();

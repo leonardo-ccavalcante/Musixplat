@@ -22,7 +22,15 @@ const SEGS = [
 // The signal is the hero, not a CTA — every count here is derived from the produced proposal rows (§14),
 // never fabricated. "Today's proposals" answers the agent-manager's question: where is the AI acting alone,
 // and exactly where must I step in?
-export function CockpitHero({ counts, onOpenCatalog }: { counts: FleetCounts; onOpenCatalog: () => void }) {
+export function CockpitHero({
+  counts,
+  week,
+  onOpenCatalog,
+}: {
+  counts: FleetCounts;
+  week?: { released: number; paused: number };
+  onOpenCatalog: () => void;
+}) {
   const { total, cohorts, autos, money, level, gate } = counts;
   const needs = money + level + gate;
   const pct = (n: number) => (total > 0 ? `${(n / total) * 100}%` : "0%");
@@ -61,14 +69,24 @@ export function CockpitHero({ counts, onOpenCatalog }: { counts: FleetCounts; on
         </div>
       </div>
 
-      {/* The "depois": the AI's track record is honest — every release is traced; browse per-action results.
-          (Fleet week-counts are a thin Decision_Trace read, flagged as a follow-up — not fabricated here.) */}
+      {/* The "depois": every human decision is traced — show the last 7 days (read from Release_Batch, §14,
+          never fabricated). No "auto-handled" count: the AI acting alone leaves no trace here, so it is omitted. */}
       <div className="flex flex-col justify-between gap-4 rounded-mxm border border-mxm-border bg-mxm-bg-elevated p-[clamp(1.1rem,2.2vw,1.4rem)]">
         <div>
-          <p className="text-[0.7rem] uppercase tracking-wide text-mxm-content-tertiary">The proof</p>
-          <p className="mt-1.5 text-sm leading-relaxed text-mxm-content-secondary">
-            Every action the AI takes is traced. See how each best-action has performed across the company before you trust it with more autonomy.
+          <p className="text-[0.7rem] uppercase tracking-wide text-mxm-content-tertiary">
+            Your week so far <span className="normal-case tracking-normal text-mxm-content-tertiary">· from the trace log</span>
           </p>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-2xl font-semibold tabnum text-mxm-content">{week ? week.released : "—"}</div>
+              <div className="mt-0.5 text-xs text-mxm-content-secondary">you released</div>
+            </div>
+            <div>
+              <div className="text-2xl font-semibold tabnum text-mxm-content">{week ? week.paused : "—"}</div>
+              <div className="mt-0.5 text-xs text-mxm-content-secondary">you paused</div>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-mxm-content-tertiary">Every release and pause is recorded as a decision trace.</p>
         </div>
         <Button variant="ghost" onClick={onOpenCatalog} aria-haspopup="dialog" className="self-start text-mxm-brand">
           What are these actions? →
