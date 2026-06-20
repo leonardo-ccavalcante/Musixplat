@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { extractText } from "../knowledge/parsers.js";
 import { ingestDocument, searchKnowledge } from "../knowledge/store.js";
@@ -56,6 +57,38 @@ export const knowledgeRouter = router({
   search: tenantProcedure.input(searchInput).query(async ({ ctx, input }) => ({
     hits: await searchKnowledge(ctx.tenantId, input.query, input.topK),
   })),
+
+  // NBA tie-in: does the knowledge base hold a Policy/Terms doc relevant to this NBA? This is a
+  // TEXT signal only (§3.3/§3.6) — it NEVER moves a number or auto-changes the autonomy level; the
+  // human decides on the cockpit. tenant_id is resolved server-side (§3.4); the proposal is gated to
+  // the caller's pool via the cohort→snapshot→restaurant chain (no cross-pool leak). NBA_Proposal has
+  // no tenant_id column (it is gov/cohort-scoped), so we use the same `exists(...)` guard the cockpit
+  // uses. Fail-closed: an unknown / out-of-pool nba_id ⇒ no-review (never an optimistic default, §3.7).
+  nbaImpact: tenantProcedure.input(z.object({ nbaId: z.string() })).query(async ({ ctx, input }) => {
+    const p = await query<{ root_cause: string | null; action_type: string | null }>(
+      `select p.root_cause, p.action_type
+         from gov."NBA_Proposal" p
+        where p.nba_id = $1::uuid
+          and exists (
+            select 1 from cohort."Cohort_Membership_Snapshot" cms
+            join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+            where cms.cohort_id = p.cohort_id
+          )`,
+      [input.nbaId, ctx.tenantId],
+    );
+    if (!p[0]) return { shouldReview: false, evidence: [], note: null };
+    const probe = [p[0].action_type, p[0].root_cause].filter(Boolean).join(" ");
+    if (!probe) return { shouldReview: false, evidence: [], note: null }; // no text to retrieve on
+    const hits = await searchKnowledge(ctx.tenantId, probe, 3);
+    const policyHits = hits.filter((h) => h.docType === "Policy" || h.docType === "Terms");
+    return {
+      shouldReview: policyHits.length > 0, // text signal only — human decides (§3.3); no number moved
+      evidence: policyHits,
+      note: policyHits.length
+        ? "Knowledge base has policy/terms relevant to this NBA — review before release."
+        : null,
+    };
+  }),
 
   // List: the tenant's documents, newest first.
   list: tenantProcedure.query(async ({ ctx }) => {

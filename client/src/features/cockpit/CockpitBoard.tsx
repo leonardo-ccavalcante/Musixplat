@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { CockpitRow, type RowAction, type RowState } from "./CockpitRow";
+import { CockpitRow, type RowAction, type RowState, type KbReview } from "./CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
 // A titled section with a count pill. accent = the action queue (brand), else the calm auto list.
@@ -33,11 +33,13 @@ export function CockpitBoard({
   onAction,
   onOpen,
   actionState,
+  kbReviews,
 }: {
   rows: NbaCockpitRow[];
   onAction: (row: NbaCockpitRow, action: RowAction) => void;
   onOpen?: (row: NbaCockpitRow) => void;
   actionState: Record<string, RowState | undefined>;
+  kbReviews?: Record<string, KbReview | undefined>;
 }) {
   if (rows.length === 0) return <EmptyState>The AI has proposed no actions yet.</EmptyState>;
 
@@ -51,7 +53,14 @@ export function CockpitBoard({
           <p className="py-3 text-sm text-mxm-content-secondary">Nothing needs you right now — the AI has it.</p>
         ) : (
           human.map((r) => (
-            <CockpitRow key={r.nba_id} row={r} onAction={onAction} onOpen={onOpen} state={actionState[r.nba_id]} />
+            <CockpitRow
+              key={r.nba_id}
+              row={r}
+              onAction={onAction}
+              onOpen={onOpen}
+              state={actionState[r.nba_id]}
+              kbReview={kbReviews?.[r.nba_id]}
+            />
           ))
         )}
       </Section>
@@ -61,7 +70,15 @@ export function CockpitBoard({
           <p className="py-3 text-sm text-mxm-content-secondary">No actions cleared for autonomy yet.</p>
         ) : (
           auto.map((r) => (
-            <CockpitRow key={r.nba_id} row={r} onAction={onAction} onOpen={onOpen} state={actionState[r.nba_id]} muted />
+            <CockpitRow
+              key={r.nba_id}
+              row={r}
+              onAction={onAction}
+              onOpen={onOpen}
+              state={actionState[r.nba_id]}
+              kbReview={kbReviews?.[r.nba_id]}
+              muted
+            />
           ))
         )}
       </Section>
