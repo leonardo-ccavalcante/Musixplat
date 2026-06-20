@@ -1,5 +1,6 @@
 import express from "express";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import * as trpcExpress from "@trpc/server/adapters/express";
 import { appRouter } from "./routers/_app.js";
 import { createContext } from "./_core/context.js";
@@ -44,13 +45,17 @@ app.use(
 // relative `/trpc` calls work with no CORS. API routes above are matched first; any other GET
 // falls back to index.html for client-side routing (wouter).
 const clientDir = path.join(process.cwd(), "dist/client");
+// Read the SPA shell ONCE at boot and serve it from memory — no per-request file-system access
+// (avoids the unbounded-fs-read DoS vector CodeQL flags), and a touch faster. The path is fixed
+// (never user-derived), so there is no path-traversal surface.
+const indexHtml = readFileSync(path.join(clientDir, "index.html"), "utf8");
 app.use(express.static(clientDir));
 app.use((req, res, next) => {
   if (req.method !== "GET") return next();
   if (req.path.startsWith("/trpc") || req.path.startsWith("/auth") || req.path === "/healthz") {
     return next();
   }
-  res.sendFile(path.join(clientDir, "index.html"));
+  res.type("html").send(indexHtml);
 });
 
 app.listen(env.PORT, () => {
