@@ -4,7 +4,7 @@ Target: `http://localhost:5173/cohorts` (live, 136 real cohorts) · calibrated a
 
 ## Headline
 
-- **Design score: B+** — strong bespoke awareness screen; the heatmap hero is the unmistakable focal point (squint test passes), copy is human, async states are honest. Held back from A by mobile density and the (pre-existing) system-font stack.
+- **Design score: A−** (was B+ at audit start) — strong bespoke awareness screen; the heatmap hero is the unmistakable focal point (squint test passes), copy is human, async states are honest. 3 of 4 findings fixed; held back from A only by the (pre-existing, app-wide) system-font stack.
 - **AI-slop score: B** — no card-grid, no gradient, no centered-everything, no emoji decoration, one accent. The single slop signal is `system-ui` as the primary font (pre-existing, app-wide).
 
 ## First impression
@@ -24,9 +24,9 @@ Target: `http://localhost:5173/cohorts` (live, 136 real cohorts) · calibrated a
 | ID | Impact | Category | Finding | Status |
 |----|--------|----------|---------|--------|
 | 001 | HIGH | Hierarchy / Color | Coral opportunity overlay on 48/136 cells (35%) — the "where to act" accent diluted to noise (§1). | **FIXED** — capped to top-12 (commit 054cd0c). Coral 48→12 cells. |
-| 002 | MEDIUM | Responsive | At 375px the 2D heatmap shrinks to very small cells (no 2D scroll, so §9.18 is technically met, but readability is poor). | DEFERRED — needs `useMediaQuery` → stacked-per-cuisine layout (structural). |
-| 003 | MEDIUM | Layout | `TicketsPanel` (reused as-is) renders the full intent×cohort list, making the secondary band's right column very tall. | QUICK WIN — cap height + scroll, or condense to intent totals. |
-| 004 | LOW | Typography / AI-slop | Primary font is `system-ui`, not the brand Gordita. | DEFERRED — app-wide (`index.css`), needs the font asset + a global decision; out of scope for this screen. |
+| 002 | MEDIUM | Responsive | At 375px the 2D heatmap shrank to unreadably small cells. | **FIXED** — `useIsMobile` → full-width stacked cells with context under sm (commit cc39be0). |
+| 003 | MEDIUM | Layout | `TicketsPanel` rendered the full intent×cohort list, making the secondary band's right column very tall. | **FIXED** — capped to `max-h-80` + scroll (commit e5098ff). |
+| 004 | LOW | Typography / AI-slop | Primary font is `system-ui`, not the brand Gordita. | DEFERRED — app-wide (`index.css`), needs the Gordita font asset (.woff2) + a global decision; out of scope for this screen. |
 
 ## Per-category grades
 
@@ -37,17 +37,15 @@ Target: `http://localhost:5173/cohorts` (live, 136 real cohorts) · calibrated a
 | Color & contrast | A− | coherent, coral-only accent |
 | Spacing & layout | B+ | clean 3 altitudes; tickets column tall |
 | Interaction states | A− | focus rings, hover, modal focus-trap |
-| Responsive | C+ | mobile heatmap cramped (002) |
+| Responsive | B+ | mobile stacked layout (002 fixed) |
 | Content & microcopy | A− | human labels, honest empty/loading/error |
 | AI slop | B | only the system font |
 | Motion | A− | transform/opacity + reduced-motion |
 | Performance feel | A | 0 console errors, fast |
 
-## Quick wins (next iteration)
+## Remaining (next iteration)
 
-1. **002** — mobile: render the stacked-per-cuisine layout under `sm` (one DOM via `useMediaQuery`) so the heatmap stays readable on phones.
-2. **003** — cap the Tickets card height (or show intent totals only) so the secondary band stays balanced.
-3. **004** — if the brand wants Gordita, add the font (app-wide, `index.css` + `@font-face`).
+1. **004** — if the brand wants Gordita, add the font asset (`index.css` + `@font-face`, app-wide). Needs the `.woff2` from the operator.
 
 ## Environment note
 
@@ -55,4 +53,4 @@ The local supabase DB (`musixmatch-customer-ops`, :54522) was reset/emptied by a
 
 ## PR summary
 
-> Design review of /cohorts: 4 findings, fixed 1 high-impact (coral overlay 48→12 cells). Design score B+, AI-slop B. 3 quick wins deferred (mobile density, tickets height, brand font).
+> Design review of /cohorts: 4 findings, fixed 3 (coral overlay 48→12, mobile stacked layout, tickets height). Design score A−, AI-slop B. 1 deferred (brand font — needs asset).

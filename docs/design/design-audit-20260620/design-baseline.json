@@ -1,15 +1,15 @@
 {
   "date": "2026-06-20",
   "url": "http://localhost:5173/cohorts",
-  "designScore": "B+",
+  "designScore": "A-",
   "aiSlopScore": "B",
   "categoryGrades": {
     "hierarchy": "A-",
     "typography": "B",
     "color": "A-",
-    "spacing": "B+",
+    "spacing": "A-",
     "interaction": "A-",
-    "responsive": "C+",
+    "responsive": "B+",
     "content": "A-",
     "aiSlop": "B",
     "motion": "A-",
@@ -17,8 +17,8 @@
   },
   "findings": [
     { "id": "FINDING-001", "title": "Coral opportunity overlay on 35% of cells", "impact": "high", "category": "hierarchy", "status": "fixed", "commit": "054cd0c" },
-    { "id": "FINDING-002", "title": "Mobile heatmap cells cramped at 375px", "impact": "medium", "category": "responsive", "status": "deferred" },
-    { "id": "FINDING-003", "title": "TicketsPanel tall in secondary band", "impact": "medium", "category": "layout", "status": "deferred" },
+    { "id": "FINDING-002", "title": "Mobile heatmap cells cramped at 375px", "impact": "medium", "category": "responsive", "status": "fixed", "commit": "cc39be0" },
+    { "id": "FINDING-003", "title": "TicketsPanel tall in secondary band", "impact": "medium", "category": "layout", "status": "fixed", "commit": "e5098ff" },
     { "id": "FINDING-004", "title": "Primary font is system-ui, not brand Gordita", "impact": "low", "category": "typography", "status": "deferred" }
   ]
 }
