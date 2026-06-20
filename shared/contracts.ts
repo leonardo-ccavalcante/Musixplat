@@ -224,6 +224,28 @@ export const nbaCatalogUsage = z.object({
 });
 export type NbaCatalogUsage = z.infer<typeof nbaCatalogUsage>;
 
+// 02:1a — the dispatch screen payload: the released NBA, who it reaches, and the rendered artifact.
+// content is a deterministic render of PRODUCED proposal fields (§14), never seeded.
+export const cockpitDispatchDetail = z.object({
+  nba_id: z.string(),
+  action_type: z.string().nullable(),
+  action_label: z.string().nullable(),
+  cohort_id: z.string(),
+  effective_level: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+  reach_count: z.number(),
+  reach_preview: z.array(z.object({ restaurant_id: z.string(), tier_base: z.string() })),
+  artifact_kind: z.string(),
+  content: z.object({ action: z.string(), cohort: z.string(), root: z.string(), path: z.string(), how: z.string() }),
+});
+export type CockpitDispatchDetail = z.infer<typeof cockpitDispatchDetail>;
+
+// 02:1a — Send: writes Release_Batch + Decision_Trace + Action_Dispatch atomically.
+export const cockpitSendDispatchInput = z.object({
+  nba_id: z.string().min(1),
+  resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
+});
+export type CockpitSendDispatchInput = z.infer<typeof cockpitSendDispatchInput>;
+
 // 01 operability — cohorts.run summary. Counts are PRODUCED by the P01 batch (read back after it runs),
 // never seeded as results (§14). weeks = the demo windows computed (the second enables the delta diff).
 export interface CohortsRunResult {

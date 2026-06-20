@@ -1,10 +1,12 @@
 import type pg from "pg";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
 import { type Level } from "../conversation/min.js";
-import { cockpitReleaseInput, type NbaCockpitRow } from "../../shared/contracts.js";
+import { cockpitReleaseInput, cockpitSendDispatchInput, type NbaCockpitRow } from "../../shared/contracts.js";
+import { renderArtifact } from "../cockpit/renderArtifact.js";
 
 const LEVEL_RANK: Record<Level, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 };
 
@@ -181,12 +183,146 @@ export async function recordRelease(i: ReleaseInput, client: pg.PoolClient): Pro
   return { releaseId, traceId, effectiveLevel: prop.effective_level, resultingLevel: i.resultingLevel };
 }
 
+// 02:1a — the dispatch screen read: the released NBA + its reach (cohort restaurants in this pool) + the
+// deterministically-rendered artifact. Pool-scoped (foreign pool ⇒ null, no leak). §14: content is rendered
+// from PRODUCED fields, never seeded.
+export async function dispatchDetail(nbaId: string, tenantId: string, exec: Exec) {
+  const p = (
+    await exec<{
+      nba_id: string;
+      action_type: string | null;
+      cohort_id: string;
+      root_cause: string | null;
+      before_after_expected: unknown;
+      effective_level: "LOW" | "MEDIUM" | "HIGH" | null;
+      label: string | null;
+      playbook: string | null;
+    }>(
+      `select p.nba_id::text as nba_id, p.action_type, p.cohort_id, p.root_cause, p.before_after_expected,
+              m.effective_level::text as effective_level, cat.label, cat.playbook
+         from gov."NBA_Proposal" p
+         left join catalog."NBA_Catalogo" cat on cat.code = p.action_type
+         left join lateral (
+           select effective_level from gov."min_calculation" where nba_id = p.nba_id::text
+           order by computed_at desc limit 1
+         ) m on true
+        where p.nba_id = $1::uuid
+          and exists (
+            select 1 from cohort."Cohort_Membership_Snapshot" cms
+            join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+            where cms.cohort_id = p.cohort_id)`,
+      [nbaId, tenantId],
+    )
+  )[0];
+  if (!p) return null;
+  const reach_preview = await exec<{ restaurant_id: string; tier_base: string }>(
+    `select r.restaurant_id, r.tier_base::text as tier_base
+       from cohort."Cohort_Membership_Snapshot" cms
+       join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+      where cms.cohort_id = $1 order by r.restaurant_id limit 6`,
+    [p.cohort_id, tenantId],
+  );
+  const reach_count =
+    (
+      await exec<{ n: number }>(
+        `select count(distinct r.restaurant_id)::int as n
+           from cohort."Cohort_Membership_Snapshot" cms
+           join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+          where cms.cohort_id = $1`,
+        [p.cohort_id, tenantId],
+      )
+    )[0]?.n ?? 0;
+  const art = renderArtifact({
+    action_type: p.action_type,
+    action_label: p.label,
+    cohort_id: p.cohort_id,
+    root_cause: p.root_cause,
+    before_after_expected: p.before_after_expected,
+    playbook: p.playbook,
+  });
+  return {
+    nba_id: p.nba_id,
+    action_type: p.action_type,
+    action_label: p.label,
+    cohort_id: p.cohort_id,
+    effective_level: p.effective_level,
+    reach_count,
+    reach_preview,
+    artifact_kind: art.artifact_kind,
+    content: art.content,
+  };
+}
+
+// 02:1a — Send: the release (Release_Batch + Decision_Trace, reusing recordRelease) AND the Action_Dispatch
+// row in ONE tx. Trace failure ⇒ nothing persists (caller's tx). Unique nba_id ⇒ no double dispatch.
+export async function sendDispatch(
+  i: Omit<ReleaseInput, "action">,
+  client: pg.PoolClient,
+): Promise<{ dispatchId: string; traceId: string }> {
+  const rel = await recordRelease({ ...i, action: "RELEASE" }, client);
+  const d = (
+    await client.query<{
+      action_type: string | null;
+      cohort_id: string;
+      root_cause: string | null;
+      before_after_expected: unknown;
+      label: string | null;
+      playbook: string | null;
+    }>(
+      `select p.action_type, p.cohort_id, p.root_cause, p.before_after_expected, cat.label, cat.playbook
+         from gov."NBA_Proposal" p
+         left join catalog."NBA_Catalogo" cat on cat.code = p.action_type
+        where p.nba_id = $1::uuid`,
+      [i.nbaId],
+    )
+  ).rows[0]!;
+  const target_count = (
+    await client.query<{ n: number }>(
+      `select count(distinct r.restaurant_id)::int as n
+         from cohort."Cohort_Membership_Snapshot" cms
+         join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+        where cms.cohort_id = $1`,
+      [d.cohort_id, i.tenantId],
+    )
+  ).rows[0]!.n;
+  const art = renderArtifact({
+    action_type: d.action_type,
+    action_label: d.label,
+    cohort_id: d.cohort_id,
+    root_cause: d.root_cause,
+    before_after_expected: d.before_after_expected,
+    playbook: d.playbook,
+  });
+  const ins = await client.query<{ dispatch_id: string }>(
+    `insert into gov."Action_Dispatch"(nba_id, cohort_id, tenant_id, artifact_kind, content, target_count, status, decision_trace_id)
+     values ($1, $2, $3, $4, $5::jsonb, $6, 'sent', $7)
+     returning dispatch_id::text as dispatch_id`,
+    [i.nbaId, d.cohort_id, i.tenantId, art.artifact_kind, JSON.stringify(art.content), target_count, rel.traceId],
+  );
+  return { dispatchId: ins.rows[0]!.dispatch_id, traceId: rel.traceId };
+}
+
 export const cockpitRouter = router({
   // 02:F-1.1 — the bandeja: every proposal in the pool with its autonomy verdict, AUTO-first.
   list: tenantProcedure.query(({ ctx }) => listCockpitRows(ctx.tenantId, query)),
 
   // 02:F-1.2 — "your week": released vs paused in the last 7 days (read from the trace, §14).
   weekSummary: tenantProcedure.query(({ ctx }) => weekSummary(ctx.tenantId, query)),
+
+  // 02:1a — the dispatch screen read: reach + rendered artifact for a released NBA (pool-scoped).
+  dispatchDetail: tenantProcedure
+    .input(z.object({ nba_id: z.string().min(1) }))
+    .query(({ ctx, input }) => dispatchDetail(input.nba_id, ctx.tenantId, query)),
+
+  // 02:1a — Send: Release_Batch + Decision_Trace + Action_Dispatch in one tx (no-trace-no-action).
+  sendDispatch: tenantProcedure.input(cockpitSendDispatchInput).mutation(({ ctx, input }) =>
+    withTx((client) =>
+      sendDispatch(
+        { tenantId: ctx.tenantId, operatorId: ctx.userId, nbaId: input.nba_id, resultingLevel: input.resulting_level },
+        client,
+      ),
+    ),
+  ),
 
   // 02:1C / F-1.2 — human release/pause; writes Decision_Trace + Release_Batch atomically (no-trace-no-action).
   release: tenantProcedure.input(cockpitReleaseInput).mutation(({ ctx, input }) =>
