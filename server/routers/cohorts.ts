@@ -245,32 +245,33 @@ export const cohortsRouter = router({
       return { restaurants: rests.length, orders: rows.length };
     }),
 
-  // Demo onboarding — the downloadable CSV template: exact header + 2 example rows + a per-column type
-  // legend the modal renders so the operator knows what each field expects. Static (no DB).
+  // Demo onboarding — the downloadable CSV template: exact header + 2 VALID example rows (one ok order,
+  // one failed/cancelled — demonstrates order-grain + cancelled_by rule) + a per-column legend with
+  // name/type/desc/example so the modal can render rich column guidance. Static (no DB).
   csvTemplate: tenantProcedure.query(async () => {
     const example = [
-      "POOL-001,R001,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-03-01,120.00,24.00,ok,,0,true,true",
-      "POOL-001,R001,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-03-08,90.00,18.00,failed,customer,0,false,true",
+      "POOL-001,R-PIZZA-01,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-06-10,120.00,24.00,ok,,0,true,true",
+      "POOL-001,R-PIZZA-01,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-06-12,90.00,18.00,failed,customer,0,false,true",
     ];
-    const legend: Record<string, string> = {
-      tenant_id: "text — pool/RLS id, e.g. POOL-001",
-      restaurant_id: "text — groups rows into one restaurant",
-      tier_base: "enum — managed_brand | managed_midmarket | long_tail",
-      segment: "enum — managed | long_tail",
-      signup_date: "date YYYY-MM-DD — must be <= latest order_date",
-      zone: "text — cohort axis (e.g. downtown)",
-      cuisine: "text — cohort axis (e.g. pizza)",
-      committed_hours_week: "number — committed weekly hours (also connection denominator)",
-      order_date: "date YYYY-MM-DD",
-      gross_value: "number >= 0",
-      fee: "number >= 0 (optional, default 0)",
-      payment_status: "enum — ok | failed | pending",
-      cancelled_by: "enum — restaurant | customer (only when payment_status=failed; else blank)",
-      discount_pct: "number 0-100 (optional, default 0)",
-      has_photo: "boolean — true | false (optional)",
-      has_description: "boolean — true | false (optional)",
-    };
-    return { csv: [CSV_COLUMNS.join(","), ...example].join("\n"), legend };
+    const columns: { name: string; type: string; desc: string; example: string }[] = [
+      { name: "tenant_id",              type: "text",              desc: "pool / RLS id",                                                         example: "POOL-001"    },
+      { name: "restaurant_id",          type: "text",              desc: "groups all rows of one restaurant",                                     example: "R-PIZZA-01"  },
+      { name: "tier_base",              type: "enum",              desc: "managed_brand · managed_midmarket · long_tail",                         example: "long_tail"   },
+      { name: "segment",                type: "enum",              desc: "managed · long_tail",                                                   example: "long_tail"   },
+      { name: "signup_date",            type: "date (YYYY-MM-DD)", desc: "must be ≤ the latest order_date",                                       example: "2025-06-01"  },
+      { name: "zone",                   type: "text",              desc: "cohort axis",                                                           example: "downtown"    },
+      { name: "cuisine",                type: "text",              desc: "cohort axis",                                                           example: "pizza"       },
+      { name: "committed_hours_week",   type: "number",            desc: "committed weekly hours (also the connection denominator)",              example: "50"          },
+      { name: "order_date",             type: "date (YYYY-MM-DD)", desc: "the order's date",                                                     example: "2026-06-10"  },
+      { name: "gross_value",            type: "number",            desc: "≥ 0",                                                                  example: "120.00"      },
+      { name: "fee",                    type: "number",            desc: "≥ 0 (optional, default 0)",                                            example: "24.00"       },
+      { name: "payment_status",         type: "enum",              desc: "ok · failed · pending",                                                example: "ok"          },
+      { name: "cancelled_by",           type: "enum",              desc: "restaurant · customer (only when payment_status=failed; else blank)",  example: "customer"    },
+      { name: "discount_pct",           type: "number",            desc: "0–100 (optional, default 0)",                                          example: "0"           },
+      { name: "has_photo",              type: "boolean",           desc: "true · false (optional)",                                              example: "true"        },
+      { name: "has_description",        type: "boolean",           desc: "true · false (optional)",                                              example: "true"        },
+    ];
+    return { csv: [CSV_COLUMNS.join(","), ...example].join("\n"), columns };
   }),
 
   // F-3.3 / F-3.4 — raw ticket distribution intent × cohort, tenant-scoped, k-anon respected.

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CSV_COLUMNS } from "../../server/cohorts/csvSchema";
+import { parseCsv } from "../../server/cohorts/parseCsv";
 import type pg from "pg";
 import { makePool, resetDb, count } from "../helpers/db";
 import { appRouter } from "../../server/routers/_app";
@@ -47,13 +48,24 @@ describe("cohorts.uploadCsv", () => {
 });
 
 describe("cohorts.csvTemplate", () => {
-  it("returns a header with every required column + at least one example row + a legend", async () => {
+  it("header matches CSV_COLUMNS and every column has type+desc+example", async () => {
     const t = await caller().cohorts.csvTemplate();
-    const [header, ...rest] = t.csv.split("\n");
-    expect(header).toBe(CSV_COLUMNS.join(","));
-    expect(rest.length).toBeGreaterThanOrEqual(1);
-    expect(t.legend.tier_base).toMatch(/managed_brand/);
-    // every column documented in the legend:
-    for (const col of CSV_COLUMNS) expect(t.legend[col]).toBeTruthy();
+    expect(t.csv.split("\n")[0]).toBe(CSV_COLUMNS.join(","));
+    expect(t.columns.map((c) => c.name)).toEqual([...CSV_COLUMNS]);
+    for (const c of t.columns) {
+      expect(c.type).toBeTruthy();
+      expect(c.desc).toBeTruthy();
+      expect(c.example).toBeTruthy();
+    }
+    const tierb = t.columns.find((c) => c.name === "tier_base")!;
+    expect(tierb.desc).toMatch(/managed_brand/);
+  });
+  it("the template's own 2 example rows are VALID (parse without error)", async () => {
+    const t = await caller().cohorts.csvTemplate();
+    const rows = parseCsv(t.csv);
+    expect(rows.length).toBe(2);
+    expect(rows[0]!.payment_status).toBe("ok");
+    expect(rows[1]!.payment_status).toBe("failed");
+    expect(rows[1]!.cancelled_by).toBe("customer");
   });
 });

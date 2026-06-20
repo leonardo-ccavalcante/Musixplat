@@ -61,8 +61,6 @@ export function CsvUploadModal({
     }
   }
 
-  const legend = template.data ? Object.entries(template.data.legend) : [];
-
   return (
     <Modal open={open} onClose={onClose} title="Upload cohort base (CSV)">
       <div className="space-y-4">
@@ -82,19 +80,22 @@ export function CsvUploadModal({
         </Button>
 
         {/* Column legend */}
-        {legend.length > 0 && (
+        {template.data && (
           <div
-            className="max-h-48 overflow-y-auto rounded-mxm border border-mxm-border p-3"
+            className="max-h-56 overflow-y-auto rounded-mxm border border-mxm-border p-3"
             aria-label="Column type legend"
           >
             <p className="mb-2 text-xs font-semibold text-mxm-content-secondary">
               Column legend
             </p>
-            <dl className="space-y-1">
-              {legend.map(([col, desc]) => (
-                <div key={col} className="flex gap-2 text-sm">
-                  <dt className="shrink-0 font-mono text-mxm-content">{col}</dt>
-                  <dd className="text-mxm-content-secondary">{desc}</dd>
+            <dl className="mt-4 text-xs">
+              {template.data.columns.map((c) => (
+                <div key={c.name} className="grid grid-cols-[10rem_1fr] gap-2 py-1 border-b border-mxm-border last:border-0">
+                  <dt className="font-mono text-mxm-content">{c.name}</dt>
+                  <dd className="text-mxm-content-secondary">
+                    <span>{c.type} — {c.desc}</span>
+                    <span className="mt-0.5 block text-mxm-content-tertiary">e.g. <span className="font-mono">{c.example || "(blank)"}</span></span>
+                  </dd>
                 </div>
               ))}
             </dl>
