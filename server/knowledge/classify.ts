@@ -59,7 +59,8 @@ export function llmClassify(client: Anthropic, model = "claude-sonnet-4-6") {
 
 /** Prod uses Claude when the key is present; on ANY error degrades to deterministic. Never throws (§3.7). */
 export async function classifyDocType(text: string): Promise<DocClassification> {
-  if (!process.env.ANTHROPIC_API_KEY) return deterministicClassify(text);
+  // Tests NEVER call the paid LLM — deterministic under vitest (hermetic, free, stable). Prod uses Claude.
+  if (process.env.VITEST || !process.env.ANTHROPIC_API_KEY) return deterministicClassify(text);
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     return await llmClassify(new Anthropic())(text);
