@@ -11,7 +11,10 @@ import { query } from "./db/pool.js";
 assertProdSecrets();
 
 const app = express();
-app.use(express.json());
+// 25mb body limit (default is 100kb): the cohort CSV onboarding uploads a base64-encoded CSV that can
+// reach a few MB for a full base (~10k rows ≈ 1.5MB base64). Without this the upload 413s and the client
+// gets an HTML error page ("Unexpected token '<'") instead of a tRPC response.
+app.use(express.json({ limit: "25mb" }));
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 

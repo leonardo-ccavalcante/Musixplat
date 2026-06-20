@@ -30,6 +30,19 @@ describe("cohorts.uploadCsv", () => {
     expect(await count(pool, `tenant."Restaurant" where tenure_months is not null`)).toBe(0);
   });
 
+  it("accepts DECIMAL fee/discount_pct (regression: coalesce($n,0) must not force integer param type)", async () => {
+    const before = await count(pool, 'tenant."Order"');
+    const dec = [HEADER, `POOL-001,RDEC,long_tail,long_tail,2024-01-01,downtown,pizza,50,2026-03-01,45.87,12.57,ok,,5.5,true,true`].join("\n");
+    const r = await caller().cohorts.uploadCsv({ filename: "dec.csv", contentBase64: b64(dec) });
+    expect(r.orders).toBe(1);
+    expect(await count(pool, 'tenant."Order"')).toBe(before + 1);
+    const stored = await pool.query<{ fee: string; discount_pct: string }>(
+      `select fee::text, discount_pct::text from tenant."Order" where restaurant_id='RDEC'`,
+    );
+    expect(stored.rows[0]!.fee).toBe("12.57");
+    expect(stored.rows[0]!.discount_pct).toBe("5.50");
+  });
+
   it("rejects a bad enum value citing the row + column (fail-closed, nothing inserted)", async () => {
     const before = await count(pool, 'tenant."Order"');
     const bad = [HEADER, `POOL-001,RBAD,WRONG_TIER,long_tail,2024-01-01,downtown,pizza,50,2026-03-01,100,20,ok,,0,true,true`].join("\n");

@@ -224,11 +224,14 @@ export const cohortsRouter = router({
         }
         for (const o of rows) {
           await c.query(
+            // fee/discount default in JS (NOT `coalesce($n,0)`): a coalesce with the integer literal 0 makes
+            // PG infer the param as INTEGER, which rejects decimals like "12.57". Binding the param straight
+            // to its numeric column lets PG infer numeric.
             `insert into tenant."Order"
                (restaurant_id, order_date, gross_value, fee, payment_status, cancelled_by, discount_pct, has_photo, has_description, zone, cuisine, channel, provenance)
-             values ($1,$2,$3,coalesce($4,0),$5,$6,coalesce($7,0),$8,$9,$10,$11,'csv','[V]')`,
-            [o.restaurant_id, o.order_date, o.gross_value, o.fee ?? null, o.payment_status,
-             o.cancelled_by ?? null, o.discount_pct ?? null, o.has_photo ?? null, o.has_description ?? null, o.zone, o.cuisine],
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'csv','[V]')`,
+            [o.restaurant_id, o.order_date, o.gross_value, o.fee ?? 0, o.payment_status,
+             o.cancelled_by ?? null, o.discount_pct ?? 0, o.has_photo ?? null, o.has_description ?? null, o.zone, o.cuisine],
           );
         }
         await c.query(
