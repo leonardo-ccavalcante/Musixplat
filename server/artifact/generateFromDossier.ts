@@ -46,6 +46,17 @@ export async function generateFromDossier(problemId: string, tenantId: string): 
 
   const area = String((f.f1_tipo_raiz as Record<string, unknown> | null)?.area_type ?? "unknown");
   const targetMetric = METRIC_BY_AREA[area] ?? `improve_${area}`;
+
+  // P06 §8 — CITE the knowledge-base docs the spine grounded this answer in (B.6.5 kb_doc_refs).
+  // Read-only here (the producer is the orchestrator, §14); render a "Sources:" line of `filename (docType)`.
+  const refs = (
+    await query<{ kb_doc_refs: { filename: string; docType: string | null }[] }>(
+      `select kb_doc_refs from tenant."Diagnosed_Problem" where problem_id = $1 and tenant_id = $2`,
+      [problemId, tenantId],
+    )
+  )[0];
+  const sources = (refs?.kb_doc_refs ?? []).map((r) => `${r.filename} (${r.docType ?? "Other"})`);
+
   // Deterministic render — quotes the dossier's PRODUCED fields + the KB HOW. Never invents a number.
   const content = {
     kind: "internal_email",
@@ -56,7 +67,13 @@ export async function generateFromDossier(problemId: string, tenantId: string): 
       impact: f.f5_how_much,
       how: how[0].resolution, // reproducible HOW from the KB precedent (not invented)
       route: f.f9_suggested_route,
+      ...(sources.length ? { sources: `Sources: ${sources.join("; ")}` } : {}),
     },
+  };
+  // Provenance per field (§3.10): the cited sources are [C] (computed by the deterministic spine).
+  const provenance = {
+    ...(f.f11_provenance as Record<string, unknown> | null ?? {}),
+    ...(sources.length ? { sources: "[C]" } : {}),
   };
 
   const ins = await query<{ artifact_id: string }>(
@@ -78,7 +95,7 @@ export async function generateFromDossier(problemId: string, tenantId: string): 
       targetMetric,
       JSON.stringify(f),
       JSON.stringify(content),
-      JSON.stringify(f.f11_provenance ?? {}),
+      JSON.stringify(provenance),
       proposer.user_id,
     ],
   );

@@ -33,8 +33,11 @@ export function openaiEmbedder(
 }
 
 // Factory — prod uses OpenAI when OPENAI_API_KEY is present, else deterministic fallback.
+// Under the test runner (Vitest sets VITEST=true) we ALWAYS use the deterministic embedder so the
+// whole suite stays hermetic/free/fast regardless of the key being present (plan §9). Tests that need
+// semantic behaviour inject an embedder explicitly; nothing here ever makes a live call under test.
 export async function resolveEmbedder(): Promise<Embedder> {
-  if (!process.env.OPENAI_API_KEY) return deterministicEmbedder;
+  if (process.env.VITEST || !process.env.OPENAI_API_KEY) return deterministicEmbedder;
   const { default: OpenAI } = await import("openai");
   return openaiEmbedder(new OpenAI() as never);
 }
