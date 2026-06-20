@@ -54,7 +54,18 @@ describe("knowledge round-trip", () => {
   });
 
   it("does NOT leak another pool's docs (§3.4 RLS)", async () => {
-    const hits = await searchKnowledge(OTHER, "refund", 5, E);
+    // Query OTHER with the EXACT doc text. The deterministic embedder is non-semantic, so an
+    // unrelated word like "refund" lands at cosine ≈ -0.02 (below kb_similarity_threshold) and gets
+    // filtered out regardless of scoping — that would make this test VACUOUS. The exact text yields
+    // cosine ≈ 1.0, so if the server-side `where c.tenant_id = $1` guard (§3.4) ever regressed, the
+    // policy.md chunk would surface here as a top hit and this assertion would fail. The query
+    // mirrors the round-trip hit test on purpose so a tenant-scoping leak is actually detectable.
+    const hits = await searchKnowledge(
+      OTHER,
+      "Refunds are issued within 30 days of a failed payment.",
+      5,
+      E,
+    );
     expect(hits.find((h) => h.filename === "policy.md")).toBeUndefined();
   });
 });
