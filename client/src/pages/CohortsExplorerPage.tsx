@@ -47,8 +47,21 @@ export function CohortsExplorerPage() {
 
   const utils = trpc.useUtils();
   const run = trpc.cohorts.run.useMutation();
+  const clearDb = trpc.cohorts.clearBusinessData.useMutation();
+  const genExample = trpc.cohorts.generateExample.useMutation();
   const [runMsg, setRunMsg] = useState<{ status: "idle" | "running" | "done" | "error"; text?: string }>({ status: "idle" });
+  const [uploadOpen, setUploadOpen] = useState(false);
   const running = runMsg.status === "running";
+
+  async function invalidateAll(): Promise<void> {
+    await Promise.all([
+      utils.cohorts.list.invalidate(),
+      utils.cohorts.deltas.invalidate(),
+      utils.cohorts.intentCounts.invalidate(),
+      utils.cohorts.changelog.invalidate(),
+      utils.money.summary.invalidate(),
+    ]);
+  }
 
   // 01 operability — drive the P01 batch from the screen. Numbers are PRODUCED by the producers; the UI
   // only triggers + reads. Fail-closed: a failure surfaces honestly, never green-fake.
@@ -56,16 +69,33 @@ export function CohortsExplorerPage() {
     setRunMsg({ status: "running" });
     try {
       const r = await run.mutateAsync();
-      await Promise.all([
-        utils.cohorts.list.invalidate(),
-        utils.cohorts.deltas.invalidate(),
-        utils.cohorts.intentCounts.invalidate(),
-        utils.cohorts.changelog.invalidate(),
-        utils.money.summary.invalidate(),
-      ]);
+      await invalidateAll();
       setRunMsg({ status: "done", text: `Computed · ${r.cohorts} cohorts · ${r.memberships} memberships · weeks ${r.weeks.join(", ")}` });
     } catch (e) {
       setRunMsg({ status: "error", text: e instanceof Error ? e.message : "P01 run failed (fail-closed)" });
+    }
+  }
+
+  async function onClear(): Promise<void> {
+    if (!window.confirm("Clear ALL business data (restaurants, orders, cohorts)? Catalog/config is kept.")) return;
+    setRunMsg({ status: "running" });
+    try {
+      await clearDb.mutateAsync();
+      await invalidateAll();
+      setRunMsg({ status: "done", text: "Business data cleared — upload a CSV or generate an example base." });
+    } catch (e) {
+      setRunMsg({ status: "error", text: e instanceof Error ? e.message : "Clear failed" });
+    }
+  }
+
+  async function onGenerate(): Promise<void> {
+    setRunMsg({ status: "running" });
+    try {
+      const g = await genExample.mutateAsync({ restaurants: 5000 });
+      await invalidateAll();
+      setRunMsg({ status: "done", text: `Example base generated · ${g.restaurants} restaurants. Now press Run flow.` });
+    } catch (e) {
+      setRunMsg({ status: "error", text: e instanceof Error ? e.message : "Generate failed" });
     }
   }
 
@@ -89,6 +119,15 @@ export function CohortsExplorerPage() {
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button type="button" onClick={() => void runFlow()} disabled={running} variant="ghost">
               {running ? "Running P01…" : "Run flow"}
+            </Button>
+            <Button type="button" variant="primary" onClick={() => void onGenerate()} disabled={running}>
+              Generate example base
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setUploadOpen(true)} disabled={running}>
+              Upload CSV
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void onClear()} disabled={running} className="text-mxm-red">
+              Clear database
             </Button>
             <span aria-live="polite" className={runMsg.status === "error" ? "text-sm text-mxm-red" : "text-sm text-mxm-content-secondary"}>
               {runMsg.status === "running" && "Computing cohorts → ranking → deltas…"}
@@ -144,6 +183,15 @@ export function CohortsExplorerPage() {
       )}
 
       <CohortModal cell={selected} onClose={() => setSelected(null)} />
+      {/* Task 8: replace this stub with <CsvUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} /> */}
+      {uploadOpen && (
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-black/60">
+          <div className="rounded-mxm bg-mxm-bg-elevated p-6 text-mxm-content">
+            <p>CSV upload — coming in Task 8.</p>
+            <Button type="button" variant="ghost" onClick={() => setUploadOpen(false)} className="mt-4">Close</Button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
