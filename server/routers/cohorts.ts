@@ -69,6 +69,10 @@ export const cohortsRouter = router({
     // (they fall under production k=5). k_anon_threshold is a NAMED knob (§3.8) so this tunes WITHOUT code;
     // the suppression mechanism stays intact and is still tested at k=5. Mirrors scripts/run-p01.ts.
     await query(`update catalog."Config_Knobs" set value='1' where key='k_anon_threshold'`);
+    // Prototype: relax n_min to 3 so smaller/sparser uploaded bases still rank cells instead of all
+    // collapsing to qualitative (production default 20). Named knob (§3.8) — tunes WITHOUT code; the gate
+    // mechanism is unchanged and still tested at 20 (the seed value, restored on reset). SEPARATE from k-anon (§3.2).
+    await query(`update catalog."Config_Knobs" set value='3' where key='n_min_threshold'`);
     const w = await deriveRunWindow();
     if (!w) return { weeks: [], cohorts: 0, memberships: 0 }; // empty base ⇒ honest zero (fail-closed)
     await runP01({ week: w.prevWeek, refDate: w.refDate });
