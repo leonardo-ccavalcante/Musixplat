@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
+import type { TokenUsage } from "../_core/llm.js";
 
 export const EMBED_DIM = 1536;
+// Default embedding model — exported so cost logging records the exact model that was billed (P07).
+export const EMBED_MODEL = "text-embedding-3-small";
 export interface Embedder { embed(texts: string[]): Promise<number[][]>; }
+
+// Optional sink: the live embedder reports its (input-only) token usage so the call-site can log
+// cost-per-process (P07). The deterministic embedder is free and NEVER calls it ⇒ tests stay silent.
+export type EmbedUsageSink = (usage: TokenUsage) => void;
 
 // Deterministic, key-free embedder for CI/anti-fake/tests. Hash → seeded pseudo-vector → unit-normalized.
 // NOT semantic; only guarantees stable, dimension-correct vectors so the pipeline + pgvector SQL run end-to-end.
@@ -27,17 +34,28 @@ export const deterministicEmbedder: Embedder = {
 export const MAX_EMBED_BATCH = 256;
 
 export function openaiEmbedder(
-  client: { embeddings: { create(a: { model: string; input: string[] }): Promise<{ data: { embedding: number[] }[] }> } },
-  model = "text-embedding-3-small",
+  client: {
+    embeddings: {
+      create(a: { model: string; input: string[] }): Promise<{
+        data: { embedding: number[] }[];
+        usage?: { prompt_tokens?: number } | null;
+      }>;
+    };
+  },
+  model = EMBED_MODEL,
+  onUsage?: EmbedUsageSink,
 ): Embedder {
   return {
     async embed(texts) {
       const out: number[][] = [];
+      let inputTokens = 0; // summed across batches — embeddings have input tokens only
       for (let i = 0; i < texts.length; i += MAX_EMBED_BATCH) {
         const batch = texts.slice(i, i + MAX_EMBED_BATCH);
         const res = await client.embeddings.create({ model, input: batch });
         out.push(...res.data.map((d) => d.embedding));
+        inputTokens += res.usage?.prompt_tokens ?? 0;
       }
+      onUsage?.({ inputTokens, outputTokens: 0 });
       return out;
     },
   };
@@ -86,8 +104,8 @@ export async function embedWithRetry(
 // Under the test runner (Vitest sets VITEST=true) we ALWAYS use the deterministic embedder so the
 // whole suite stays hermetic/free/fast regardless of the key being present (plan §9). Tests that need
 // semantic behaviour inject an embedder explicitly; nothing here ever makes a live call under test.
-export async function resolveEmbedder(): Promise<Embedder> {
+export async function resolveEmbedder(onUsage?: EmbedUsageSink): Promise<Embedder> {
   if (process.env.VITEST || !process.env.OPENAI_API_KEY) return deterministicEmbedder;
   const { default: OpenAI } = await import("openai");
-  return openaiEmbedder(new OpenAI() as never);
+  return openaiEmbedder(new OpenAI() as never, EMBED_MODEL, onUsage);
 }

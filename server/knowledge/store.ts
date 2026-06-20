@@ -1,9 +1,16 @@
 import { query, withTx } from "../db/pool.js";
-import { resolveEmbedder, embedWithRetry, type Embedder } from "./embedder.js";
-import { chatText, openaiChatClient, type ChatClient } from "../_core/llm.js";
+import { resolveEmbedder, embedWithRetry, EMBED_MODEL, type Embedder } from "./embedder.js";
+import { chatText, openaiChatClient, CHAT_MODEL, type ChatClient, type TokenUsage } from "../_core/llm.js";
+import { recordUsageSafe, type ProcessType } from "../_core/usage.js";
 import { chunk } from "./chunker.js";
 import { classifyDocType } from "./classify.js";
 import type { SearchHit, AskResult } from "../../shared/contracts_knowledge.js";
+
+// What a retrieval is FOR — so its embedding token cost is attributed to the right process (P07).
+export interface UsageCtx {
+  processType: ProcessType;
+  refId?: string | null;
+}
 
 // Threshold read BY NAME from the catalog (§3.8) — never a hard-coded literal. Fail-closed:
 // a missing knob yields NaN, which makes every `sim >= NaN` filter false (no optimistic default).
@@ -26,16 +33,20 @@ export async function ingestDocument(
   // ([I], text only — never a number), split into chunks, and embed (bounded retry on transient errors;
   // a terminal failure like a bad key/quota throws here). If anything throws, nothing was written —
   // no orphan document (§3.7 fail-closed, operator rule "se o embed falhar, não colocar lixo no DB").
-  const cls = await classifyDocType(doc.text);
+  // P07: capture the live token usage of the two paid steps (classify chat + embed) so we can log
+  // cost AFTER the doc_id exists. Deterministic providers (tests) never fire these ⇒ both stay null.
+  let chatUsage: TokenUsage | null = null;
+  let embedUsage: TokenUsage | null = null;
+  const cls = await classifyDocType(doc.text, (u) => (chatUsage = u));
   const parts = chunk(doc.text, {
     size: await knob("kb_chunk_size"),
     overlap: await knob("kb_chunk_overlap"),
   });
-  const emb = embedder ?? (await resolveEmbedder()); // prod: OpenAI; tests: injected deterministic.
+  const emb = embedder ?? (await resolveEmbedder((u) => (embedUsage = u))); // prod: OpenAI; tests: injected deterministic.
   const vecs = await embedWithRetry(emb, parts); // §14 producer fills the embeddings at runtime.
   // Atomic write: the document and every chunk land in ONE transaction, so a failure mid-insert rolls
   // the document back too — the base never holds a document with zero chunks.
-  return withTx(async (c) => {
+  const result = await withTx(async (c) => {
     const ins = await c.query<{ doc_id: string }>(
       `insert into tenant."Knowledge_Document"(tenant_id,filename,mime,source,raw_text,doc_type,doc_type_confidence,status,provenance_by_field)
        values ($1,$2,$3,$4,$5,$6,$7,'proposed',jsonb_build_object('doc_type','[I]'))
@@ -52,6 +63,12 @@ export async function ingestDocument(
     }
     return { docId, docType: cls.docType, confidence: cls.confidence };
   });
+  // Log cost AFTER the atomic write succeeded (no orphan ⇒ no orphan cost), attributed to the doc.
+  if (chatUsage)
+    await recordUsageSafe({ tenantId, processType: "kb_ingest", kind: "chat", model: CHAT_MODEL, refId: result.docId, usage: chatUsage });
+  if (embedUsage)
+    await recordUsageSafe({ tenantId, processType: "kb_ingest", kind: "embedding", model: EMBED_MODEL, refId: result.docId, usage: embedUsage });
+  return result;
 }
 
 export async function searchKnowledge(
@@ -59,9 +76,13 @@ export async function searchKnowledge(
   queryText: string,
   topK?: number,
   embedder?: Embedder,
+  usageCtx?: UsageCtx, // P07: attribute the query-embedding cost to its process (kb_ask/kb_search/nba_kb_check)
 ): Promise<SearchHit[]> {
-  const emb = embedder ?? (await resolveEmbedder());
+  let embedUsage: TokenUsage | null = null;
+  const emb = embedder ?? (await resolveEmbedder((u) => (embedUsage = u)));
   const [qv] = await emb.embed([queryText]);
+  if (embedUsage && usageCtx)
+    await recordUsageSafe({ tenantId, processType: usageCtx.processType, kind: "embedding", model: EMBED_MODEL, refId: usageCtx.refId ?? null, usage: embedUsage });
   const k = topK ?? (await knob("kb_retrieval_top_k"));
   const minSim = await knob("kb_similarity_threshold");
   // pgvector `<=>` is cosine distance with vector_cosine_ops; cosine similarity = 1 - distance.
@@ -109,7 +130,7 @@ export async function answerFromBase(
   embedder?: Embedder, // DI for hermetic retrieval in tests
   chat?: ChatClient, // DI for hermetic generation in tests; prod passes none ⇒ OpenAI
 ): Promise<AskResult> {
-  const hits = await searchKnowledge(tenantId, question, undefined, embedder);
+  const hits = await searchKnowledge(tenantId, question, undefined, embedder, { processType: "kb_ask" });
   if (hits.length === 0) return { grounded: false, answer: null, sources: [], hits: [] };
   const sources = [
     ...new Map(hits.map((h) => [h.docId, { filename: h.filename, docType: h.docType }])).values(),
@@ -123,11 +144,12 @@ export async function answerFromBase(
     .map((h) => `Source: ${h.filename} (${h.docType ?? "unclassified"})\n${h.content}`)
     .join("\n\n---\n\n");
   const client = chat ?? (await openaiChatClient());
-  const answer = await chatText(
+  const { text: answer, usage } = await chatText(
     client,
     ANSWER_SYSTEM,
     `Question: ${question}\n\nContext passages:\n${context}`,
     400,
   );
+  await recordUsageSafe({ tenantId, processType: "kb_ask", kind: "chat", model: CHAT_MODEL, usage });
   return { grounded: true, answer, sources, hits };
 }

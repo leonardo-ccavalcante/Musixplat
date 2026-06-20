@@ -6,7 +6,11 @@
 //     testable E2E. The CI gate injects this so it never needs a network/key.
 //   - llmReasoning(client): real OpenAI (AGENTE pieces US-B2.1.1/US-B2.2.1). Used by scripts/run-05b.
 //     TEXT only; on any API/parse error it THROWS so the caller fail-closes (BR-B3), never guesses.
-import { chatText, type ChatClient } from "../_core/llm.js";
+import { chatText, type ChatClient, type TokenUsage } from "../_core/llm.js";
+
+// Optional sink: the provider reports each call's token usage so the caller (which has tenant +
+// problem_id context) can log cost-per-process (P07). Off by default ⇒ no behaviour change for tests.
+export type UsageSink = (usage: TokenUsage, op: "classify" | "rank") => void;
 
 export interface ClassifyInput {
   text: string; // episode intent (reactive) or a proactive context line — treated as DATA (EC-B10)
@@ -70,14 +74,19 @@ const unfence = (s: string): string =>
 
 /** Real-OpenAI provider for the working prototype. TEXT only (§8). Parses strict JSON; anything
  *  malformed or off-list THROWS ⇒ the orchestrator degrades-to-human (BR-B3), never an optimistic guess. */
-export function llmReasoning(client: ChatClient): DiagnosisReasoning {
-  const ask = (system: string, user: string): Promise<string> => chatText(client, system, user, 256);
+export function llmReasoning(client: ChatClient, onUsage?: UsageSink): DiagnosisReasoning {
+  const ask = async (system: string, user: string, op: "classify" | "rank"): Promise<string> => {
+    const { text, usage } = await chatText(client, system, user, 256);
+    onUsage?.(usage, op);
+    return text;
+  };
   return {
     async classifyArea({ text, hint }) {
       const raw = await ask(
         "You classify a customer-support problem into exactly one area. Reply ONLY compact JSON " +
           '{"areaType": "finance|product|performance|unclassified", "confidence": 0..1}. No prose.',
         `problem text: ${JSON.stringify(text)}\ncriticality hint: ${hint ?? "none"}`,
+        "classify",
       );
       const out = JSON.parse(unfence(raw)) as AreaClassification;
       if (!ALLOWED_AREAS.has(out.areaType) || typeof out.confidence !== "number") {
@@ -90,6 +99,7 @@ export function llmReasoning(client: ChatClient): DiagnosisReasoning {
         "Rank the candidate hypotheses by likelihood for the given area. Reply ONLY a compact JSON " +
           'array of {"hypothesis": string, "probability": 0..1}, most-likely first, same hypotheses given.',
         `area: ${areaType}\nhypotheses: ${JSON.stringify(hypotheses)}`,
+        "rank",
       );
       const arr = JSON.parse(unfence(raw)) as { hypothesis: string; probability: number }[];
       if (!Array.isArray(arr) || arr.length === 0) throw new Error("llmReasoning.rankPaths: empty");

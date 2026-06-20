@@ -9,6 +9,7 @@ import {
   MAX_EMBED_BATCH,
   type Embedder,
 } from "./embedder.js";
+import type { TokenUsage } from "../_core/llm.js";
 
 // Records each request's input size; echoes one 1-D vector per input ([index]) so order is checkable.
 function recordingClient(): {
@@ -101,6 +102,21 @@ describe("openaiEmbedder batching (large docs must not exceed OpenAI's per-reque
     const { client, calls } = recordingClient();
     await openaiEmbedder(client as never).embed(["a", "b", "c"]);
     expect(calls()).toEqual([3]);
+  });
+
+  it("reports summed input-token usage to onUsage across batches (embeddings have no output tokens)", async () => {
+    // client bills 1 prompt token per input; across 2 batches the sink must see the TOTAL.
+    const client = {
+      embeddings: {
+        async create({ input }: { input: string[] }) {
+          return { data: input.map((t) => ({ embedding: [Number(t)] })), usage: { prompt_tokens: input.length } };
+        },
+      },
+    };
+    let seen: TokenUsage | null = null;
+    const texts = Array.from({ length: MAX_EMBED_BATCH + 5 }, (_, i) => String(i)); // forces 2 batches
+    await openaiEmbedder(client as never, undefined, (u) => (seen = u)).embed(texts);
+    expect(seen).toEqual({ inputTokens: MAX_EMBED_BATCH + 5, outputTokens: 0 });
   });
 });
 

@@ -78,7 +78,9 @@ export const knowledgeRouter = router({
 
   // Search: semantic retrieval over the tenant's chunks (tenant scoped inside searchKnowledge).
   search: tenantProcedure.input(searchInput).query(async ({ ctx, input }) => ({
-    hits: await searchKnowledge(ctx.tenantId, input.query, input.topK),
+    hits: await searchKnowledge(ctx.tenantId, input.query, input.topK, undefined, {
+      processType: "kb_search",
+    }),
   })),
 
   // Ask: the Q&A chatbot — retrieval grounds a synthesized, source-cited answer (the "G" of RAG).
@@ -108,7 +110,10 @@ export const knowledgeRouter = router({
     if (!p[0]) return { shouldReview: false, evidence: [], note: null };
     const probe = [p[0].action_type, p[0].root_cause].filter(Boolean).join(" ");
     if (!probe) return { shouldReview: false, evidence: [], note: null }; // no text to retrieve on
-    const hits = await searchKnowledge(ctx.tenantId, probe, 3);
+    const hits = await searchKnowledge(ctx.tenantId, probe, 3, undefined, {
+      processType: "nba_kb_check",
+      refId: input.nbaId,
+    });
     const policyHits = hits.filter((h) => h.docType === "Policy" || h.docType === "Terms");
     return {
       shouldReview: policyHits.length > 0, // text signal only — human decides (§3.3); no number moved
