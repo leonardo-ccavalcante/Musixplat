@@ -3,6 +3,7 @@ import { Link, Route, Switch, useLocation } from "wouter";
 import { CohortsExplorerPage } from "./pages/CohortsExplorerPage";
 import { CockpitPage } from "./pages/CockpitPage";
 import { ActionDetailPage } from "@/pages/ActionDetailPage";
+import { DispatchPage } from "@/pages/DispatchPage";
 import { DiagnosisPage } from "./pages/DiagnosisPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { HealthPage } from "./pages/HealthPage";
@@ -53,6 +54,7 @@ export function App() {
         <Route path="/" component={CohortsExplorerPage} />
         <Route path="/cohorts" component={CohortsExplorerPage} />
         <Route path="/cockpit/action/:code" component={ActionDetailPage} />
+        <Route path="/cockpit/dispatch/:nbaId" component={DispatchPage} />
         <Route path="/cockpit" component={CockpitPage} />
         <Route path="/diagnosis" component={DiagnosisPage} />
         <Route path="/knowledge" component={KnowledgePage} />

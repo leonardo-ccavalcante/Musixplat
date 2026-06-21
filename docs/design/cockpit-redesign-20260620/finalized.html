@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Autonomy Cockpit — redesign mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ── real --mxm-* tokens (client/src/index.css). Gordita unavailable as woff2 (playbook) → Inter stand-in. ── */
+  :root{
+    --mxm-bg:#131313; --mxm-bg-elevated:#1f1f1f; --mxm-bg-secondary:#343434; --mxm-bg-tertiary:#757575;
+    --mxm-hover:rgba(255,255,255,.05);
+    --mxm-content:#ffffff; --mxm-content-secondary:#bdbdbd; --mxm-content-tertiary:#9e9e9e;
+    --mxm-brand:#fc532e; --mxm-purple:#9013fe; --mxm-green:#00cc99;
+    --mxm-red:#f54b40; --mxm-amber:#f0a83b; --mxm-blue:#2979ff;
+    --mxm-border:#343434; --mxm-radius:12px;
+    --dur-micro:80ms; --dur-short:160ms; --dur-base:240ms; --ease-out:cubic-bezier(.2,.7,.3,1);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--mxm-bg); color:var(--mxm-content);
+    font-family:Inter,system-ui,-apple-system,sans-serif; font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin-inline:auto; padding:clamp(1rem,2.5vw,2.25rem)}
+  .tabnum{font-variant-numeric:tabular-nums}
+  h1{font-size:1.5rem; font-weight:600; margin:0}
+  .sub{color:var(--mxm-content-secondary); max-width:64ch; margin:.35rem 0 0; font-size:.875rem}
+
+  /* ── HERO: fleet autonomy posture (the signal IS the hero; awareness screen, zero coral fill at rest) ── */
+  .hero{margin-top:clamp(1.25rem,3vw,2rem)}
+  .hero-grid{display:grid; gap:clamp(1rem,2vw,1.5rem); grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)}
+  @media(max-width:840px){.hero-grid{grid-template-columns:1fr}}
+  .card{background:var(--mxm-bg-elevated); border:1px solid var(--mxm-border); border-radius:var(--mxm-radius)}
+  .hero-main{padding:clamp(1.1rem,2.2vw,1.6rem)}
+  .digest{font-size:1.05rem; line-height:1.55; color:var(--mxm-content-secondary); max-width:48ch}
+  .digest b{color:var(--mxm-content); font-weight:600}
+  .digest .mk-auto{color:var(--mxm-green); font-weight:600}
+  .digest .mk-you{color:var(--mxm-brand); font-weight:600}
+
+  /* the autonomy bar — proportional segments, color+label+count (never color-only) */
+  .bar{display:flex; height:14px; border-radius:999px; overflow:hidden; margin:1.25rem 0 .9rem; background:var(--mxm-bg-secondary)}
+  .bar span{display:block; height:100%}
+  .seg-auto{background:var(--mxm-green)}
+  .seg-money{background:var(--mxm-red)}
+  .seg-level{background:var(--mxm-amber)}
+  .seg-gate{background:var(--mxm-bg-tertiary)}
+  .legend{display:flex; flex-wrap:wrap; gap:.4rem 1.25rem}
+  .legend div{display:flex; align-items:center; gap:.45rem; font-size:.8rem; color:var(--mxm-content-secondary)}
+  .legend .dot{width:9px; height:9px; border-radius:2px; flex:none}
+  .legend .n{color:var(--mxm-content); font-weight:600}
+
+  /* the "depois" — fleet proof strip (counts ARE produced: Decision_Trace) */
+  .hero-side{padding:clamp(1.1rem,2.2vw,1.4rem); display:flex; flex-direction:column; gap:1rem}
+  .kicker{font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--mxm-content-tertiary); margin:0}
+  .proof{display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem}
+  .proof .stat{font-size:1.7rem; font-weight:600; line-height:1}
+  .proof .lab{font-size:.72rem; color:var(--mxm-content-secondary); margin-top:.3rem}
+  .proof .g{color:var(--mxm-green)} .proof .w{color:var(--mxm-content)}
+  .spark{display:flex; align-items:flex-end; gap:3px; height:34px}
+  .spark i{flex:1; background:var(--mxm-bg-secondary); border-radius:2px}
+  .spark i.on{background:var(--mxm-green)}
+  .side-link{font-size:.78rem; color:var(--mxm-brand); text-decoration:none}
+  .side-link:hover{text-decoration:underline}
+
+  /* ── group-by control ── */
+  .toolbar{display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:clamp(1.5rem,3vw,2.25rem) 0 1rem; flex-wrap:wrap}
+  .toolbar h2{font-size:1.05rem; font-weight:600; margin:0}
+  .segmented{display:inline-flex; background:var(--mxm-bg-elevated); border:1px solid var(--mxm-border); border-radius:999px; padding:3px}
+  .segmented button{appearance:none; border:0; background:transparent; color:var(--mxm-content-secondary);
+    font:inherit; font-size:.8rem; padding:.35rem .85rem; border-radius:999px; cursor:pointer; transition:color var(--dur-short)}
+  .segmented button[aria-pressed=true]{background:var(--mxm-bg-secondary); color:var(--mxm-content)}
+  .segmented button:focus-visible{outline:2px solid var(--mxm-brand); outline-offset:2px}
+
+  /* ── groups + rows ── */
+  .groups{display:grid; gap:1rem}
+  .group{background:var(--mxm-bg-elevated); border:1px solid var(--mxm-border); border-radius:var(--mxm-radius); overflow:hidden}
+  .group-head{display:flex; align-items:center; gap:.6rem; width:100%; text-align:left; appearance:none; border:0;
+    background:transparent; color:inherit; font:inherit; cursor:pointer; padding:.85rem clamp(.85rem,1.6vw,1.25rem); border-bottom:1px solid var(--mxm-border)}
+  .group-head:focus-visible{outline:2px solid var(--mxm-brand); outline-offset:-2px}
+  .group.collapsed .group-head{border-bottom-color:transparent}
+  .group-accent{width:3px; align-self:stretch; border-radius:999px; flex:none}
+  .a-money{background:var(--mxm-red)} .a-level{background:var(--mxm-amber)} .a-gate{background:var(--mxm-bg-tertiary)} .a-auto{background:var(--mxm-green)}
+  .group-title{font-weight:600; font-size:.95rem}
+  .group-why{font-size:.78rem; color:var(--mxm-content-secondary)}
+  .count{margin-left:auto; display:inline-flex; align-items:center; gap:.5rem}
+  .pill{border:1px solid var(--mxm-border); border-radius:999px; padding:.1rem .55rem; font-size:.72rem; font-weight:600; color:var(--mxm-content-secondary)}
+  .pill.you{border-color:var(--mxm-brand); color:var(--mxm-brand)}
+  .chev{color:var(--mxm-content-tertiary); transition:transform var(--dur-short)}
+  .group.collapsed .chev{transform:rotate(-90deg)}
+  .rows{display:block}
+  .group.collapsed .rows{display:none}
+
+  .row{display:flex; align-items:center; gap:clamp(.6rem,1.4vw,1.1rem); padding:.75rem clamp(.85rem,1.6vw,1.25rem);
+    border-bottom:1px solid var(--mxm-border); font-size:.85rem}
+  .row:last-child{border-bottom:0}
+  .row:hover{background:var(--mxm-hover)}
+  .row.muted .action{color:var(--mxm-content-secondary)}
+  .action{min-width:13.5rem; display:flex; align-items:baseline; gap:.5rem}
+  .action .name{font-weight:500}
+  .action .code{font-size:.72rem; color:var(--mxm-content-tertiary); font-variant-numeric:tabular-nums}
+  .cohort{font-size:.75rem; color:var(--mxm-content-secondary); min-width:11rem}
+  .path{flex:1; min-width:0; font-size:.78rem; color:var(--mxm-content-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .path b{color:var(--mxm-content); font-weight:500}
+  .lvl{font-size:.72rem; color:var(--mxm-content-secondary); min-width:5.5rem}
+  .lvl b{color:var(--mxm-content)}
+  .badge{display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--mxm-border); border-radius:999px;
+    padding:.12rem .5rem; font-size:.72rem; font-weight:500; white-space:nowrap}
+  .badge.auto{color:var(--mxm-green)} .badge.money{color:var(--mxm-red)} .badge.amber{color:var(--mxm-amber)}
+  .badge .ic{font-size:.7rem}
+  .actions{margin-left:auto; display:flex; align-items:center; gap:.4rem}
+  .btn{appearance:none; border:1px solid transparent; background:transparent; color:var(--mxm-content-secondary);
+    font:inherit; font-size:.78rem; padding:.32rem .7rem; border-radius:8px; cursor:pointer; transition:background var(--dur-short),color var(--dur-short)}
+  .btn:hover{background:var(--mxm-bg-secondary); color:var(--mxm-content)}
+  .btn:focus-visible{outline:2px solid var(--mxm-brand); outline-offset:2px}
+  /* release = brand OUTLINE/text (not filled coral) — awareness screen, AA: brand text on dark 5.2:1 */
+  .btn.release{border-color:var(--mxm-brand); color:var(--mxm-brand); font-weight:600}
+  .btn.release:hover{background:rgba(252,83,46,.10); color:var(--mxm-brand)}
+
+  .auto-foot{padding:.7rem clamp(.85rem,1.6vw,1.25rem); font-size:.78rem; color:var(--mxm-content-tertiary); display:flex; gap:.5rem; align-items:center}
+
+  .note{margin-top:2rem; padding:1rem 1.1rem; border:1px dashed var(--mxm-border); border-radius:var(--mxm-radius);
+    color:var(--mxm-content-tertiary); font-size:.78rem; line-height:1.6}
+  .note b{color:var(--mxm-content-secondary)}
+
+  /* expand/collapse-all + catalog link */
+  .toolbar-left{display:flex; align-items:center; gap:1rem; flex-wrap:wrap}
+  .linkbtn{appearance:none; border:0; background:transparent; color:var(--mxm-content-secondary); font:inherit;
+    font-size:.78rem; cursor:pointer; padding:.25rem 0; display:inline-flex; align-items:center; gap:.35rem}
+  .linkbtn:hover{color:var(--mxm-content)}
+  .linkbtn:focus-visible{outline:2px solid var(--mxm-brand); outline-offset:2px; border-radius:4px}
+  .linkbtn.cat{color:var(--mxm-brand)}
+  .linkbtn .sep{color:var(--mxm-border)}
+  .fold{display:inline-flex; gap:.65rem; align-items:center}
+
+  /* catalog drawer — "what are these actions?" (read & understand the NBAs) */
+  .scrim{position:fixed; inset:0; background:rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity var(--dur-base)}
+  .scrim.open{opacity:1; pointer-events:auto}
+  .drawer{position:fixed; top:0; right:0; height:100dvh; width:min(440px,92vw); background:var(--mxm-bg-elevated);
+    border-left:1px solid var(--mxm-border); transform:translateX(100%); transition:transform var(--dur-base) var(--ease-out);
+    display:flex; flex-direction:column; z-index:10}
+  .drawer.open{transform:translateX(0)}
+  .drawer-head{display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.1rem 1.25rem; border-bottom:1px solid var(--mxm-border)}
+  .drawer-head h3{margin:0; font-size:1.05rem; font-weight:600}
+  .drawer-head p{margin:.25rem 0 0; font-size:.78rem; color:var(--mxm-content-secondary); max-width:34ch}
+  .x{appearance:none; border:0; background:transparent; color:var(--mxm-content-secondary); cursor:pointer;
+    font-size:1.1rem; line-height:1; min-width:32px; min-height:32px; border-radius:8px}
+  .x:hover{background:var(--mxm-bg-secondary); color:var(--mxm-content)}
+  .x:focus-visible{outline:2px solid var(--mxm-brand); outline-offset:2px}
+  .cat-list{overflow-y:auto; padding:.5rem .75rem 1.25rem}
+  .cat-item{padding:.85rem .75rem; border-bottom:1px solid var(--mxm-border)}
+  .cat-item:last-child{border-bottom:0}
+  .cat-top{display:flex; align-items:baseline; gap:.55rem}
+  .cat-top .code{font-size:.72rem; color:var(--mxm-content-tertiary); font-variant-numeric:tabular-nums}
+  .cat-top .name{font-weight:600; font-size:.9rem}
+  .cat-top .money{margin-left:auto; font-size:.68rem; color:var(--mxm-red); border:1px solid var(--mxm-border); border-radius:999px; padding:.05rem .45rem}
+  .cat-desc{margin:.3rem 0 0; font-size:.8rem; color:var(--mxm-content-secondary); line-height:1.5}
+  .cat-meta{margin-top:.4rem; font-size:.72rem; color:var(--mxm-content-tertiary)}
+  .cat-link{display:inline-block; margin-top:.45rem; font-size:.75rem; color:var(--mxm-brand); text-decoration:none}
+  .cat-link:hover{text-decoration:underline}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media(max-width:560px){
+    .action{min-width:0; width:100%} .cohort{min-width:0}
+    .path{flex-basis:100%; white-space:normal} .actions{margin-left:0; width:100%; justify-content:flex-end}
+    .proof{grid-template-columns:repeat(3,1fr)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Autonomy Cockpit</h1>
+    <p class="sub">Where is my AI fleet acting on its own — and exactly where do I need to step in?</p>
+  </header>
+
+  <!-- ───────── HERO: fleet autonomy posture (the answer in one look) ───────── -->
+  <section class="hero" aria-label="Fleet autonomy posture">
+    <div class="hero-grid">
+      <div class="card hero-main">
+        <p class="kicker">Today’s proposals</p>
+        <p class="digest">
+          The AI proposed <b>24</b> best-actions across <b>9 cohorts</b>.
+          It’s clear to act <span class="mk-auto">alone on 17</span>.
+          <span class="mk-you">7 need your call</span> — 2 touch money, 3 are escalated beyond low autonomy, 2 are held by a gate.
+        </p>
+
+        <div class="bar" role="img" aria-label="17 auto-handled, 2 money, 3 escalated, 2 gated">
+          <span class="seg-auto" style="width:71%"></span>
+          <span class="seg-money" style="width:8%"></span>
+          <span class="seg-level" style="width:13%"></span>
+          <span class="seg-gate" style="width:8%"></span>
+        </div>
+        <div class="legend">
+          <div><span class="dot" style="background:var(--mxm-green)"></span> ● AUTO — AI acts alone <span class="n">17</span></div>
+          <div><span class="dot" style="background:var(--mxm-red)"></span> ▲ Money — only proposes <span class="n">2</span></div>
+          <div><span class="dot" style="background:var(--mxm-amber)"></span> ▲ Escalated level <span class="n">3</span></div>
+          <div><span class="dot" style="background:var(--mxm-bg-tertiary)"></span> ◼ Gate held <span class="n">2</span></div>
+        </div>
+      </div>
+
+      <div class="card hero-side">
+        <div>
+          <p class="kicker">Your week so far <span style="text-transform:none;letter-spacing:0;color:var(--mxm-content-tertiary)">· from the trace log</span></p>
+          <div class="proof">
+            <div><div class="stat g tabnum">140</div><div class="lab">auto-handled by AI</div></div>
+            <div><div class="stat w tabnum">12</div><div class="lab">you released</div></div>
+            <div><div class="stat w tabnum">3</div><div class="lab">you paused</div></div>
+          </div>
+        </div>
+        <div>
+          <p class="kicker">Auto-handled, last 7 days</p>
+          <div class="spark" aria-hidden="true">
+            <i class="on" style="height:40%"></i><i class="on" style="height:55%"></i><i class="on" style="height:48%"></i>
+            <i class="on" style="height:70%"></i><i class="on" style="height:62%"></i><i class="on" style="height:85%"></i><i class="on" style="height:78%"></i>
+          </div>
+        </div>
+        <a class="side-link" href="#">See the AI’s track record by action →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── group-by control + queue ───────── -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <h2 id="queue-h">The queue</h2>
+      <span class="fold">
+        <button class="linkbtn" id="expandAll">Expand all</button>
+        <span class="sep">·</span>
+        <button class="linkbtn" id="collapseAll">Collapse all</button>
+      </span>
+      <button class="linkbtn cat" id="openCat" aria-haspopup="dialog">What are these actions?</button>
+    </div>
+    <div class="segmented" role="group" aria-labelledby="queue-h" aria-label="Group the queue by">
+      <span style="font-size:.72rem;color:var(--mxm-content-tertiary);padding:.35rem .5rem">Group by</span>
+      <button data-group="why" aria-pressed="true">Why I’m needed</button>
+      <button data-group="level" aria-pressed="false">Autonomy level</button>
+      <button data-group="action" aria-pressed="false">Action type</button>
+    </div>
+  </div>
+
+  <div class="groups" id="groups"></div>
+
+  <div class="note">
+    <b>Mockup notes (honest §14):</b> every number/path shown is a field a producer computes
+    (<code>min_calculation</code>, the NBA proposal’s <code>before_after_expected</code> [C] projection, Decision_Trace counts) —
+    nothing seeded, no invented ROI/%. The “Release” control is a <b>brand outline</b>, not a filled-coral button:
+    this is an <b>awareness screen</b> (the autonomy signal is the hero), so coral marks the opportunity, it doesn’t shout an action.
+    CSV upload intentionally out of scope this round. Toggle <b>Group by</b> to compare the three axes.
+  </div>
+</div>
+
+<!-- ───────── catalog drawer: read & understand the NBAs (NBA_Catalogo A1–A8 reference) ───────── -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="cat-title" aria-hidden="true">
+  <div class="drawer-head">
+    <div>
+      <h3 id="cat-title">What are these actions?</h3>
+      <p>The closed set of best-actions the AI can propose (A1–A8). Reference, not a result.</p>
+    </div>
+    <button class="x" id="closeCat" aria-label="Close">✕</button>
+  </div>
+  <div class="cat-list" id="catList"></div>
+</aside>
+
+<script>
+/* honest sample rows — codes/labels from catalog.NBA_Catalogo (A1–A8); cohorts = tenure×tier; paths = [C] projection */
+const ROWS = [
+  {code:'A3', name:'Propose promo/bonus',     cohort:'long_tail · 0–3m',        path:'price percentile <b>82</b> → <b>60</b>',     lvl:'MEDIUM', why:'money', badge:['money','▲','Money — only proposes']},
+  {code:'A7', name:'Investigate fraud/risk',  cohort:'managed_midmarket · 3–6m', path:'customer-cancel rate <b>14%</b> → <b>5%</b>', lvl:'HIGH',   why:'money', badge:['money','▲','Money — only proposes']},
+  {code:'A2', name:'Review price vs peers',   cohort:'managed_brand · 6–12m',    path:'price percentile <b>71</b> → <b>55</b>',     lvl:'MEDIUM', why:'level', badge:['amber','▲','Escalated level']},
+  {code:'A2', name:'Review price vs peers',   cohort:'long_tail · 12m+',         path:'price percentile <b>78</b> → <b>55</b>',     lvl:'MEDIUM', why:'level', badge:['amber','▲','Escalated level']},
+  {code:'A6', name:'Resolve cancellation ops',cohort:'managed_midmarket · 6–12m',path:'cancel-by-restaurant <b>11%</b> → <b>4%</b>',lvl:'MEDIUM', why:'level', badge:['amber','▲','Escalated level']},
+  {code:'A1', name:'Increase connection',     cohort:'long_tail · 6–12m',        path:'held — sample below n_min',                  lvl:'—',      why:'gate',  badge:['amber','◼','Gate — sample / policy']},
+  {code:'A4', name:'Improve menu',            cohort:'long_tail · 0–3m',         path:'held — k-anon on cohort cell',              lvl:'—',      why:'gate',  badge:['amber','◼','Gate — sample / policy']},
+  {code:'A4', name:'Improve menu',            cohort:'managed_midmarket · 12m+', path:'menu quality <b>3.1</b> → <b>4.0</b>',       lvl:'LOW',    why:'auto',  badge:['auto','●','AUTO — AI acts alone']},
+  {code:'A6', name:'Resolve cancellation ops',cohort:'managed_brand · 12m+',     path:'cancel-by-restaurant <b>9%</b> → <b>4%</b>', lvl:'LOW',    why:'auto',  badge:['auto','●','AUTO — AI acts alone']},
+  {code:'A5', name:'Stimulate local demand',  cohort:'long_tail · 0–3m',         path:'zone demand trend <b>−12%</b> → <b>0</b>',   lvl:'LOW',    why:'auto',  badge:['auto','●','AUTO — AI acts alone']},
+  {code:'A1', name:'Increase connection',     cohort:'managed_brand · 6–12m',    path:'connection ratio <b>0.62</b> → <b>0.80</b>', lvl:'LOW',    why:'auto',  badge:['auto','●','AUTO — AI acts alone']},
+  {code:'A8', name:'Observation (no action)', cohort:'managed_brand · 6–12m',    path:'no attributable cause — held conservatively',lvl:'LOW',   why:'auto',  badge:['auto','●','AUTO — AI acts alone']},
+];
+
+const WHY_GROUPS = {
+  money:{title:'Touches money — you decide',     why:'Financial hard-no: the AI may only propose; you release the money.', accent:'a-money', you:true},
+  level:{title:'Escalated above low autonomy',   why:'Autonomy is above LOW — release at the granted level or clamp it down.', accent:'a-level', you:true},
+  gate: {title:'Held by a gate',                 why:'A sample-size / policy / k-anon gate isn’t satisfied — held, fail-closed.', accent:'a-gate', you:true},
+  auto: {title:'Auto-handled by the AI',         why:'Cleared for autonomy — the AI is acting on these. You can still pause any.', accent:'a-auto', you:false},
+};
+const LEVEL_GROUPS = {
+  HIGH:  {title:'HIGH autonomy',   why:'The AI would act most independently here.', accent:'a-level', you:true},
+  MEDIUM:{title:'MEDIUM autonomy', why:'Partial autonomy — escalated for your call.', accent:'a-level', you:true},
+  LOW:   {title:'LOW autonomy',    why:'Lowest-stakes — mostly auto-cleared.', accent:'a-auto', you:false},
+  '—':   {title:'Not computed',    why:'Held by a gate before autonomy resolved.', accent:'a-gate', you:true},
+};
+
+function rowHTML(r){
+  const muted = r.why==='auto' ? ' muted':'';
+  const release = r.why!=='auto'
+    ? `<button class="btn release">Release</button><button class="btn">Pause</button>`
+    : `<button class="btn">Pause</button>`;
+  return `<div class="row${muted}">
+    <div class="action"><span class="name">${r.name}</span><span class="code">${r.code}</span></div>
+    <div class="cohort">${r.cohort}</div>
+    <div class="path">${r.path}</div>
+    <div class="lvl">level <b>${r.lvl}</b></div>
+    <span class="badge ${r.badge[0]}"><span class="ic" aria-hidden="true">${r.badge[1]}</span>${r.badge[2]}</span>
+    <div class="actions"><button class="btn">Details</button>${release}</div>
+  </div>`;
+}
+
+function groupHTML(key, meta, rows, collapsed){
+  return `<section class="group${collapsed?' collapsed':''}" aria-label="${meta.title}">
+    <button class="group-head" aria-expanded="${!collapsed}">
+      <span class="group-accent ${meta.accent}"></span>
+      <span>
+        <span class="group-title">${meta.title}</span><br>
+        <span class="group-why">${meta.why}</span>
+      </span>
+      <span class="count">
+        <span class="pill${meta.you?' you':''}">${rows.length}</span>
+        <span class="chev" aria-hidden="true">▾</span>
+      </span>
+    </button>
+    <div class="rows">
+      ${rows.map(rowHTML).join('')}
+      ${key==='auto' ? `<div class="auto-foot">✓ The loop closed: these were cleared and acted on automatically.</div>`:''}
+    </div>
+  </section>`;
+}
+
+function render(mode){
+  const host = document.getElementById('groups');
+  let html = '';
+  if(mode==='why'){
+    for(const k of ['money','level','gate','auto']){
+      const rows = ROWS.filter(r=>r.why===k);
+      if(rows.length) html += groupHTML(k, WHY_GROUPS[k], rows, k==='auto');
+    }
+  } else if(mode==='level'){
+    for(const k of ['HIGH','MEDIUM','LOW','—']){
+      const rows = ROWS.filter(r=>r.lvl===k);
+      if(rows.length) html += groupHTML(k==='LOW'?'auto':k, LEVEL_GROUPS[k], rows, k==='LOW');
+    }
+  } else { /* action */
+    const codes = [...new Set(ROWS.map(r=>r.code))].sort();
+    for(const c of codes){
+      const rows = ROWS.filter(r=>r.code===c);
+      const sample = rows[0];
+      html += groupHTML(c, {title:`${sample.name}`, why:`${c} · ${rows.length} cohort${rows.length>1?'s':''} with this action`, accent:'a-auto', you:false}, rows, false);
+    }
+  }
+  host.innerHTML = html;
+  wireGroups();
+}
+
+function wireGroups(){
+  document.querySelectorAll('.group-head').forEach(h=>{
+    h.addEventListener('click', ()=>{
+      const g = h.closest('.group');
+      const open = g.classList.toggle('collapsed');
+      h.setAttribute('aria-expanded', String(!open));
+    });
+  });
+}
+
+document.querySelectorAll('.segmented button[data-group]').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('.segmented button[data-group]').forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true');
+    render(b.dataset.group);
+  });
+});
+
+render('why');
+
+/* ── expand / collapse all ── */
+function setAll(collapsed){
+  document.querySelectorAll('.group').forEach(g=>{
+    g.classList.toggle('collapsed', collapsed);
+    const h = g.querySelector('.group-head'); if(h) h.setAttribute('aria-expanded', String(!collapsed));
+  });
+}
+document.getElementById('expandAll').addEventListener('click', ()=>setAll(false));
+document.getElementById('collapseAll').addEventListener('click', ()=>setAll(true));
+
+/* ── catalog drawer: NBA_Catalogo A1–A8 (label + action_hint + funnel_stage + financial_class) ── */
+const CATALOG = [
+  {code:'A1', name:'Increase connection',      stage:'availability',  money:false, desc:'Nudge the restaurant to connect its committed hours — be online when it said it would be.'},
+  {code:'A2', name:'Review price vs peers',    stage:'attractiveness',money:false, desc:'Surface a price recommendation vs cohort peers. Proposal only — never changes price automatically.'},
+  {code:'A3', name:'Propose promo/bonus',      stage:'attractiveness',money:true,  desc:'Propose a promo or bonus to lift attractiveness. The AI proposes; a human releases the money.'},
+  {code:'A4', name:'Improve menu',             stage:'attractiveness',money:false, desc:'A menu-quality checklist (photos + descriptions) when quality is the gap.'},
+  {code:'A5', name:'Stimulate local demand',  stage:'demand',        money:false, desc:'Signal local growth/marketing when demand dropped in the zone — not the restaurant’s fault.'},
+  {code:'A6', name:'Resolve cancellation ops', stage:'fulfillment',   money:false, desc:'Open an operations ticket for the cause behind restaurant-side cancellations.'},
+  {code:'A7', name:'Investigate fraud/risk',  stage:'integrity',     money:true,  desc:'Escalate to a human risk/fraud review when a customer-cancel pattern looks like abuse. Money at stake.'},
+  {code:'A8', name:'Observation (no action)',  stage:'fallback',      money:false, desc:'Fail-closed: no attributable cause found — the AI does not invent one. It watches instead.'},
+];
+document.getElementById('catList').innerHTML = CATALOG.map(c=>`
+  <div class="cat-item">
+    <div class="cat-top">
+      <span class="code">${c.code}</span><span class="name">${c.name}</span>
+      ${c.money?'<span class="money">touches money</span>':''}
+    </div>
+    <p class="cat-desc">${c.desc}</p>
+    <div class="cat-meta">funnel stage · ${c.stage}</div>
+    <a class="cat-link" href="#">See ${c.code}’s track record →</a>
+  </div>`).join('');
+
+const scrim = document.getElementById('scrim'), drawer = document.getElementById('drawer');
+let lastFocus = null;
+function openCat(){
+  lastFocus = document.activeElement;
+  scrim.classList.add('open'); drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false');
+  document.getElementById('closeCat').focus();
+}
+function closeCat(){
+  scrim.classList.remove('open'); drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true');
+  if(lastFocus) lastFocus.focus();
+}
+document.getElementById('openCat').addEventListener('click', openCat);
+document.getElementById('closeCat').addEventListener('click', closeCat);
+scrim.addEventListener('click', closeCat);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && drawer.classList.contains('open')) closeCat(); });
+</script>
+</body>
+</html>

@@ -206,6 +206,49 @@ export const cockpitReleaseInput = z.object({
 });
 export type CockpitReleaseInput = z.infer<typeof cockpitReleaseInput>;
 
+// 02:F-1.2 — the cockpit's "your week" proof strip: how many proposals the operator released vs paused in
+// the last 7 days. Counted from gov."Release_Batch" (the trace of every human decision) — a READ, never a
+// fabricated number (§14). Pool-scoped server-side. No "auto-handled" count: the AI acting alone leaves no
+// trace in this prototype, so it is not shown rather than invented.
+export const cockpitWeekSummary = z.object({ released: z.number(), paused: z.number() });
+export type CockpitWeekSummary = z.infer<typeof cockpitWeekSummary>;
+
+// 02:DETAIL — per-action usage for the "What are these actions?" catalog drawer: how many proposals each
+// A-code has and its on-target rate. Company-wide aggregate of fn_nba_action_history (a READ, §14:
+// acerto_rate is NULL when there's no breach-class proposal, never a 0-fake). Lets the drawer show real
+// usage inline and avoid a dead-end link for actions not yet proposed.
+export const nbaCatalogUsage = z.object({
+  code: z.string(),
+  run_count: z.number(),
+  acerto_rate: z.number().nullable(),
+});
+export type NbaCatalogUsage = z.infer<typeof nbaCatalogUsage>;
+
+// 02:1a — the dispatch screen payload: the released NBA, who it reaches, and the rendered artifact.
+// content is a deterministic render of PRODUCED proposal fields (§14), never seeded.
+export const cockpitDispatchDetail = z.object({
+  nba_id: z.string(),
+  action_type: z.string().nullable(),
+  action_label: z.string().nullable(),
+  cohort_id: z.string(),
+  effective_level: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+  reach_count: z.number(),
+  reach_preview: z.array(z.object({ restaurant_id: z.string(), tier_base: z.string() })),
+  artifact_kind: z.string(),
+  // title = heading; evidence = the measured "why" ([V], read-only); body = the editable message.
+  content: z.object({ title: z.string(), evidence: z.string(), body: z.string() }),
+});
+export type CockpitDispatchDetail = z.infer<typeof cockpitDispatchDetail>;
+
+// 02:1a — Send: writes Release_Batch + Decision_Trace + Action_Dispatch atomically. body = the
+// operator-reviewed (possibly edited) message; the measured evidence stays server-rendered ([V]).
+export const cockpitSendDispatchInput = z.object({
+  nba_id: z.string().min(1),
+  resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  body: z.string().min(1).max(5000),
+});
+export type CockpitSendDispatchInput = z.infer<typeof cockpitSendDispatchInput>;
+
 // 01 operability — cohorts.run summary. Counts are PRODUCED by the P01 batch (read back after it runs),
 // never seeded as results (§14). weeks = the demo windows computed (the second enables the delta diff).
 export interface CohortsRunResult {

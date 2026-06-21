@@ -1,6 +1,7 @@
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CockpitBoard } from "./CockpitBoard";
+import { CockpitBoard, groupRows } from "./CockpitBoard";
+import type { RowState } from "./CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
 const row = (over: Partial<NbaCockpitRow>): NbaCockpitRow => ({
@@ -18,58 +19,80 @@ const row = (over: Partial<NbaCockpitRow>): NbaCockpitRow => ({
   ...over,
 });
 
-describe("02:F-1.1 CockpitBoard", () => {
+// render the board with every group expanded so rows are assertable
+function renderBoard(rows: NbaCockpitRow[], opts: { onAction?: () => void; actionState?: Record<string, RowState | undefined> } = {}) {
+  const groups = groupRows(rows, "why");
+  const openGroups = Object.fromEntries(groups.map((g) => [g.key, true]));
+  return render(
+    <CockpitBoard groups={groups} openGroups={openGroups} onToggle={() => {}} onAction={opts.onAction ?? (() => {})} actionState={opts.actionState ?? {}} />,
+  );
+}
+
+describe("02:F-1.1 groupRows — group the queue by the chosen axis (pure, §14: reads, never recomputes)", () => {
+  const rows = [
+    row({ nba_id: "m", status: "needs_human", reason: "money", financial_class: "direct", auto_releasable: false, effective_level: "MEDIUM", action_type: "A3" }),
+    row({ nba_id: "l", status: "needs_human", reason: "level", auto_releasable: false, effective_level: "MEDIUM", action_type: "A2" }),
+    row({ nba_id: "g", status: "needs_human", reason: "gates", auto_releasable: false, effective_level: null, action_type: "A1" }),
+    row({ nba_id: "a", status: "auto", action_type: "A4", effective_level: "LOW" }),
+  ];
+
+  it("by 'why' ⇒ money/level/gates queue groups first, auto last", () => {
+    const g = groupRows(rows, "why");
+    expect(g.map((x) => x.key)).toEqual(["money", "level", "gates", "auto"]);
+    expect(g.find((x) => x.key === "money")!.isQueue).toBe(true);
+    expect(g.find((x) => x.key === "auto")!.isQueue).toBe(false);
+    expect(g.find((x) => x.key === "auto")!.defaultOpen).toBe(false); // calm list folds by default
+  });
+
+  it("by 'level' ⇒ grouped by the produced effective_level, null ⇒ 'Not computed yet'", () => {
+    const g = groupRows(rows, "level");
+    expect(g.map((x) => x.key)).toEqual(["MEDIUM", "LOW", "uncomputed"]);
+    expect(g.find((x) => x.key === "uncomputed")!.rows[0]!.nba_id).toBe("g");
+  });
+
+  it("by 'action' ⇒ one band per catalog code with the human label", () => {
+    const g = groupRows(rows, "action");
+    expect(g.map((x) => x.key)).toEqual(["A1", "A2", "A3", "A4"]);
+    expect(g.find((x) => x.key === "A3")!.title).toMatch(/Propose promo/);
+  });
+
+  it("empty ⇒ no groups", () => {
+    expect(groupRows([], "why")).toEqual([]);
+  });
+});
+
+describe("02:F-1.1 CockpitBoard — grouped, foldable, honest", () => {
   it("empty ⇒ explicit empty state (never green-fake)", () => {
-    render(<CockpitBoard rows={[]} onAction={() => {}} actionState={{}} />);
+    renderBoard([]);
     expect(screen.getByText(/proposed no actions/i)).toBeInTheDocument();
   });
 
-  it("splits into a 'Needs your decision' queue and a calm 'Auto-handled' list", () => {
-    const rows = [
-      row({ nba_id: "a1", cohort_id: "co_alpha", status: "auto", auto_releasable: true }),
-      row({ nba_id: "h1", cohort_id: "co_beta", status: "needs_human", reason: "money", financial_class: "direct", auto_releasable: false }),
+  it("a money row lands in 'Touches money' with a Release; auto rows have no Release; every row can be paused", () => {
+    renderBoard([
+      row({ nba_id: "a1", cohort_id: "co_alpha", status: "auto" }),
+      row({ nba_id: "h1", cohort_id: "co_beta", status: "needs_human", reason: "money", financial_class: "direct", auto_releasable: false, effective_level: "MEDIUM" }),
       row({ nba_id: "a2", cohort_id: "co_gamma", status: "auto" }),
-    ];
-    render(<CockpitBoard rows={rows} onAction={() => {}} actionState={{}} />);
-    const needs = screen.getByRole("region", { name: "Needs your decision" });
-    const auto = screen.getByRole("region", { name: "Auto-handled by the AI" });
-
-    // the money row sits in the needs queue, with its cohort shown as context + a Release action
-    expect(within(needs).getByText("co_beta")).toBeInTheDocument();
-    expect(within(needs).getByRole("button", { name: "Release" })).toBeInTheDocument();
-    // auto rows live in the calm section — no Release
+    ]);
+    const money = screen.getByText("Touches money — you decide").closest("details")!;
+    const auto = screen.getByText("Auto-handled by the AI").closest("details")!;
+    expect(within(money).getByText("co_beta")).toBeInTheDocument();
+    expect(within(money).getByRole("button", { name: "Release" })).toBeInTheDocument();
     expect(within(auto).getByText("co_alpha")).toBeInTheDocument();
     expect(within(auto).queryByRole("button", { name: "Release" })).not.toBeInTheDocument();
-    // every row can be paused (human override down)
     expect(screen.getAllByRole("button", { name: "Pause" })).toHaveLength(3);
-  });
-
-  it("empty needs-queue ⇒ reassuring message, not a blank", () => {
-    render(<CockpitBoard rows={[row({ status: "auto" })]} onAction={() => {}} actionState={{}} />);
-    expect(screen.getByText(/Nothing needs you/i)).toBeInTheDocument();
   });
 
   it("Release fires onAction(row, RELEASE)", () => {
     const onAction = vi.fn();
-    render(
-      <CockpitBoard
-        rows={[row({ nba_id: "h1", status: "needs_human", reason: "gates", auto_releasable: false })]}
-        onAction={onAction}
-        actionState={{}}
-      />,
-    );
+    renderBoard([row({ nba_id: "h1", status: "needs_human", reason: "gates", auto_releasable: false, effective_level: "LOW" })], { onAction });
     fireEvent.click(screen.getByRole("button", { name: "Release" }));
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ nba_id: "h1" }), "RELEASE");
   });
 
   it("done state hides actions and shows the recorded trace", () => {
-    render(
-      <CockpitBoard
-        rows={[row({ nba_id: "h1", status: "needs_human", auto_releasable: false })]}
-        onAction={() => {}}
-        actionState={{ h1: { status: "done", msg: "Released ✓ trace abcd1234" } }}
-      />,
-    );
+    renderBoard([row({ nba_id: "h1", status: "needs_human", reason: "gates", auto_releasable: false, effective_level: "LOW" })], {
+      actionState: { h1: { status: "done", msg: "Released ✓ trace abcd1234" } },
+    });
     expect(screen.getByText(/Released ✓/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Release" })).not.toBeInTheDocument();
   });

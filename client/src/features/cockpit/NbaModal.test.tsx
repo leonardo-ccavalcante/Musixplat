@@ -35,11 +35,13 @@ describe("02 NbaModal — the NBA made legible + editable", () => {
     expect(screen.getByText(/payment gateway timeout concentrated in Centro/)).toBeInTheDocument();
   });
 
-  it("shows THE PATH it indicates (before → after projection), marked [C]", () => {
+  it("shows THE PATH it indicates (before → after projection) in the signal's unit, marked [C]", () => {
     render(<NbaModal row={nba()} onClose={() => {}} onAction={() => {}} />);
     expect(screen.getByText(/recovery_rate/)).toBeInTheDocument();
-    expect(screen.getByText(/0\.42/)).toBeInTheDocument();
-    expect(screen.getByText(/0\.78/)).toBeInTheDocument();
+    // a rate renders as a % with no raw float (§3.10): 0.42 → 42%, 0.78 → 78%
+    expect(screen.getByText(/42%/)).toBeInTheDocument();
+    expect(screen.getByText(/78%/)).toBeInTheDocument();
+    expect(screen.getByText(/42%/)).not.toHaveTextContent("0.42");
     expect(screen.getAllByText("[C]").length).toBeGreaterThan(0); // projection, never measured
   });
 
