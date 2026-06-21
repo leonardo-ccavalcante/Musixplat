@@ -29,7 +29,9 @@ afterAll(async () => {
 // Pick any real cohort + the pool it lives in + its tier (for the authorizing policy). The §7 logic here is
 // driven by CRAFTED verdicts (deterministic), not the data-dependent engine gate — the real engine→auto→
 // dispatch e2e is covered in the cockpit.propose integration test.
-async function pickPool(c: pg.PoolClient): Promise<{ cohortId: string; tenant: string; tierBase: string }> {
+async function pickPool(
+  c: pg.PoolClient,
+): Promise<{ cohortId: string; tenant: string; tierBase: string; operator: string; aiAgent: string }> {
   const r = (
     await c.query<{ cohort_id: string; tenant_id: string; tier_base: string }>(
       `select cms.cohort_id, rt.tenant_id, ct.tier_base::text as tier_base
@@ -40,16 +42,30 @@ async function pickPool(c: pg.PoolClient): Promise<{ cohortId: string; tenant: s
       [W1],
     )
   ).rows[0]!;
-  return { cohortId: r.cohort_id, tenant: r.tenant_id, tierBase: r.tier_base };
+  // Both governance actors MUST belong to the picked pool: the accountable human signer (autoDispatch
+  // enforces in-pool signer) and the AI proposer.
+  const op = (
+    await c.query<{ user_id: string }>(
+      `select user_id from gov."User" where tenant_id=$1 and role='agent_manager_senior' order by user_id limit 1`,
+      [r.tenant_id],
+    )
+  ).rows[0]!;
+  const ai = (
+    await c.query<{ user_id: string }>(
+      `select user_id from gov."User" where tenant_id=$1 and role='ai_agent' order by user_id limit 1`,
+      [r.tenant_id],
+    )
+  ).rows[0]!;
+  return { cohortId: r.cohort_id, tenant: r.tenant_id, tierBase: r.tier_base, operator: op.user_id, aiAgent: ai.user_id };
 }
 
-// A signed LOW policy for the tier (human_signature = the accountable authorizer the autonomous trace
-// records as operator). Sorts last by version so autoDispatch resolves THIS one.
-async function signPolicy(c: pg.PoolClient, tierBase: string): Promise<void> {
+// A signed LOW policy for the tier, signed by the IN-POOL operator (the accountable authorizer the
+// autonomous trace records). Sorts last by version so autoDispatch resolves THIS one.
+async function signPolicy(c: pg.PoolClient, tierBase: string, operator: string): Promise<void> {
   await c.query(
     `insert into gov."Policy_Tier"(policy_id, tier_id, policy_version, tier_cap, human_signature)
-     values ('pt-auto', $1, 'pv-zzz-auto', 'LOW', 'U-OP-001')`,
-    [tierBase],
+     values ('pt-auto', $1, 'pv-zzz-auto', 'LOW', $2)`,
+    [tierBase, operator],
   );
 }
 
@@ -103,8 +119,8 @@ async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
 describe("02:CP2 — autoDispatch (the AI acts alone, §7-honest)", () => {
   it("auto_releasable + non-money ⇒ dispatches with an origin='auto', un-confirmed trace", async () => {
     await tx(async (c) => {
-      const { cohortId, tenant, tierBase } = await pickPool(c);
-      await signPolicy(c, tierBase);
+      const { cohortId, tenant, tierBase, operator, aiAgent } = await pickPool(c);
+      await signPolicy(c, tierBase, operator);
       const nbaId = await craftProposal(c, cohortId, "none", { financialDirect: false, nMinOk: true });
       const out = await autoDispatch(nbaId, tenant, c);
       expect(out.dispatchId).toBeTruthy();
@@ -121,7 +137,7 @@ describe("02:CP2 — autoDispatch (the AI acts alone, §7-honest)", () => {
       expect(dt.origin).toBe("auto"); // the autonomous audit origin
       expect(dt.confirmer_id).toBeNull(); // no human confirmed this action
       expect(dt.independence_guaranteed).toBe(false); // GENERATED from confirmer null — honest §3.6
-      expect(dt.proposer_id).toBe("U-AI-001"); // the AI proposed it
+      expect(dt.proposer_id).toBe(aiAgent); // the in-pool AI proposed it
 
       const rb = (
         await c.query<{ proposer_id: string; operator_id: string }>(
@@ -129,8 +145,8 @@ describe("02:CP2 — autoDispatch (the AI acts alone, §7-honest)", () => {
           [out.releaseId],
         )
       ).rows[0]!;
-      expect(rb.proposer_id).toBe("U-AI-001");
-      expect(rb.operator_id).toBe("U-OP-001"); // the human who SIGNED the policy that authorizes autonomy
+      expect(rb.proposer_id).toBe(aiAgent);
+      expect(rb.operator_id).toBe(operator); // the in-pool human who SIGNED the policy that authorizes autonomy
 
       const disp = await c.query(`select 1 from gov."Action_Dispatch" where nba_id=$1`, [nbaId]);
       expect(disp.rowCount).toBe(1);
@@ -172,18 +188,32 @@ describe("02:CP2 — autoDispatch (the AI acts alone, §7-honest)", () => {
 
   it("idempotent: a second autoDispatch of the same NBA is blocked (no double dispatch)", async () => {
     await tx(async (c) => {
-      const { cohortId, tenant, tierBase } = await pickPool(c);
-      await signPolicy(c, tierBase);
+      const { cohortId, tenant, tierBase, operator } = await pickPool(c);
+      await signPolicy(c, tierBase, operator);
       const nbaId = await craftProposal(c, cohortId, "none", { financialDirect: false, nMinOk: true });
       await autoDispatch(nbaId, tenant, c);
       await expect(autoDispatch(nbaId, tenant, c)).rejects.toMatchObject({ code: "CONFLICT" });
     });
   });
 
+  it("same (cohort, action) auto-acts once — a rerun's fresh nba_id cannot duplicate the effect (Codex P1)", async () => {
+    await tx(async (c) => {
+      const { cohortId, tenant, tierBase, operator } = await pickPool(c);
+      await signPolicy(c, tierBase, operator);
+      const first = await craftProposal(c, cohortId, "none", { financialDirect: false, nMinOk: true });
+      await autoDispatch(first, tenant, c);
+      // a SECOND proposal (new nba_id, same cohort + action A1) must NOT be auto-dispatched again.
+      const second = await craftProposal(c, cohortId, "none", { financialDirect: false, nMinOk: true });
+      await expect(autoDispatch(second, tenant, c)).rejects.toMatchObject({ code: "CONFLICT" });
+      const disp = await c.query(`select 1 from gov."Action_Dispatch" where nba_id=$1`, [second]);
+      expect(disp.rowCount).toBe(0); // the duplicate effect was prevented
+    });
+  });
+
   it("cross-pool: a foreign tenant cannot auto-dispatch another pool's NBA (no leak)", async () => {
     await tx(async (c) => {
-      const { cohortId, tierBase } = await pickPool(c);
-      await signPolicy(c, tierBase);
+      const { cohortId, tierBase, operator } = await pickPool(c);
+      await signPolicy(c, tierBase, operator);
       const nbaId = await craftProposal(c, cohortId, "none", { financialDirect: false, nMinOk: true });
       await expect(autoDispatch(nbaId, "POOL-999", c)).rejects.toMatchObject({ code: "NOT_FOUND" });
       const disp = await c.query(`select 1 from gov."Action_Dispatch" where nba_id=$1`, [nbaId]);

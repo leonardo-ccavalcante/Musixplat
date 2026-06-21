@@ -41,15 +41,21 @@ describe("02:CP2 — cockpit propose + auto-act (real engine)", () => {
         [W1],
       )
     ).rows[0]!;
-    // The governance preconditions the demo seed provides: a signed LOW policy (accountable human) + green
-    // LOW eval ⇒ the 2nd/3rd min() arms resolve LOW ⇒ auto is POSSIBLE (the lever's gates still decide).
+    // The governance preconditions the demo seed provides: a signed LOW policy (accountable IN-POOL human) +
+    // green LOW eval ⇒ the 2nd/3rd min() arms resolve LOW ⇒ auto is POSSIBLE (the lever's gates still decide).
     const intent = (
       await pool.query<{ intent_id: string }>(`select intent_id from catalog."Intent_Catalog" limit 1`)
     ).rows[0]!.intent_id;
+    const operator = (
+      await pool.query<{ user_id: string }>(
+        `select user_id from gov."User" where tenant_id=$1 and role='agent_manager_senior' order by user_id limit 1`,
+        [target.tenant_id],
+      )
+    ).rows[0]!.user_id;
     await pool.query(
       `insert into gov."Policy_Tier"(policy_id, tier_id, policy_version, tier_cap, human_signature)
-       values ('pt-cp2', $1, 'pv-zzz-cp2', 'LOW', 'U-OP-001') on conflict (policy_id) do nothing`,
-      [target.tier_base],
+       values ('pt-cp2', $1, 'pv-zzz-cp2', 'LOW', $2) on conflict (policy_id) do nothing`,
+      [target.tier_base, operator],
     );
     await pool.query(
       `insert into gov."Eval_Cell"(cohort_id, intent, version, released_evals, status)

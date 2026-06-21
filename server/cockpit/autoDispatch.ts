@@ -1,8 +1,19 @@
 import type pg from "pg";
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
+import { query } from "../db/pool.js";
 import { type Level } from "../conversation/min.js";
 import { renderArtifact } from "./renderArtifact.js";
+
+// Audit a blocked autonomous attempt on a SEPARATE connection (Codex P2): the caller wraps autoDispatch in
+// a tx, and we throw right after — logging on `client` would roll the Security_Log row back with the action,
+// leaving the block un-audited in production. `query` commits independently, so the record survives.
+async function logBlocked(tenantId: string, detail: Record<string, unknown>): Promise<void> {
+  await query(`insert into gov."Security_Log"(tenant_id, kind, detail) values ($1,'auto_dispatch_blocked',$2::jsonb)`, [
+    tenantId,
+    JSON.stringify(detail),
+  ]);
+}
 
 // 02:CP2 / 02:BR-5 / 04 §3.3 L280 / §7 — the AI acts ALONE on an auto_releasable, NON-money NBA. This is
 // the autonomous counterpart of recordRelease/sendDispatch (which need a human operator and CLAIM
@@ -67,30 +78,46 @@ export async function autoDispatch(
   const dup = await client.query(`select 1 from gov."Action_Dispatch" where nba_id = $1`, [nbaId]);
   if (dup.rowCount) throw new TRPCError({ code: "CONFLICT", message: "already dispatched" });
 
+  // 2b. Idempotent at the (pool, cohort, action) level too (Codex P1): a rerun mints a NEW nba_id, so the
+  //     per-nba_id guard alone can't stop the AI re-sending the SAME action to the SAME cohort — repeated
+  //     "Run NBA" clicks would duplicate the effect. One autonomous action of a given type per cohort.
+  const same = await client.query(
+    `select 1 from gov."Action_Dispatch" ad
+       join gov."Decision_Trace" dt on dt.trace_id = ad.decision_trace_id and dt.origin = 'auto'::public.trace_origin
+       join gov."NBA_Proposal" p2 on p2.nba_id::text = ad.nba_id
+      where ad.tenant_id = $1 and ad.cohort_id = $2 and p2.action_type is not distinct from $3`,
+    [tenantId, p.cohort_id, p.action_type],
+  );
+  if (same.rowCount) throw new TRPCError({ code: "CONFLICT", message: "this action already auto-acted for this cohort" });
+
   // 3. §7 gate (fail-closed, defense-in-depth): money NEVER auto; the verdict must be a clean auto. A refused
-  //    attempt is logged + thrown, never a silent skip.
+  //    attempt is logged (on a SEPARATE connection, survives the caller's rollback) + thrown, never a silent skip.
   const moneyBlocked = p.financial_class === "direct";
   if (moneyBlocked || p.auto_releasable !== true || !p.effective_level || !p.calc_id) {
     const reason = moneyBlocked ? "money" : "not_auto_releasable";
-    await client.query(
-      `insert into gov."Security_Log"(tenant_id, kind, detail) values ($1,'auto_dispatch_blocked',$2::jsonb)`,
-      [tenantId, JSON.stringify({ nba_id: nbaId, reason, financial_class: p.financial_class, auto_releasable: p.auto_releasable })],
-    );
+    await logBlocked(tenantId, { nba_id: nbaId, reason, financial_class: p.financial_class, auto_releasable: p.auto_releasable });
     throw new TRPCError({
       code: "FORBIDDEN",
       message: moneyBlocked ? "money action never auto-dispatched (§7 hard-no)" : "not auto-releasable (fail-closed)",
     });
   }
 
-  // 4. The authorizing policy + the accountable human who signed it. No signed policy ⇒ fail-closed.
+  // 4. The authorizing policy + the accountable human who signed it — and that human MUST belong to THIS pool
+  //    (Codex P1): Policy_Tier is tier-keyed (global), so a tier policy signed by another pool's manager must
+  //    not become this pool's autonomous authorizer. Join User and constrain tenant_id. No in-pool signed
+  //    policy ⇒ fail-closed (escalate).
   const pol = (
-    await client.query<{ policy_version: string; human_signature: string | null }>(
-      `select policy_version, human_signature from gov."Policy_Tier" where tier_id = $1 order by policy_version desc limit 1`,
-      [p.tier_base],
+    await client.query<{ policy_version: string; human_signature: string }>(
+      `select pt.policy_version, pt.human_signature
+         from gov."Policy_Tier" pt
+         join gov."User" u on u.user_id = pt.human_signature and u.tenant_id = $2
+        where pt.tier_id = $1 order by pt.policy_version desc limit 1`,
+      [p.tier_base, tenantId],
     )
   ).rows[0];
-  if (!pol || !pol.human_signature) {
-    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "no signed policy authorizes autonomy (fail-closed)" });
+  if (!pol) {
+    await logBlocked(tenantId, { nba_id: nbaId, reason: "no_in_pool_signed_policy", tier: p.tier_base });
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "no in-pool signed policy authorizes autonomy (fail-closed)" });
   }
   // 5. The AI proposer, distinct from the policy's human ⇒ the Release_Batch 4-eyes (proposer<>operator) holds.
   const ai = (

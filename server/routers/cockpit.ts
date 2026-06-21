@@ -92,21 +92,29 @@ export async function listCockpitRows(tenantId: string, exec: Exec): Promise<Nba
 // (§14). The trace ORIGIN is what separates a human decision from an autonomous one — a release counted as
 // "you released" must be a human's (a left join + `is distinct from 'auto'` keeps a null-origin row human).
 // counts cast ::int so node-pg returns numbers, not bigint strings.
+// auto_acted is scoped by the DISPATCH's owner (Action_Dispatch.tenant_id) — NOT cohort presence (Codex P1):
+// a cohort spans pools, so an autonomous release for another pool would otherwise be miscounted here.
 const WEEK_SQL = `
+  with human as (
+    select rb.action
+    from gov."Release_Batch" rb
+    left join gov."Decision_Trace" dt on dt.trace_id = rb.decision_trace_id
+    where rb.created_at >= now() - interval '7 days'
+      and dt.origin is distinct from 'auto'::public.trace_origin
+      and exists (
+        select 1 from cohort."Cohort_Membership_Snapshot" cms
+        join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1
+        where cms.cohort_id = rb.cohort_id
+          -- same current-version pool-presence rule as the list (anti-mezcla §3.5 consistency)
+          and cms.cohort_rule_version = (select value from catalog."Config_Knobs" where key='cohort_rule_version_current')
+      )
+  )
   select
-    count(*) filter (where rb.action = 'RELEASE' and dt.origin is distinct from 'auto'::public.trace_origin)::int as released,
-    count(*) filter (where rb.action = 'PAUSE'   and dt.origin is distinct from 'auto'::public.trace_origin)::int as paused,
-    count(*) filter (where rb.action = 'RELEASE' and dt.origin = 'auto'::public.trace_origin)::int as auto_acted
-  from gov."Release_Batch" rb
-  left join gov."Decision_Trace" dt on dt.trace_id = rb.decision_trace_id
-  where rb.created_at >= now() - interval '7 days'
-    and exists (
-      select 1 from cohort."Cohort_Membership_Snapshot" cms
-      join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1
-      where cms.cohort_id = rb.cohort_id
-        -- same current-version pool-presence rule as the list (anti-mezcla §3.5 consistency)
-        and cms.cohort_rule_version = (select value from catalog."Config_Knobs" where key='cohort_rule_version_current')
-    )`;
+    (select count(*) filter (where action = 'RELEASE') from human)::int as released,
+    (select count(*) filter (where action = 'PAUSE')   from human)::int as paused,
+    (select count(*) from gov."Action_Dispatch" ad
+       join gov."Decision_Trace" dt on dt.trace_id = ad.decision_trace_id and dt.origin = 'auto'::public.trace_origin
+      where ad.tenant_id = $1 and ad.created_at >= now() - interval '7 days')::int as auto_acted`;
 
 export async function weekSummary(
   tenantId: string,
@@ -117,18 +125,16 @@ export async function weekSummary(
 }
 
 // 02:CP2 — the autonomous-actions registry: what the AI did ALONE (origin='auto'), pool-scoped, recent
-// first. Reads each dispatch's rendered title + reach + the applied autonomy level ([V], §14) — never a
-// fabricated number. The decision_trace_id ⋈ origin='auto' is what proves the AI, not a human, acted.
+// first. Reads each dispatch's rendered title + reach + the level APPLIED at dispatch (the immutable
+// dt.effective_level_applied, NOT the latest min_calculation — Codex P2: a later re-eval must not
+// retroactively rewrite the audit registry). The decision_trace_id ⋈ origin='auto' proves the AI acted.
 const AUTO_ACTIONS_SQL = `
   select ad.dispatch_id::text as dispatch_id, ad.nba_id, ad.cohort_id, p.action_type,
          ad.content->>'title' as title, ad.target_count,
-         m.effective_level::text as effective_level, ad.created_at
+         dt.effective_level_applied::text as effective_level, ad.created_at
     from gov."Action_Dispatch" ad
     join gov."Decision_Trace" dt on dt.trace_id = ad.decision_trace_id and dt.origin = 'auto'::public.trace_origin
     left join gov."NBA_Proposal" p on p.nba_id::text = ad.nba_id
-    left join lateral (
-      select effective_level from gov."min_calculation" where nba_id = ad.nba_id order by computed_at desc limit 1
-    ) m on true
    where ad.tenant_id = $1
    order by ad.created_at desc limit 50`;
 

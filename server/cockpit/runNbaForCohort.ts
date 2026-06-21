@@ -35,11 +35,15 @@ export async function proposeAndAutoActForCohort(
   const week = wk[0]?.week;
   if (!week) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "no cohort snapshot (run P01 first)" });
 
+  // Scope candidates to THIS pool (Codex P1, §3.4): a cohort spans pools (04 §3.2), so cohort presence is
+  // not tenant ownership — without the tenant join a foreign restaurant's signal would drive an autonomous
+  // action for the caller's pool. Join Restaurant + constrain tenant_id.
   const sample = await query<{ restaurant_id: string }>(
-    `select restaurant_id from cohort."Cohort_Membership_Snapshot"
-      where cohort_id = $1 and week = $2 and ${PROBLEM}
-      order by restaurant_id limit 12`,
-    [cohortId, week],
+    `select cms.restaurant_id from cohort."Cohort_Membership_Snapshot" cms
+       join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $3
+      where cms.cohort_id = $1 and cms.week = $2 and ${PROBLEM}
+      order by cms.restaurant_id limit 12`,
+    [cohortId, week, tenantId],
   );
 
   const out: ProposeForCohortResult = { proposed: 0, auto_acted: 0, escalated: 0, skipped: 0 };
@@ -88,10 +92,14 @@ export interface ProposeForPoolResult extends ProposeForCohortResult {
   cohorts: number;
 }
 export async function proposeForPool(tenantId: string): Promise<ProposeForPoolResult> {
+  // Current-version cohorts only, deterministically ordered (Codex P2): never run historical/arbitrary
+  // cohorts. The UI reports the ACTUAL count it ran (never claims "every cohort").
   const cohorts = await query<{ cohort_id: string }>(
     `select distinct cms.cohort_id from cohort."Cohort_Membership_Snapshot" cms
        join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1
-      where ${PROBLEM} limit 8`,
+      where ${PROBLEM}
+        and cms.cohort_rule_version = (select value from catalog."Config_Knobs" where key='cohort_rule_version_current')
+      order by cms.cohort_id limit 8`,
     [tenantId],
   );
   const agg: ProposeForPoolResult = { proposed: 0, auto_acted: 0, escalated: 0, skipped: 0, cohorts: 0 };
