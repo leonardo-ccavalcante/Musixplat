@@ -57,7 +57,8 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('connection_min_ratio',      '0.80', '[C]', 'leo'),
   -- 05D cancellation diagnosis threshold — DISTINCT from the A6 nba_cancel_rate_max ACTION policy (§3.8 by name).
   ('cancel_rate_max',           '0.10', '[C]', 'leo'),
-  ('menu_quality_min',          '0.50', '[C]', 'leo')
+  ('menu_quality_min',          '0.50', '[C]', 'leo'),
+  ('adoption_gap_days',         '30',   '[C]', 'leo')
 -- idempotent: the 05D diagnosis knobs (connection_min_ratio, cancel_rate_max) are ALSO inserted by the
 -- 20260621000006 migration (hosted-safe, Codex P1). rebuild_db.sh runs migrations THEN this seed, so this
 -- block must skip the already-present rows — else the duplicate aborts the whole block (dropping window_silent
@@ -169,6 +170,9 @@ insert into gov."User"(user_id, tenant_id, org_level, role) values
 -- ── Business base (Restaurant + Order + Weekly_Connection + Conversation_Episode): 5000 restaurants,
 --    deterministic via fn_generate_business_base (DRY — the demo "generate example" button reuses it). ──
 select public.fn_generate_business_base(5000, date '2026-06-17');
+-- 05D adoption: the platform feature-usage recency signal (Usage_Event) for the base restaurants, so the
+-- adoption diagnosis sees a REAL non-adopting population (~30%) — not every restaurant looking non-adopting.
+select public.fn_seed_usage_events(current_date);
 
 -- ── P06 Knowledge Base / RAG: knobs BY NAME (CLAUDE.md §3.8, [C] config). ──
 insert into catalog."Config_Knobs"(key, value, provenance, owner) values

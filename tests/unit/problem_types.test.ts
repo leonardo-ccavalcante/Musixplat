@@ -33,6 +33,11 @@ describe("problem_types registry", () => {
     expect(m.area_type).toBe("product");
     expect(m.impact.kind).toBe("at_risk_gmv");
     expect(m.affected.threshold_knob).toBe("menu_quality_min");
-    expect(Object.keys(PROBLEM_TYPES)).toEqual(expect.arrayContaining(["cancellation", "menu_quality"]));
+    const a = getDescriptor("adoption");
+    expect(a.area_type).toBe("product");
+    expect(a.affected.threshold_knob).toBe("adoption_gap_days");
+    expect(Object.keys(PROBLEM_TYPES)).toEqual(
+      expect.arrayContaining(["cancellation", "menu_quality", "adoption"]),
+    );
   });
 });

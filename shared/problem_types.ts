@@ -50,6 +50,16 @@ export const PROBLEM_TYPES: Record<string, ProblemDescriptor> = {
     hypotheses: ["menu items missing photos", "menu items missing descriptions", "stale / incomplete menu listing"],
     metric: "improve_menu_quality", origin: "builtin",
   },
+  adoption: {
+    problem_type: "adoption", area_type: "product", label: "Feature adoption gap",
+    // affected = restaurants whose most-recent Usage_Event is older than adoption_gap_days (or who have
+    // NONE). The actual anti-join lives in tenant.fn_affected_adoption (SQL, §3.6). threshold read BY NAME
+    // (§3.8) — adoption_gap_days is a DEDICATED diagnosis gap, never an nba_* action policy.
+    affected: { table: "Usage_Event", signal: "days_since_last_usage_event > adoption_gap_days", operator: "gt", threshold_knob: "adoption_gap_days" },
+    impact: { kind: "at_risk_gmv" }, concentration_dim: "zone",
+    hypotheses: ["restaurant never onboarded the feature", "feature value not understood / no activation moment", "usage churned after initial trial"],
+    metric: "restore_feature_adoption", origin: "builtin",
+  },
 };
 export function getDescriptor(t: string): ProblemDescriptor {
   const d = PROBLEM_TYPES[t];

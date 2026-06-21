@@ -254,4 +254,33 @@ describe("05D F0 anti-fake — general path reports a problem with NO produced r
     expect(r[0]!.revenue_lost).toBeNull();
     expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
   });
+
+  it("adoption: revenue_lost is NULL and Affected is empty for a freshly-reported problem", async () => {
+    const POOL = "POOL-AF-ADOPT";
+    // INPUT only — one non-adopting restaurant (a stale usage event, no producer runs at report time).
+    await pool.query(
+      `insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week)
+       values ('R-AFA-1', $1, 'long_tail','long_tail'::segment, date '2026-01-01','Centro','pizza',50)`,
+      [POOL],
+    );
+    await pool.query(
+      `insert into tenant."Usage_Event"(restaurant_id, feature, event_type, ts)
+       values ('R-AFA-1', 'orders_dashboard', 'view', current_date - 60)`,
+    );
+
+    const reported = await caller(POOL).diagnosis.reportProblem({
+      restaurantId: "R-AFA-1",
+      problem_type: "adoption",
+    });
+    expect(reported.created).toBe(true);
+
+    // §14: the adoption report path computes NOTHING — revenue_lost NULL, zero Affected rows.
+    const r = await rows<{ revenue_lost: number | null }>(
+      pool,
+      `select revenue_lost from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [reported.problem_id],
+    );
+    expect(r[0]!.revenue_lost).toBeNull();
+    expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
+  });
 });

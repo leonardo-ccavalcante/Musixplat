@@ -101,6 +101,9 @@ export const cohortsRouter = router({
         tenant."Weekly_Connection", tenant."Conversation_Episode", tenant."Order", tenant."Restaurant"
         restart identity cascade;`);
       await query(`select public.fn_generate_business_base($1, date '2026-06-17')`, [input.restaurants]);
+      // 05D adoption: also seed the Usage_Event recency signal so the adoption diagnosis works on the
+      // freshly-generated base too (this "generate example" path mirrors seed.sql, DRY).
+      await query(`select public.fn_seed_usage_events(current_date)`);
       return { restaurants: input.restaurants };
     }),
 
