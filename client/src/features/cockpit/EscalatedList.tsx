@@ -4,7 +4,7 @@ import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 
 // 02C:6a — "Escalated to you": the cases the MOTOR (the ≤3 hypothesis LLM loop) handed back to a human
 // because it found no in-range fix. Every row is READ from Knowledge_Case (area · pattern · why it stopped ·
-// the hypotheses it tried + discarded · the LLM cost of the attempt) — the AI's accountability trail when it
+// the actions it considered + discarded {action_code, reason} · the LLM cost of the attempt) — the AI's trail when it
 // stepped back, never a fabricated number (§14). cost_usd is honest: NULL ⇒ "unpriced", never "$0" (§3.7).
 // Acted-vs-escalated carries redundant text+icon, not color alone (WCAG 2.1 AA).
 function when(ts: string): string {
@@ -18,10 +18,11 @@ function cost(usd: number | null): { text: string; unpriced: boolean } {
   return { text: `$${usd.toFixed(usd < 0.01 ? 4 : 2)}`, unpriced: false };
 }
 
-// discarded_branches is jsonb (unknown over the wire): a list of {hypothesis, reason} the loop tried and
-// dropped. Render defensively — any shape that isn't a usable array of objects degrades to nothing shown.
+// P2-4: discarded_branches is jsonb (unknown over the wire): a list of {action_code, reason} — the action
+// the loop considered and the reason it discarded it. Render the REAL shape. Parse defensively — any shape
+// that isn't a usable array of {action_code|reason} objects degrades to nothing shown.
 interface Branch {
-  hypothesis: string;
+  action_code: string;
   reason: string;
 }
 function branches(raw: unknown): Branch[] {
@@ -29,9 +30,9 @@ function branches(raw: unknown): Branch[] {
   return raw.flatMap((b): Branch[] => {
     if (b == null || typeof b !== "object") return [];
     const o = b as Record<string, unknown>;
-    const hypothesis = typeof o.hypothesis === "string" ? o.hypothesis : typeof o.branch === "string" ? o.branch : "";
-    const reason = typeof o.reason === "string" ? o.reason : typeof o.why === "string" ? o.why : "";
-    return hypothesis || reason ? [{ hypothesis, reason }] : [];
+    const action_code = typeof o.action_code === "string" ? o.action_code : "";
+    const reason = typeof o.reason === "string" ? o.reason : "";
+    return action_code || reason ? [{ action_code, reason }] : [];
   });
 }
 
@@ -77,14 +78,14 @@ export function EscalatedList({ open, onClose }: { open: boolean; onClose: () =>
                 {tried.length > 0 && (
                   <div className="mt-2">
                     <p className="text-[0.7rem] uppercase tracking-wide text-mxm-content-tertiary">
-                      Hypotheses it tried &amp; discarded
+                      Actions it considered &amp; discarded
                     </p>
                     <ul className="mt-1 space-y-1">
                       {tried.map((b, i) => (
                         <li key={i} className="text-xs text-mxm-content-secondary">
                           <span aria-hidden className="mr-1 text-mxm-content-tertiary">✕</span>
-                          {b.hypothesis && <span className="text-mxm-content">{b.hypothesis}</span>}
-                          {b.hypothesis && b.reason && <span className="text-mxm-content-tertiary"> — </span>}
+                          {b.action_code && <span className="font-mono text-mxm-content">{b.action_code}</span>}
+                          {b.action_code && b.reason && <span className="text-mxm-content-tertiary"> — </span>}
                           {b.reason}
                         </li>
                       ))}

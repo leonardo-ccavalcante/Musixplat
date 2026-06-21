@@ -36,7 +36,9 @@ export function CockpitPage() {
   const [escalationsOpen, setEscalationsOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
   const [motorResult, setMotorResult] = useState<MotorRunResult | null>(null);
+  const [motorError, setMotorError] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
@@ -47,8 +49,11 @@ export function CockpitPage() {
   const runMotor = trpc.motor.runPool.useMutation();
 
   // 02:CP2 — "Run NBA": fire the engine across the pool; on success refresh the board + "your week" + the
-  // registry (the autonomous actions it just took), and surface the spectrum inline.
+  // registry (the autonomous actions it just took), and surface the spectrum inline. On a new run we clear the
+  // prior result + error first so a stale success line never lingers; on failure we surface it explicitly (P2-5).
   const onRunNba = () => {
+    setRunResult(null);
+    setRunError(null);
     propose.mutate(undefined, {
       onSuccess: (res) => {
         setRunResult(res);
@@ -56,14 +61,19 @@ export function CockpitPage() {
         void utils.cockpit.weekSummary.invalidate();
         void utils.cockpit.autoActions.invalidate();
       },
+      onError: (e) => setRunError(e.message),
     });
   };
 
   // 02C:6a — "Run Motor": fire the LLM autonomous engine pool-wide (mirrors Run NBA's pool decision — the
   // board spans cohorts, so there's no single focused cohort to target). The OpenAI call is slow; the hero
   // shows an explicit busy state, never a fake-instant success. On success refresh the escalations feed + the
-  // auto-actions registry + "your week" (the motor may have acted alone and left traces).
+  // auto-actions registry + "your week" (the motor may have acted alone and left traces). P2-5: clear the prior
+  // result + error on a new run so a stale success line never persists; on API/LLM failure surface it explicitly
+  // (fail-closed, §7 — the operator must SEE the error, never a silently vanished busy state).
   const onRunMotor = () => {
+    setMotorResult(null);
+    setMotorError(null);
     runMotor.mutate(undefined, {
       onSuccess: (res) => {
         setMotorResult(res);
@@ -71,6 +81,7 @@ export function CockpitPage() {
         void utils.cockpit.autoActions.invalidate();
         void utils.cockpit.weekSummary.invalidate();
       },
+      onError: (e) => setMotorError(e.message),
     });
   };
 
@@ -177,6 +188,36 @@ export function CockpitPage() {
             motorResult={motorResult}
             onOpenEscalations={() => setEscalationsOpen(true)}
           />
+
+          {/* P2-5 — explicit, visible failure for the two engine runs. The hero owns the busy + success lines;
+              an API/LLM failure (or a FORBIDDEN from the role gate on a senior-only control) must NOT vanish
+              silently. role=alert + ✕ glyph (icon + text, not color alone) so the operator always sees it. */}
+          {(runError || motorError) && (
+            <div className="mt-3 space-y-1.5" aria-live="assertive">
+              {runError && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-mxm border border-mxm-red/40 bg-mxm-red/10 px-3 py-2 text-xs text-mxm-red"
+                >
+                  <span aria-hidden className="mt-px">✕</span>
+                  <span>
+                    <b className="font-semibold">Run NBA failed.</b> {runError}
+                  </span>
+                </p>
+              )}
+              {motorError && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-mxm border border-mxm-red/40 bg-mxm-red/10 px-3 py-2 text-xs text-mxm-red"
+                >
+                  <span aria-hidden className="mt-px">✕</span>
+                  <span>
+                    <b className="font-semibold">Run Motor failed.</b> {motorError}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="mb-3 mt-[clamp(1.5rem,3vw,2.25rem)] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">

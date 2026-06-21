@@ -12,15 +12,11 @@ import { cn } from "@/lib/utils";
 // every value READS motor.controls.get and writes via motor.controls.set. Toggles carry text + a ✓/○ glyph,
 // so the on/off state never rests on color alone (WCAG 2.1 AA).
 
-// The action_types the motor can be permitted to auto-act on. Kept in sync with the action catalog; a tier's
-// allowed set is the intersection of this menu and what the human has toggled on.
-const ACTION_TYPES = [
-  "outreach_message",
-  "menu_nudge",
-  "price_review_flag",
-  "quality_followup",
-  "reactivation_ping",
-] as const;
+// P1-5: the action identities are NOT invented here — the ONLY source is controls.available_actions (the
+// real NBA catalog, A1..A8, the same codes the runtime whitelist compares). A tier's allowed set is the
+// intersection of that catalog and what the human has toggled on, so what the human edits is exactly what
+// the motor evaluates. financial_class === 'direct' = a money action: §7 never auto-acts it at dispatch,
+// even when toggled on — surfaced (text + glyph, not color alone) so the human sees the real, honest set.
 
 const KNOB_LABELS: Record<string, { label: string; hint: string }> = {
   motor_max_loops: { label: "Max hypothesis loops", hint: "How many hypotheses the motor may try before it escalates (≤3)." },
@@ -93,36 +89,57 @@ export function AutonomyControls({ open, onClose }: { open: boolean; onClose: ()
                         <SaveBadge state={st} />
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {ACTION_TYPES.map((a) => {
-                          const on = t.auto_actions.includes(a);
+                        {data.available_actions.map((act) => {
+                          const on = t.auto_actions.includes(act.code);
+                          const money = act.financial_class === "direct";
                           return (
                             <button
-                              key={a}
+                              key={act.code}
                               type="button"
                               role="switch"
                               aria-checked={on}
                               disabled={st.status === "saving"}
-                              onClick={() => toggleAction(t.tier_id, t.auto_actions, a)}
+                              title={money ? "Money action — §7 blocks auto-act at dispatch even when toggled on." : undefined}
+                              onClick={() => toggleAction(t.tier_id, t.auto_actions, act.code)}
                               className={cn(
                                 "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
                                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand disabled:opacity-50",
                                 on
-                                  ? "border-mxm-green/50 bg-mxm-green/10 text-mxm-green"
+                                  ? money
+                                    ? "border-mxm-red/50 bg-mxm-red/10 text-mxm-red"
+                                    : "border-mxm-green/50 bg-mxm-green/10 text-mxm-green"
                                   : "border-mxm-border text-mxm-content-secondary hover:text-mxm-content",
                               )}
                             >
                               <span aria-hidden>{on ? "✓" : "○"}</span>
-                              {a}
-                              <span className="sr-only">{on ? "allowed" : "not allowed"}</span>
+                              <span className="font-mono">{act.code}</span>
+                              <span aria-hidden className="text-mxm-content-tertiary">·</span>
+                              {act.label}
+                              {money && (
+                                <span className="ml-1 inline-flex items-center gap-0.5 text-[0.62rem] text-mxm-red">
+                                  <span aria-hidden>$</span>money
+                                </span>
+                              )}
+                              <span className="sr-only">
+                                {on ? "allowed" : "not allowed"}
+                                {money ? " — money action, never auto-acts (§7)" : ""}
+                              </span>
                             </button>
                           );
                         })}
                       </div>
-                      {/* any action_type already on the tier but outside our menu — surfaced read-only, not hidden */}
-                      {t.auto_actions.filter((a) => !ACTION_TYPES.includes(a as (typeof ACTION_TYPES)[number])).length > 0 && (
+                      {/* §7: a money action stays toggleable so the boundary is honest, but dispatch always blocks it. */}
+                      {data.available_actions.some((act) => act.financial_class === "direct") && (
+                        <p className="mt-2 flex items-center gap-1 text-[0.68rem] text-mxm-content-tertiary">
+                          <span aria-hidden className="text-mxm-red">$</span>
+                          Money actions never auto-act — §7 blocks them at dispatch regardless of this toggle.
+                        </p>
+                      )}
+                      {/* any action_code already on the tier but no longer in the catalog — surfaced read-only, not hidden */}
+                      {t.auto_actions.filter((a) => !data.available_actions.some((act) => act.code === a)).length > 0 && (
                         <p className="mt-2 text-[0.68rem] text-mxm-content-tertiary">
-                          Also on (other):{" "}
-                          {t.auto_actions.filter((a) => !ACTION_TYPES.includes(a as (typeof ACTION_TYPES)[number])).join(", ")}
+                          Also on (no longer in catalog):{" "}
+                          {t.auto_actions.filter((a) => !data.available_actions.some((act) => act.code === a)).join(", ")}
                         </p>
                       )}
                     </li>
