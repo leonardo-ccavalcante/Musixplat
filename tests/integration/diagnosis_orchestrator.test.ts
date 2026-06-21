@@ -3,6 +3,7 @@ import type pg from "pg";
 import { makePool, resetDb, count, rows } from "../helpers/db";
 import { runDiagnosis } from "../../server/diagnosis/orchestrator";
 import type { DiagnosisReasoning, GroundingCase } from "../../server/diagnosis/reasoning";
+import { getDescriptor } from "../../shared/problem_types";
 
 // EPIC-B1 orchestrator — assembles B.2→B.8 over the real modules. Numbers are SQL (§8/§14); the
 // AGENTE provider here is the deterministic stub so the gate needs no key/network. Proves the machine
@@ -177,6 +178,70 @@ describe("05B EPIC-B1 — runDiagnosis (E2E sequencing, §14 anti-fake, fail-clo
       [problemId],
     );
     expect(st[0]?.status).toBe("needs_human"); // never an optimistic default (§7)
+  });
+});
+
+describe("05D descriptor-refactor — proactive path is descriptor-authoritative (area + hypotheses)", () => {
+  // A proactive/typed problem (no Conversation) has nothing to blind-read, so the REGISTERED type's
+  // descriptor drives the pipeline directly — no synthetic-string round-trip through the classifier.
+  // This is what makes L3 (a live-taught type) work with zero vocab change, and it never touches the
+  // reactive net (the promo/cancellation degrade tests above stay green).
+  async function seedProactiveTyped(problemType: string): Promise<string> {
+    await pool.query(
+      `insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date)
+       values ('R-PRO-1','POOL-DIAG','long_tail','long_tail', date '2026-01-01')`,
+    );
+    const r = await pool.query<{ problem_id: string }>(
+      `insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, criticality, status, problem_type)
+       values ('POOL-DIAG','R-PRO-1','low','open',$1) returning problem_id`,
+      [problemType],
+    );
+    return r.rows[0]!.problem_id;
+  }
+
+  it("proactive: descriptor.area_type wins and the blind classifier is NOT consulted (cannot override it)", async () => {
+    const problemId = await seedProactiveTyped("connection"); // descriptor area = performance
+    let classifyCalled = false;
+    let rankHypotheses: string[] | null = null;
+    // If consulted, this spy would MIS-classify to finance with sub-floor confidence. The proactive
+    // path must ignore it entirely (descriptor authoritative) ⇒ classifyArea never runs.
+    const spy: DiagnosisReasoning = {
+      classifyArea: async () => {
+        classifyCalled = true;
+        return { areaType: "finance", confidence: 0.1 };
+      },
+      rankPaths: async (i) => {
+        rankHypotheses = i.hypotheses;
+        return i.hypotheses.map((hypothesis, idx) => ({
+          path_id: idx + 1,
+          hypothesis,
+          probability: (i.hypotheses.length - idx) / i.hypotheses.length,
+        }));
+      },
+    };
+    const out = await runDiagnosis(problemId, "POOL-DIAG", spy);
+    expect(classifyCalled).toBe(false); // no conversation ⇒ never blind-classifies
+    expect(out.areaType).toBe("performance"); // descriptor, NOT the spy's 'finance'
+    expect(out.degraded).toBe(false); // type is known ⇒ not degraded despite the spy's 0.1 confidence
+    expect(out.confidence).toBeNull(); // no classifier inference occurred ⇒ NULL, never a fabricated number (Codex P1)
+    expect(rankHypotheses).toEqual(getDescriptor("connection").hypotheses); // descriptor.hypotheses wired (the L3 seed)
+
+    const after = await rows<{
+      area_type: string;
+      confidence: string | null;
+      issue_tree: { paths: { source_consulted: string | null }[] };
+      prov: Record<string, string>;
+    }>(
+      pool,
+      `select area_type, confidence, issue_tree, provenance_by_field as prov
+         from tenant."Diagnosed_Problem" where problem_id=$1`,
+      [problemId],
+    );
+    expect(after[0]?.area_type).toBe("performance");
+    expect(after[0]?.prov.area_type).toBe("[C]"); // a classification marker, never promoted to a fact (§8)
+    expect(after[0]?.confidence).toBeNull(); // persisted NULL — honest about the inference that never ran (Codex P1)
+    // the consulted source is the descriptor's OWN evidence table, not a regex guess on the hypothesis (Codex P2)
+    expect(after[0]?.issue_tree.paths[0]?.source_consulted).toBe(`tenant.${getDescriptor("connection").affected.table}`);
   });
 });
 
