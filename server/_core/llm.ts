@@ -17,6 +17,7 @@ export interface ChatClient {
       create(args: {
         model: string;
         max_tokens?: number;
+        temperature?: number;
         messages: ReadonlyArray<{ role: "system" | "user"; content: string }>;
       }): Promise<{
         choices: ReadonlyArray<{ message: { content: string | null } }>;
@@ -47,6 +48,10 @@ export async function chatText(
   const res = await client.chat.completions.create({
     model,
     max_tokens: maxTokens,
+    // Pinned to 0: classify/rank must be reproducible — same problem text → same area/order. A non-zero
+    // default would make the deterministic-vs-LLM behavioural diff (CLAUDE.md §7) flaky and let identical
+    // tickets land in different areas across runs. The model still only writes TEXT (§3.6).
+    temperature: 0,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },

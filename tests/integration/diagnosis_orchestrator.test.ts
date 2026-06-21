@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { makePool, resetDb, count, rows } from "../helpers/db";
 import { runDiagnosis } from "../../server/diagnosis/orchestrator";
+import type { DiagnosisReasoning, GroundingCase } from "../../server/diagnosis/reasoning";
 
 // EPIC-B1 orchestrator — assembles B.2→B.8 over the real modules. Numbers are SQL (§8/§14); the
 // AGENTE provider here is the deterministic stub so the gate needs no key/network. Proves the machine
@@ -96,6 +97,41 @@ describe("05B EPIC-B1 — runDiagnosis (E2E sequencing, §14 anti-fake, fail-clo
     // NULL (no pre-churn producer) + cost/value are NULL pre-resolution. The gate WORKS (it gates).
     expect(out.dossier.emitted).toBe(false);
     expect(out.dossier.gaps).toContain("f5_how_much");
+  });
+
+  it("BR-B3 grounding: a REVIEWED Knowledge_Case for the area is fed to the agent (fetch→pass wiring)", async () => {
+    const problemId = await seedReactive();
+    // A reviewed prior case (negative polarity): 'balance mismatch' was falsified before ⇒ grounding
+    // should hand it to the agent so it ranks that dead branch lower. reviewed=true is the gate (BR-B16).
+    await pool.query(`
+      insert into tenant."Knowledge_Case"
+        (tenant_id, area_type, pattern, outcome, not_resolved_reason, discarded_branches, reviewed)
+      values ('POOL-DIAG','finance','late payout pattern','not_resolved','still open',
+              '["balance mismatch"]'::jsonb, true);`);
+
+    // Spy provider: records the examples it RECEIVES, returns a valid permutation so the run completes.
+    const seen: { classify?: GroundingCase[]; rank?: GroundingCase[] } = {};
+    const spy: DiagnosisReasoning = {
+      classifyArea: async (i) => {
+        seen.classify = i.examples;
+        return { areaType: "finance", confidence: 0.9 };
+      },
+      rankPaths: async (i) => {
+        seen.rank = i.examples;
+        return i.hypotheses.map((hypothesis, idx) => ({
+          path_id: idx + 1,
+          hypothesis,
+          probability: (i.hypotheses.length - idx) / i.hypotheses.length,
+        }));
+      },
+    };
+
+    await runDiagnosis(problemId, "POOL-DIAG", spy);
+    // classify is grounded on tenant-recent reviewed cases; rank is grounded on the SAME area's cases.
+    expect(seen.rank?.length).toBeGreaterThan(0);
+    expect(seen.rank?.[0]?.pattern).toBe("late payout pattern");
+    expect(seen.rank?.[0]?.discardedBranches).toEqual(["balance mismatch"]);
+    expect(seen.classify?.some((c) => c.pattern === "late payout pattern")).toBe(true);
   });
 
   it("BR-B3 fail-closed: unclassifiable text + no KB ⇒ degrade-to-human (status needs_human)", async () => {
