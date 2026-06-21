@@ -1,8 +1,10 @@
 // 02:1a — deterministic render of a released NBA into a dispatchable artifact: a real, recipient-facing
 // MESSAGE the operator reviews (and may edit) before Send. Quotes the proposal's PRODUCED fields + the
 // NBA_Catalogo playbook; numbers are formatted by unit (rate→%, €) but never invented (§14, mirrors
-// server/artifact/generateFromDossier.ts). NO LLM (server/_core/llm.ts is not on this branch).
-import { evidenceLine } from "../../shared/signalFormat.js";
+// server/artifact/generateFromDossier.ts). The body text is built by the copy agent (server/cockpit/
+// copywriter.ts) — deterministic here; dispatchDetail swaps in the restaurant-facing LLM copy on the live path.
+import { evidenceLine, readSignal, fmtValue } from "../../shared/signalFormat.js";
+import { deterministicCopy, type CopyInput } from "./copywriter.js";
 
 export const ARTIFACT_KIND = {
   A1: "ops_memo",
@@ -30,24 +32,23 @@ export interface RenderedArtifact {
   content: { title: string; evidence: string; body: string };
 }
 
+// The facts both providers share. evidence + numbers come from the [V] diagnosis (formatted, never invented).
+// numbers = the figures the LLM must quote verbatim (§14 number-preservation guard).
+export function buildCopyInput(i: RenderInput): CopyInput {
+  const actionLabel = i.action_label ?? i.action_type ?? "Recommended action";
+  const evidence = evidenceLine(i.before_after_expected) ?? i.root_cause ?? "No attributable cause.";
+  const playbook = i.playbook ?? "Review with your account team and decide the next step.";
+  const s = readSignal(i.before_after_expected);
+  const numbers = s ? [fmtValue(s.dimension, s.measured), fmtValue(s.dimension, s.standard)] : [];
+  return { actionLabel, cohortId: i.cohort_id, evidence, playbook, numbers };
+}
+
 export function renderArtifact(i: RenderInput): RenderedArtifact {
   const code = (i.action_type ?? "").toUpperCase();
   const kind = (ARTIFACT_KIND as Record<string, string>)[code] ?? ARTIFACT_KIND.default;
-  const action = i.action_label ?? i.action_type ?? "Recommended action";
-  // The measured why, formatted in its natural unit; fall back to the proposal prose, then a conservative
-  // default (never a fabricated number, §14).
-  const evidence = evidenceLine(i.before_after_expected) ?? i.root_cause ?? "No attributable cause.";
-  const steps = i.playbook ?? "Review with your account team and decide the next step.";
-  const body = [
-    `Re: ${action} — cohort ${i.cohort_id}.`,
-    "",
-    `What we measured: ${evidence}.`,
-    "",
-    "Recommended next steps:",
-    steps,
-  ].join("\n");
+  const ci = buildCopyInput(i);
   return {
     artifact_kind: kind,
-    content: { title: `${action} · ${i.cohort_id}`, evidence, body },
+    content: { title: `${ci.actionLabel} · ${ci.cohortId}`, evidence: ci.evidence, body: deterministicCopy(ci) },
   };
 }

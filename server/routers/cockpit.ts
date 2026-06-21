@@ -6,7 +6,8 @@ import { router, tenantProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
 import { type Level } from "../conversation/min.js";
 import { cockpitReleaseInput, cockpitSendDispatchInput, type NbaCockpitRow } from "../../shared/contracts.js";
-import { renderArtifact } from "../cockpit/renderArtifact.js";
+import { renderArtifact, buildCopyInput } from "../cockpit/renderArtifact.js";
+import { restaurantCopy } from "../cockpit/copywriter.js";
 
 const LEVEL_RANK: Record<Level, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 };
 
@@ -232,14 +233,19 @@ export async function dispatchDetail(nbaId: string, tenantId: string, exec: Exec
         [p.cohort_id, tenantId],
       )
     )[0]?.n ?? 0;
-  const art = renderArtifact({
+  const renderInput = {
     action_type: p.action_type,
     action_label: p.label,
     cohort_id: p.cohort_id,
     root_cause: p.root_cause,
     before_after_expected: p.before_after_expected,
     playbook: p.playbook,
-  });
+  };
+  const art = renderArtifact(renderInput);
+  // The body is the restaurant-facing copy: LLM on the live path (warm, plain, actionable), deterministic
+  // template under vitest / no key / any error (fail-closed §3.7). The measured [V] figures are preserved
+  // verbatim by the agent's number-guard (§14). evidence/title stay server-rendered (read-only [V]).
+  const body = await restaurantCopy(buildCopyInput(renderInput));
   return {
     nba_id: p.nba_id,
     action_type: p.action_type,
@@ -249,7 +255,7 @@ export async function dispatchDetail(nbaId: string, tenantId: string, exec: Exec
     reach_count,
     reach_preview,
     artifact_kind: art.artifact_kind,
-    content: art.content,
+    content: { ...art.content, body },
   };
 }
 
