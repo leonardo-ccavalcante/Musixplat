@@ -49,10 +49,16 @@ export async function runP02(opts: P02Options): Promise<P02Result> {
   let human = 0;
   let skipped = 0;
   for (const r of sample) {
-    // Green golden-set for this cohort×intent — the 2nd min() arm (a real verdict, produced here, never seeded).
+    // DEMO BOOTSTRAP (§14 honesty): there is no golden-set evaluator yet (EPIC-B4 not built). released_evals
+    // and status are RESULT columns that must NOT be seeded as measured ([V]). We insert the CONSERVATIVE
+    // floor (released_evals='LOW' caps least() to LOW — never a permissive grant) only so the hosted cockpit
+    // has the 2nd min() arm to show; provenance is stamped [I] (inferred/seeded) so nothing downstream can
+    // read it as a measured pass. A real evaluator (EPIC-B4) must overwrite it with [V] before any [V] claim.
     await query(
-      `insert into gov."Eval_Cell"(cohort_id, intent, version, released_evals, status)
-       values ($1,$2,'gs-1','LOW','green') on conflict (cohort_id, intent, version) do nothing`,
+      `insert into gov."Eval_Cell"(cohort_id, intent, version, released_evals, status, provenance_by_field)
+       values ($1,$2,'gs-1','LOW','green',
+               jsonb_build_object('released_evals','[I]','status','[I]'))
+       on conflict (cohort_id, intent, version) do nothing`,
       [r.cohort_id, intent],
     );
     const res = await proposeNba({ restaurantId: r.restaurant_id, cohortId: r.cohort_id, week });

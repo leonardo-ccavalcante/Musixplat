@@ -59,4 +59,26 @@ describe("P02 job — fills the cockpit; list is version-scoped (§3.5 / §3.11)
       c.release();
     }
   });
+
+  it("§14: the bootstrap Eval_Cell verdict is stamped [I] (seeded), never claimed as a measured [V]", async () => {
+    // There is no golden-set evaluator yet (EPIC-B4). The hosted seed inserts a conservative LOW/green
+    // cell so the cockpit has data — but released_evals/status are RESULT columns (never seeded as [V]).
+    // The provenance MUST mark them [I] so nothing downstream reads a fabricated pass as a measured one.
+    const c = await pool.connect();
+    try {
+      const cells = (
+        await c.query<{ prov: Record<string, string>; released_evals: string | null }>(
+          `select provenance_by_field as prov, released_evals from gov."Eval_Cell" limit 5`,
+        )
+      ).rows;
+      expect(cells.length).toBeGreaterThan(0);
+      for (const cell of cells) {
+        expect(cell.prov.released_evals).toBe("[I]"); // seeded/inferred, NOT a measured [V] verdict
+        expect(cell.prov.status).toBe("[I]");
+        expect(cell.released_evals).toBe("LOW"); // the conservative floor (least() caps autonomy to LOW)
+      }
+    } finally {
+      c.release();
+    }
+  });
 });
