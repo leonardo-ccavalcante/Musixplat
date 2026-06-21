@@ -110,7 +110,7 @@ export type RunDiagnosisInput = z.infer<typeof runDiagnosisInput>;
 export interface RunDiagnosisResult {
   problem_id: string;
   area_type: string;
-  confidence: number;
+  confidence: number | null; // classifier inference [C]; NULL on the proactive/typed path (none ran)
   degraded: boolean;
   affected: number;
   silent: number;
