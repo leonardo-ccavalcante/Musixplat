@@ -149,6 +149,8 @@ Plus the operational remainders from §2: **push branch + open PR + run the gate
 
 ## 5. Demo-blocking risks
 
+> **UPDATE 2026-06-21:** the **p_ref demo-blocker is FIXED** — PR #45 (`feat/demo-ref-fresh`): seed reads `app.demo_ref` GUC (tests stay fixed 2026-06-17 ⇒ deterministic; hosted anchors to current_date). · **NEW deployment gap (confirmed):** `OPENAI_API_KEY` must be set in **Railway's Variables** on the backend service — `openaiChatClient()`=`new OpenAI()` reads it by SDK default; locally it's absent from `.env.local` (only `.env.example` has the name). Without it, Run Motor (and any LLM agent) fails with "Missing credentials" — that IS the honest P2-5 error-state, not a code bug.
+
 ### CONFIRMED — the `p_ref` / `current_date` anchor mismatch (the seed)
 - `supabase/seed.sql:172` anchors the business base to a **FIXED** date:
   `select public.fn_generate_business_base(5000, date '2026-06-17');`

@@ -169,7 +169,11 @@ insert into gov."User"(user_id, tenant_id, org_level, role) values
 
 -- ── Business base (Restaurant + Order + Weekly_Connection + Conversation_Episode): 5000 restaurants,
 --    deterministic via fn_generate_business_base (DRY — the demo "generate example" button reuses it). ──
-select public.fn_generate_business_base(5000, date '2026-06-17');
+-- Demo-freshness vs test-determinism (REMAINING_WORK §5): the anchor reads the `app.demo_ref` session GUC
+-- when set, else falls back to the FIXED 2026-06-17. resetDb (tests) never sets it ⇒ 2026-06-17 ⇒ the §14
+-- numbers stay deterministic. The hosted seed (apply-hosted) sets app.demo_ref=current_date on its connection
+-- BEFORE this runs ⇒ the prod/demo base is anchored to TODAY (never goes stale).
+select public.fn_generate_business_base(5000, coalesce(nullif(current_setting('app.demo_ref', true), '')::date, date '2026-06-17'));
 -- 05D adoption: the platform feature-usage recency signal (Usage_Event) for the base restaurants, so the
 -- adoption diagnosis sees a REAL non-adopting population (~30%) — not every restaurant looking non-adopting.
 select public.fn_seed_usage_events(current_date);
