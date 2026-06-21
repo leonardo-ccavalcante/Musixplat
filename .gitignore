@@ -42,3 +42,6 @@ docs/**/*.png
 
 # local-only dev tooling (untracked by design — e.g. the 05B :5174→:3001 proxy vite config)
 vite.local.config.ts
+
+# QA artifacts (local evidence, not committed)
+.qa-reports/
