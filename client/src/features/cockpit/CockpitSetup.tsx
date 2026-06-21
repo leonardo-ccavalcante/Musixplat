@@ -29,7 +29,11 @@ export function CockpitSetup({ open, onClose }: { open: boolean; onClose: () => 
           setPrepErr("No business base yet — upload a CSV or generate an example base on the Cohorts screen first.");
           return;
         }
-        setPrep(`Done ✓ ${r.cohorts} cohorts · ${r.proposed} proposals (${r.auto_acted} cleared by the AI alone, ${r.escalated} for you).`);
+        if (r.alreadyPrepared) {
+          setPrep("Already prepared ✓ — your pool already has proposals. Clear the base on the Cohorts screen to reset, then prepare again.");
+        } else {
+          setPrep(`Done ✓ ${r.cohorts} cohorts · ${r.proposed} proposals (${r.auto_acted} cleared by the AI alone, ${r.escalated} for you).`);
+        }
         void utils.cockpit.list.invalidate();
         void utils.cockpit.weekSummary.invalidate();
         void utils.cockpit.autoActions.invalidate();
@@ -75,7 +79,7 @@ export function CockpitSetup({ open, onClose }: { open: boolean; onClose: () => 
         <h3 id="cs-prep" className="text-[0.7rem] uppercase tracking-wide text-mxm-content-tertiary">1 · Prepare the cockpit</h3>
         <p className="mt-1 max-w-[60ch] text-xs text-mxm-content-secondary">
           Runs the engine over your pool — builds cohorts (if needed), the governance floor, and the AI&apos;s
-          proposals. Idempotent: safe to click again.
+          proposals. Safe to click again: it won&apos;t duplicate, it only fills an empty cockpit.
         </p>
         <Button onClick={onPrepare} disabled={provision.isPending} className="mt-2">
           {provision.isPending ? "Preparing…" : "Prepare cockpit"}

@@ -54,12 +54,17 @@ describe("02:CP — provisionCockpit (the 'Preparar cockpit' button)", () => {
     }
   });
 
-  it("is idempotent: a second call skips P01 and adds no duplicate tiers", async () => {
+  it("is idempotent: a second call skips P01, proposes nothing new, no duplicate tiers/proposals", async () => {
     const tenantId = await aTenant();
-    const before = (await pool.query<{ n: number }>(`select count(*)::int n from gov."Policy_Tier"`)).rows[0]!.n;
+    const tiersBefore = (await pool.query<{ n: number }>(`select count(*)::int n from gov."Policy_Tier"`)).rows[0]!.n;
+    const propsBefore = (await pool.query<{ n: number }>(`select count(*)::int n from gov."NBA_Proposal"`)).rows[0]!.n;
     const r2 = await provisionCockpit(tenantId);
     expect(r2.ranCohorts).toBe(false); // cohorts now exist ⇒ P01 skipped
-    const after = (await pool.query<{ n: number }>(`select count(*)::int n from gov."Policy_Tier"`)).rows[0]!.n;
-    expect(after).toBe(before); // bootstrapPolicies is on-conflict ⇒ no duplicate tiers
+    expect(r2.alreadyPrepared).toBe(true); // proposals exist ⇒ the additive propose step is skipped
+    expect(r2.proposed).toBe(0);
+    const tiersAfter = (await pool.query<{ n: number }>(`select count(*)::int n from gov."Policy_Tier"`)).rows[0]!.n;
+    const propsAfter = (await pool.query<{ n: number }>(`select count(*)::int n from gov."NBA_Proposal"`)).rows[0]!.n;
+    expect(tiersAfter).toBe(tiersBefore); // bootstrapPolicies on-conflict ⇒ no duplicate tiers
+    expect(propsAfter).toBe(propsBefore); // additive proposeNba NOT re-run ⇒ queue does not grow (real idempotency)
   }, 180_000);
 });

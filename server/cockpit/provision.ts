@@ -6,6 +6,7 @@ import { proposeForPool, type ProposeForPoolResult } from "./runNbaForCohort.js"
 export interface ProvisionResult extends ProposeForPoolResult {
   needsBase: boolean; // no orders at all ⇒ the operator must upload/generate a base first (fail-closed)
   ranCohorts: boolean; // P01 was run here because this pool had no cohorts yet
+  alreadyPrepared: boolean; // this pool already had current-version proposals ⇒ propose step skipped (idempotent)
 }
 
 // One conservative ([I]) LOW/green Eval_Cell per (cohort, first intent) for THIS pool's current-version
@@ -53,7 +54,7 @@ export async function provisionCockpit(tenantId: string): Promise<ProvisionResul
     const w = await deriveRunWindow(); // derive from the data so ANY uploaded/generated base cohortizes
     if (!w) {
       // No orders at all ⇒ honest fail-closed: the operator must load a base first (§14, never invent data).
-      return { needsBase: true, ranCohorts: false, cohorts: 0, proposed: 0, auto_acted: 0, escalated: 0, skipped: 0 };
+      return { needsBase: true, ranCohorts: false, alreadyPrepared: false, cohorts: 0, proposed: 0, auto_acted: 0, escalated: 0, skipped: 0 };
     }
     await runP01({ week: w.prevWeek, refDate: w.refDate });
     await runP01({ week: w.week, refDate: w.refDate, prevSemana: w.prevWeek });
@@ -62,6 +63,21 @@ export async function provisionCockpit(tenantId: string): Promise<ProvisionResul
 
   await bootstrapPolicies(); // (2) global tiers (Policy_Tier is tier-keyed) — idempotent on policy_id
   await seedEvalFloor(tenantId, version); // (3) conservative [I] LOW floor for this pool's cohorts
-  const r = await proposeForPool(tenantId); // (4) tenant-scoped propose + auto-act
-  return { needsBase: false, ranCohorts, ...r };
+
+  // (4) propose ONLY if this pool has no current-version proposals yet — proposeNba is ADDITIVE (no dedup
+  // constraint), so re-running would clutter the queue with duplicates. Skip ⇒ "Prepare cockpit" is idempotent
+  // (it sets up an EMPTY cockpit; "Run NBA" is the separate, intentionally-additive re-run). Clearing the base
+  // on the Cohorts screen resets proposals, after which a fresh prepare proposes again.
+  const prepared = await query(
+    `select 1 from gov."NBA_Proposal" p
+       join cohort."Cohort_Membership_Snapshot" cms on cms.cohort_id = p.cohort_id
+       join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+      where p.cohort_rule_version = $1 limit 1`,
+    [version, tenantId],
+  );
+  if (prepared.length) {
+    return { needsBase: false, ranCohorts, alreadyPrepared: true, cohorts: 0, proposed: 0, auto_acted: 0, escalated: 0, skipped: 0 };
+  }
+  const r = await proposeForPool(tenantId); // tenant-scoped propose + auto-act
+  return { needsBase: false, ranCohorts, alreadyPrepared: false, ...r };
 }

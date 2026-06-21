@@ -115,4 +115,44 @@ describe("02:CP — cockpit config upload (operator governance, §14-safe)", () 
     const n = (await pool.query(`select 1 from gov."Policy_Tier" where policy_id='PT-bad'`)).rowCount;
     expect(n).toBe(0);
   });
+
+  it("rejects an out-of-range safety-knob value (§3.8 allowlist + range, fail-closed)", async () => {
+    const before = (
+      await pool.query<{ value: string }>(`select value from catalog."Config_Knobs" where key='k_anon_threshold'`)
+    ).rows[0]!.value;
+    await expect(
+      uploadCockpitConfig({ knobs: [{ key: "k_anon_threshold", value: "-1" }], policy_tiers: [] }, TENANT),
+    ).rejects.toThrow();
+    // and the anchor knob is not even operator-settable
+    await expect(
+      uploadCockpitConfig({ knobs: [{ key: "cohort_rule_version_current", value: "invented" }], policy_tiers: [] }, TENANT),
+    ).rejects.toThrow();
+    const after = (
+      await pool.query<{ value: string }>(`select value from catalog."Config_Knobs" where key='k_anon_threshold'`)
+    ).rows[0]!.value;
+    expect(after).toBe(before); // nothing corrupted
+  });
+
+  it("rejects a signer who exists in-pool but is NOT a senior manager (authority, §3.4)", async () => {
+    await expect(
+      uploadCockpitConfig(
+        {
+          knobs: [],
+          policy_tiers: [
+            {
+              policy_id: "PT-ai",
+              tier_id: "managed_brand",
+              policy_version: "pv-ai",
+              tier_cap: "MEDIUM",
+              allowed_today: { auto_actions: [] },
+              human_signature: "U-AI-001", // exists in POOL-001 but role='ai_agent', not a manager
+            },
+          ],
+        },
+        TENANT,
+      ),
+    ).rejects.toThrow();
+    const n = (await pool.query(`select 1 from gov."Policy_Tier" where policy_id='PT-ai'`)).rowCount;
+    expect(n).toBe(0);
+  });
 });
