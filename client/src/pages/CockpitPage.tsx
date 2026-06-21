@@ -8,6 +8,8 @@ import { CockpitHero, type RunResult, type MotorRunResult } from "@/features/coc
 import { CatalogDrawer } from "@/features/cockpit/CatalogDrawer";
 import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
 import { EscalatedList } from "@/features/cockpit/EscalatedList";
+import { AutonomyControls } from "@/features/cockpit/AutonomyControls";
+import { Button } from "@/components/ui/Button";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
 import { type RowAction, type RowState, type KbReview } from "@/features/cockpit/CockpitRow";
@@ -32,6 +34,7 @@ export function CockpitPage() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [registryOpen, setRegistryOpen] = useState(false);
   const [escalationsOpen, setEscalationsOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [motorResult, setMotorResult] = useState<MotorRunResult | null>(null);
 
@@ -142,11 +145,17 @@ export function CockpitPage() {
 
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2.5vw,2.25rem)]">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-mxm-content">Autonomy Cockpit</h1>
-        <p className="mt-1 max-w-[70ch] text-sm text-mxm-content-secondary">
-          Where is my AI fleet acting on its own — and exactly where do I need to step in?
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-mxm-content">Autonomy Cockpit</h1>
+          <p className="mt-1 max-w-[70ch] text-sm text-mxm-content-secondary">
+            Where is my AI fleet acting on its own — and exactly where do I need to step in?
+          </p>
+        </div>
+        {/* 02C:6b — the human-editable boundary the motor acts within (range · knobs · learnings to approve). */}
+        <Button variant="ghost" onClick={() => setControlsOpen(true)} aria-haspopup="dialog">
+          Autonomy Controls
+        </Button>
       </header>
 
       {!ready || list.isLoading ? (
@@ -210,6 +219,7 @@ export function CockpitPage() {
       <CatalogDrawer open={catalogOpen} onClose={() => setCatalogOpen(false)} />
       <AutonomousRegistry open={registryOpen} onClose={() => setRegistryOpen(false)} />
       <EscalatedList open={escalationsOpen} onClose={() => setEscalationsOpen(false)} />
+      <AutonomyControls open={controlsOpen} onClose={() => setControlsOpen(false)} />
     </main>
   );
 }
