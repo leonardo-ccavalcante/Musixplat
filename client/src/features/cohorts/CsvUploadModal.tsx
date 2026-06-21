@@ -2,6 +2,24 @@ import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { trpc } from "@/lib/trpc";
+import { chunkCsvByRestaurant } from "./csvChunk";
+
+// Rows per upload batch. 100k in one request is ~20s server-side → trips the deploy gateway timeout;
+// batches of this size are a couple seconds each. Whole restaurants only (see chunkCsvByRestaurant).
+const CHUNK_ROWS = 8000;
+
+// Base64 of a UTF-8 string, browser-native (matches the server's Buffer.from(b64,'base64').toString('utf8')).
+function toBase64Utf8(text: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.slice(dataUrl.indexOf(",") + 1));
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(new Blob([text], { type: "text/csv" }));
+  });
+}
 
 // Task 8 — CSV upload modal. Reuses <Modal> for all a11y (focus-trap, Esc, focus-return, aria-modal).
 // TRIGGER-IN: uploadOpen=true  DATA-OUT: restaurants+orders counts  TRIGGERS: onUploaded→invalidateAll
@@ -18,6 +36,7 @@ export function CsvUploadModal({
   const upload = trpc.cohorts.uploadCsv.useMutation();
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<{ restaurants: number; orders: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,22 +56,29 @@ export function CsvUploadModal({
     if (!file) return;
     setErr(null);
     setResult(null);
+    setProgress(null);
     setBusy(true);
     try {
-      const contentBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          resolve(dataUrl.slice(dataUrl.indexOf(",") + 1));
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const r = await upload.mutateAsync({ filename: file.name, contentBase64 });
-      setResult(r);
+      // Split into whole-restaurant batches so each request stays small/fast (no gateway timeout at
+      // 100k scale). Each batch is a self-contained CSV (header + its rows); counts sum cleanly.
+      const chunks = chunkCsvByRestaurant(await file.text(), CHUNK_ROWS);
+      if (chunks.length === 0) throw new Error("CSV has no data rows");
+      let restaurants = 0;
+      let orders = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        setProgress({ done: i, total: chunks.length });
+        const contentBase64 = await toBase64Utf8(chunks[i]!);
+        const r = await upload.mutateAsync({ filename: file.name, contentBase64 });
+        restaurants += r.restaurants;
+        orders += r.orders;
+      }
+      setProgress({ done: chunks.length, total: chunks.length });
+      setResult({ restaurants, orders });
       onUploaded();
       onClose();
     } catch (e) {
+      // A batch failed → fail-closed: surface the error. Earlier batches already committed (server has
+      // no cross-batch transaction); the user can Clear database and retry. Stated in the error copy.
       setErr(e instanceof Error ? e.message : "Upload failed (fail-closed)");
     } finally {
       setBusy(false);
@@ -115,9 +141,12 @@ export function CsvUploadModal({
           />
         </label>
 
-        {/* Busy state */}
+        {/* Busy state — large files upload in batches; surface which batch is in flight */}
         <div aria-live="polite" className="text-sm text-mxm-content-secondary">
-          {busy && "Uploading + validating…"}
+          {busy &&
+            (progress && progress.total > 1
+              ? `Uploading batch ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`
+              : "Uploading + validating…")}
           {result && `Imported · ${result.restaurants} restaurants · ${result.orders} orders`}
         </div>
 
@@ -125,7 +154,14 @@ export function CsvUploadModal({
         {err && (
           <div role="alert" className="flex items-start gap-2 text-sm text-mxm-red">
             <span aria-hidden="true">⚠</span>
-            <span>Rejected: {err}</span>
+            <span>
+              Rejected: {err}
+              {progress && progress.total > 1 && progress.done > 0 && (
+                <span className="mt-0.5 block text-mxm-content-tertiary">
+                  {progress.done} of {progress.total} batches loaded before this — use “Clear database” and retry.
+                </span>
+              )}
+            </span>
           </div>
         )}
 

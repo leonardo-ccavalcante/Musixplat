@@ -247,6 +247,12 @@ export const cohortsRouter = router({
           ],
         );
         await c.query(
+          // Synthesize connection for ALL restaurants, anchored on the global max(order_date). This is
+          // deliberately NOT scoped to the current batch: chunked uploads arrive in batches and the
+          // global max grows as later (newer-dated) batches land, so each call re-anchors every
+          // restaurant on the latest max — keeping their weeks inside the cohort engine's 63-day
+          // connection window (on conflict keeps it idempotent). Scoping to the batch would strand an
+          // early batch's weeks before the window once a later batch raised the max → NULL percentile.
           `insert into tenant."Weekly_Connection"(restaurant_id, week, connected_hours, committed_hours)
            select r.restaurant_id,
                   (date_trunc('week', m.maxd)::date - (w * 7)),
