@@ -51,7 +51,10 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('baseline_team_size',        '10',  '[C]', 'leo'),
   ('operator_available_minutes','480', '[C]', 'leo'),
   ('aht_ai_absorbed_minutes',   '0.5', '[C]', 'leo'),
-  ('sla_target_hours',          '24',  '[V]', 'leo');
+  ('sla_target_hours',          '24',  '[V]', 'leo'),
+  -- 05D diagnosis threshold — DISTINCT from the A1 nba_connection_min_ratio ACTION policy (§3.8 by name):
+  -- this decides what COUNTS as a diagnosed connection problem; the A1 knob decides when to PROPOSE reconnect.
+  ('connection_min_ratio',      '0.80', '[C]', 'leo');
 
 -- ── 02 NBA action-threshold knobs ([C] placeholders — the human-approved ranges that gate autonomy,
 --    read BY NAME §3.8. "value está en el mecanismo": Leo ratifies the numbers in the cockpit). ──

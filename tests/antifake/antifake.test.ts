@@ -161,4 +161,33 @@ describe("05D F0 anti-fake — general path reports a problem with NO produced r
     expect(r[0]!.revenue_lost).toBeNull();
     expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
   });
+
+  it("connection (F1): revenue_lost is NULL and Affected is empty for a freshly-reported problem", async () => {
+    const POOL = "POOL-AF-CONN";
+    // INPUT only — one low-connection restaurant (no producer runs at report time).
+    await pool.query(
+      `insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week)
+       values ('R-AFC-1', $1, 'long_tail','long_tail'::segment, date '2026-01-01','Centro','pizza',50)`,
+      [POOL],
+    );
+    await pool.query(
+      `insert into tenant."Weekly_Connection"(restaurant_id, week, connected_hours, committed_hours)
+       select 'R-AFC-1', (current_date - (w*7)), 30, 50 from generate_series(0,3) w`,
+    );
+
+    const reported = await caller(POOL).diagnosis.reportProblem({
+      restaurantId: "R-AFC-1",
+      problem_type: "connection",
+    });
+    expect(reported.created).toBe(true);
+
+    // §14: the connection report path computes NOTHING — revenue_lost NULL, zero Affected rows.
+    const r = await rows<{ revenue_lost: number | null }>(
+      pool,
+      `select revenue_lost from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [reported.problem_id],
+    );
+    expect(r[0]!.revenue_lost).toBeNull();
+    expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
+  });
 });

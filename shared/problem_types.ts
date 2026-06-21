@@ -16,6 +16,17 @@ export const PROBLEM_TYPES: Record<string, ProblemDescriptor> = {
     hypotheses: ["payment was not executed", "refund dispute concentrated", "balance mismatch"],
     metric: "recover_failed_payment_value", origin: "builtin",
   },
+  connection: {
+    problem_type: "connection", area_type: "performance", label: "Low connection",
+    // ratio = Σconnected/Σcommitted over the window; affected when below the diagnosis knob.
+    // threshold read BY NAME (§3.8) — connection_min_ratio is the DIAGNOSIS threshold, DISTINCT from the
+    // A1 nba_connection_min_ratio ACTION policy (tuning when to PROPOSE a reconnect must not silently
+    // shift what COUNTS as a diagnosed connection problem). Codex P2.
+    affected: { table: "Weekly_Connection", signal: "connection_ratio < connection_min_ratio", operator: "lt", threshold_knob: "connection_min_ratio" },
+    impact: { kind: "at_risk_gmv" }, concentration_dim: "zone",
+    hypotheses: ["restaurant device/app disconnected", "POS/integration failure", "staff not logging in during committed hours"],
+    metric: "restore_connection_uptime", origin: "builtin",
+  },
 };
 export function getDescriptor(t: string): ProblemDescriptor {
   const d = PROBLEM_TYPES[t];

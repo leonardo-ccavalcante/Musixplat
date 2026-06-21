@@ -117,7 +117,7 @@ export async function runDiagnosis(
           [prob.conversation_id, tenantId],
         )
       )[0]?.intent ?? ""
-    : "payments process monitor — proactive non-payment sweep";
+    : `${descriptor.label} — proactive ${descriptor.area_type} sweep`; // 05D F1: descriptor-derived (NOT the hard-coded "payments" text) so a typed proactive sweep classifies to its OWN area, not finance (Codex P1)
   guardInjection(text); // signal is audit-only; never executes embedded instructions.
 
   // B.2 classify + B.3 rank — the AGENTE provider (TEXT only, §8). Grounded on prior reviewed cases
