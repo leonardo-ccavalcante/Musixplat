@@ -1,6 +1,7 @@
 import { query, withTx } from "../db/pool.js";
 import { resolveEmbedder, embedWithRetry, EMBED_MODEL, type Embedder } from "./embedder.js";
-import { chatText, openaiChatClient, CHAT_MODEL, type ChatClient, type TokenUsage } from "../_core/llm.js";
+import { chatText, openaiChatClient, type ChatClient, type TokenUsage } from "../_core/llm.js";
+import { getActiveChatModel } from "../_core/model.js";
 import { recordUsageSafe, type ProcessType } from "../_core/usage.js";
 import { chunk } from "./chunker.js";
 import { classifyDocType } from "./classify.js";
@@ -37,7 +38,8 @@ export async function ingestDocument(
   // cost AFTER the doc_id exists. Deterministic providers (tests) never fire these ⇒ both stay null.
   let chatUsage: TokenUsage | null = null;
   let embedUsage: TokenUsage | null = null;
-  const cls = await classifyDocType(doc.text, (u) => (chatUsage = u));
+  const chatModel = await getActiveChatModel(); // operator-selected model (knob)
+  const cls = await classifyDocType(doc.text, (u) => (chatUsage = u), chatModel);
   const parts = chunk(doc.text, {
     size: await knob("kb_chunk_size"),
     overlap: await knob("kb_chunk_overlap"),
@@ -65,7 +67,7 @@ export async function ingestDocument(
   });
   // Log cost AFTER the atomic write succeeded (no orphan ⇒ no orphan cost), attributed to the doc.
   if (chatUsage)
-    await recordUsageSafe({ tenantId, processType: "kb_ingest", kind: "chat", model: CHAT_MODEL, refId: result.docId, usage: chatUsage });
+    await recordUsageSafe({ tenantId, processType: "kb_ingest", kind: "chat", model: chatModel, refId: result.docId, usage: chatUsage });
   if (embedUsage)
     await recordUsageSafe({ tenantId, processType: "kb_ingest", kind: "embedding", model: EMBED_MODEL, refId: result.docId, usage: embedUsage });
   return result;
@@ -144,12 +146,14 @@ export async function answerFromBase(
     .map((h) => `Source: ${h.filename} (${h.docType ?? "unclassified"})\n${h.content}`)
     .join("\n\n---\n\n");
   const client = chat ?? (await openaiChatClient());
+  const chatModel = await getActiveChatModel();
   const { text: answer, usage } = await chatText(
     client,
     ANSWER_SYSTEM,
     `Question: ${question}\n\nContext passages:\n${context}`,
     400,
+    chatModel,
   );
-  await recordUsageSafe({ tenantId, processType: "kb_ask", kind: "chat", model: CHAT_MODEL, usage });
+  await recordUsageSafe({ tenantId, processType: "kb_ask", kind: "chat", model: chatModel, usage });
   return { grounded: true, answer, sources, hits };
 }

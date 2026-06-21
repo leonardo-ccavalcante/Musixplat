@@ -1,7 +1,97 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/Button";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { formatUsd, formatTokens } from "@/lib/cost";
+
+// Common OpenAI chat models; the operator can also type any other model id (custom). The active value
+// is always shown even if not in this list, so a custom/legacy selection never disappears.
+const CURATED_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"];
+
+const inputCls =
+  "rounded-mxm border border-mxm-border bg-mxm-bg-secondary px-2 py-1 text-sm text-mxm-content tabular-nums";
+
+// Operator surface: pick the chat model the agents use + set its $/1M price (feeds gov.v_llm_cost).
+function ModelPricing({ ready }: { ready: boolean }) {
+  const utils = trpc.useUtils();
+  const cfg = trpc.cost.config.useQuery(undefined, { enabled: ready });
+  const refresh = (): void => {
+    void utils.cost.config.invalidate();
+    void utils.cost.summary.invalidate();
+  };
+  const setModel = trpc.cost.setActiveModel.useMutation({ onSuccess: refresh });
+  const setPrice = trpc.cost.setPrice.useMutation({ onSuccess: refresh });
+
+  const [model, setModelField] = useState("");
+  const [pin, setPin] = useState("");
+  const [pout, setPout] = useState("");
+
+  // Prefill the price form from the chosen model's current knobs whenever config or the field changes.
+  const active = cfg.data?.activeModel ?? "";
+  const chosen = model || active;
+  useEffect(() => {
+    const p = cfg.data?.prices.find((x) => x.model === chosen);
+    setPin(p?.inPerMtok != null ? String(p.inPerMtok) : "");
+    setPout(p?.outPerMtok != null ? String(p.outPerMtok) : "");
+  }, [cfg.data, chosen]);
+
+  if (!ready || cfg.isLoading || !cfg.data) return null;
+  const options = Array.from(new Set([active, ...CURATED_MODELS])).filter(Boolean);
+
+  return (
+    <section className="rounded-mxm border border-mxm-border p-4">
+      <h2 className="mb-3 text-sm font-medium text-mxm-content">Model &amp; pricing</h2>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-mxm-content-secondary">Active chat model (agents use this)</span>
+          <select
+            className={inputCls}
+            value={active}
+            onChange={(e) => setModel.mutate({ model: e.target.value })}
+          >
+            {options.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-mxm-content-secondary">Price for model</span>
+          <input
+            className={`${inputCls} w-48`}
+            value={chosen}
+            onChange={(e) => setModelField(e.target.value)}
+            placeholder="model id"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-mxm-content-secondary">$/1M input</span>
+          <input className={`${inputCls} w-28`} value={pin} onChange={(e) => setPin(e.target.value)} inputMode="decimal" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-mxm-content-secondary">$/1M output</span>
+          <input className={`${inputCls} w-28`} value={pout} onChange={(e) => setPout(e.target.value)} inputMode="decimal" />
+        </label>
+        <Button
+          variant="ghost"
+          disabled={!chosen || pin === "" || pout === "" || setPrice.isPending}
+          onClick={() =>
+            setPrice.mutate({ model: chosen, inPerMtok: Number(pin), outPerMtok: Number(pout) })
+          }
+        >
+          {setPrice.isPending ? "Saving…" : "Save price"}
+        </Button>
+      </div>
+      {cfg.data.prices.length > 0 && (
+        <p className="mt-3 text-xs text-mxm-content-tertiary">
+          Configured: {cfg.data.prices.map((p) => `${p.model} (${formatUsd(p.inPerMtok)}/${formatUsd(p.outPerMtok)} per 1M)`).join(" · ")}
+        </p>
+      )}
+    </section>
+  );
+}
 
 // P07 — AI Cost. Read-only VITRINA over gov.v_llm_cost: it only READS produced numbers (§3.6), never
 // computes a cost here. Unpriced models show "—" + an honest banner, never a fake $0 (§3.7). dev-login
@@ -63,6 +153,10 @@ export function CostPage() {
           configured price shows “—”, never a misleading $0.
         </p>
       </header>
+
+      <div className="mb-6">
+        <ModelPricing ready={ready} />
+      </div>
 
       {!ready || q.isLoading ? (
         <LoadingState label={!ready ? "Signing in…" : "Reading cost…"} />

@@ -6,7 +6,7 @@
 //     testable E2E. The CI gate injects this so it never needs a network/key.
 //   - llmReasoning(client): real OpenAI (AGENTE pieces US-B2.1.1/US-B2.2.1). Used by scripts/run-05b.
 //     TEXT only; on any API/parse error it THROWS so the caller fail-closes (BR-B3), never guesses.
-import { chatText, type ChatClient, type TokenUsage } from "../_core/llm.js";
+import { chatText, CHAT_MODEL, type ChatClient, type TokenUsage } from "../_core/llm.js";
 
 // Optional sink: the provider reports each call's token usage so the caller (which has tenant +
 // problem_id context) can log cost-per-process (P07). Off by default ⇒ no behaviour change for tests.
@@ -74,9 +74,13 @@ const unfence = (s: string): string =>
 
 /** Real-OpenAI provider for the working prototype. TEXT only (§8). Parses strict JSON; anything
  *  malformed or off-list THROWS ⇒ the orchestrator degrades-to-human (BR-B3), never an optimistic guess. */
-export function llmReasoning(client: ChatClient, onUsage?: UsageSink): DiagnosisReasoning {
+export function llmReasoning(
+  client: ChatClient,
+  onUsage?: UsageSink,
+  model: string = CHAT_MODEL,
+): DiagnosisReasoning {
   const ask = async (system: string, user: string, op: "classify" | "rank"): Promise<string> => {
-    const { text, usage } = await chatText(client, system, user, 256);
+    const { text, usage } = await chatText(client, system, user, 256, model);
     onUsage?.(usage, op);
     return text;
   };

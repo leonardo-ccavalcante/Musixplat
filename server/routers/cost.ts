@@ -1,6 +1,26 @@
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
-import { ticketCostInput, type CostSummary, type TicketCost } from "../../shared/contracts_cost.js";
+import { CHAT_MODEL } from "../_core/llm.js";
+import {
+  ticketCostInput,
+  setActiveModelInput,
+  setPriceInput,
+  type CostSummary,
+  type TicketCost,
+  type CostConfig,
+} from "../../shared/contracts_cost.js";
+
+const ACTIVE_MODEL_KNOB = "llm_chat_model";
+const priceKey = (dir: "in" | "out", model: string): string => `llm_price_${dir}_per_mtok:${model}`;
+
+async function upsertKnob(key: string, value: string): Promise<void> {
+  // Operator-set ⇒ provenance [V] (a human chose it), §3.8 by name.
+  await query(
+    `insert into catalog."Config_Knobs"(key, value, provenance, owner) values ($1,$2,'[V]','operator')
+     on conflict (key) do update set value = excluded.value, provenance = '[V]', owner = 'operator'`,
+    [key, value],
+  );
+}
 
 // P07 AI Cost — read-only VITRINA over gov.v_llm_cost. Every number is SQL (§3.6): this router only
 // AGGREGATES the produced view, never computes a cost itself. tenant resolved server-side (§3.4).
@@ -85,5 +105,43 @@ export const costRouter = router({
         outTok: r.out_tok,
       })),
     };
+  }),
+
+  // Model & pricing config (operator surface). Reads the active chat model + every per-model price knob.
+  config: tenantProcedure.query(async (): Promise<CostConfig> => {
+    const active = (
+      await query<{ value: string }>(`select value from catalog."Config_Knobs" where key = $1`, [
+        ACTIVE_MODEL_KNOB,
+      ])
+    )[0]?.value;
+    const knobs = await query<{ key: string; value: string }>(
+      `select key, value from catalog."Config_Knobs" where key like 'llm\\_price\\_%'`,
+    );
+    const byModel = new Map<string, { inPerMtok: number | null; outPerMtok: number | null }>();
+    for (const k of knobs) {
+      const m = /^llm_price_(in|out)_per_mtok:(.+)$/.exec(k.key);
+      if (!m) continue;
+      const entry = byModel.get(m[2]!) ?? { inPerMtok: null, outPerMtok: null };
+      if (m[1] === "in") entry.inPerMtok = Number(k.value);
+      else entry.outPerMtok = Number(k.value);
+      byModel.set(m[2]!, entry);
+    }
+    return {
+      activeModel: active || CHAT_MODEL,
+      prices: [...byModel.entries()].map(([model, p]) => ({ model, ...p })),
+    };
+  }),
+
+  // Operator picks the chat model the agents will use (takes effect via getActiveChatModel on next call).
+  setActiveModel: tenantProcedure.input(setActiveModelInput).mutation(async ({ input }) => {
+    await upsertKnob(ACTIVE_MODEL_KNOB, input.model);
+    return { ok: true as const };
+  }),
+
+  // Operator sets a model's price ($ per 1M tokens, in + out). Feeds gov.v_llm_cost (BY NAME, §3.8).
+  setPrice: tenantProcedure.input(setPriceInput).mutation(async ({ input }) => {
+    await upsertKnob(priceKey("in", input.model), String(input.inPerMtok));
+    await upsertKnob(priceKey("out", input.model), String(input.outPerMtok));
+    return { ok: true as const };
   }),
 });

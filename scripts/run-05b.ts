@@ -1,4 +1,5 @@
-import { openaiChatClient, CHAT_MODEL } from "../server/_core/llm.js";
+import { openaiChatClient } from "../server/_core/llm.js";
+import { getActiveChatModel } from "../server/_core/model.js";
 import { recordUsageSafe } from "../server/_core/usage.js";
 import { pool, query } from "../server/db/pool.js";
 import { runDiagnosis } from "../server/diagnosis/orchestrator.js";
@@ -23,18 +24,19 @@ async function main(): Promise<void> {
   // P07 cost tracking: the diagnosis "ticket" is one runDiagnosis call. The provider reports usage via
   // onUsage; we log it against the problem being diagnosed (ref_id) so cost-per-ticket is queryable in
   // gov.v_llm_cost. currentRef is set before each runDiagnosis (sequential, awaited ⇒ no interleave).
+  const model = await getActiveChatModel(); // operator-selected chat model (knob), fallback default
   let currentRef: string | null = null;
   const onUsage = (usage: { inputTokens: number; outputTokens: number }): void =>
     void recordUsageSafe({
       tenantId: POOL_PAY,
       processType: "diagnosis",
       kind: "chat",
-      model: CHAT_MODEL,
+      model,
       refId: currentRef,
       usage,
     });
   const reasoning: DiagnosisReasoning = hasKey
-    ? llmReasoning(await openaiChatClient(), onUsage)
+    ? llmReasoning(await openaiChatClient(), onUsage, model)
     : deterministicReasoning;
   console.warn(`run-05b: AGENTE reasoning = ${hasKey ? "OpenAI (real LLM)" : "deterministic (no OPENAI_API_KEY)"}`);
 
