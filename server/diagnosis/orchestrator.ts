@@ -11,7 +11,13 @@ import { dispatchPriority, routeNowQueue } from "./priority.js";
 import { routeStub } from "./routing.js";
 import { upsertCaseRepo } from "./case_repo.js";
 import { emitDossier, type DossierGateResult } from "./dossier.js";
-import { deterministicReasoning, type DiagnosisReasoning, type GroundingCase } from "./reasoning.js";
+import {
+  deterministicReasoning,
+  type DiagnosisReasoning,
+  type GroundingCase,
+  type AreaClassification,
+  type RankedPath,
+} from "./reasoning.js";
 import { searchKnowledge } from "../knowledge/store.js";
 import type { Embedder } from "../knowledge/embedder.js";
 import type { Criticality } from "../../shared/contracts_05b.js";
@@ -40,7 +46,7 @@ async function fetchGrounding(tenantId: string, areaType?: string): Promise<Grou
     area_type: string;
     path_used: unknown;
     discarded_branches: unknown;
-    probability: number | null;
+    probability: string | null; // node-pg returns a numeric column as a STRING — coerce below (honest type)
   }>(
     `select pattern, area_type, path_used, discarded_branches, probability
        from tenant."Knowledge_Case"
@@ -54,7 +60,7 @@ async function fetchGrounding(tenantId: string, areaType?: string): Promise<Grou
     areaType: r.area_type,
     pathUsed: r.path_used,
     discardedBranches: r.discarded_branches,
-    probability: r.probability,
+    probability: r.probability == null ? null : Number(r.probability), // numeric(string) → number | null
   }));
 }
 
@@ -100,35 +106,55 @@ export async function runDiagnosis(
     : "payments process monitor — proactive non-payment sweep";
   guardInjection(text); // signal is audit-only; never executes embedded instructions.
 
-  // B.2 classify (TEXT only). Grounded on prior reviewed cases (BR-B3); empty ⇒ ungrounded as before.
-  // Grounding floor: low confidence + no KB precedent ⇒ degrade (BR-B3).
-  const classifyExamples = await fetchGrounding(tenantId);
-  const cls = await reasoning.classifyArea({ text, hint: prob.criticality, examples: classifyExamples });
-  const floor = await knob("threshold_classification"); // seeded 05B classify floor (§3.8, fail-closed)
-  const kb = await query<{ n: number }>(
-    `select count(*)::int n from tenant."Knowledge_Case" where tenant_id = $1 and area_type = $2`,
-    [tenantId, cls.areaType],
-  );
-  const degraded = cls.confidence < floor && (kb[0]?.n ?? 0) === 0;
-  await query(
-    `update tenant."Diagnosed_Problem"
-        set area_type = $2, confidence = $3,
-            status = case when $4 then 'needs_human' else status end,
-            provenance_by_field = provenance_by_field
-              || jsonb_build_object('area_type','[C]','confidence','[C]')
-      where problem_id = $1 and tenant_id = $5`,
-    [problemId, cls.areaType, cls.confidence, degraded, tenantId],
-  );
+  // B.2 classify + B.3 rank — the AGENTE provider (TEXT only, §8). Grounded on prior reviewed cases
+  // (BR-B3); empty ⇒ ungrounded as before. Any PROVIDER failure — off-contract output, set-equality
+  // violation (model invented/dropped/duplicated a hypothesis), or an empty rank — is fail-closed to
+  // needs_human (BR-B3 / §3.7): the case is degraded, never left 'open' as if undiagnosed and never a
+  // guess. We mark needs_human, then re-throw so the caller sees the degrade rather than a half-run.
+  let cls: AreaClassification;
+  let degraded: boolean;
+  let ranked: RankedPath[];
+  try {
+    const classifyExamples = await fetchGrounding(tenantId);
+    cls = await reasoning.classifyArea({ text, hint: prob.criticality, examples: classifyExamples });
+    const floor = await knob("threshold_classification"); // seeded 05B classify floor (§3.8, fail-closed)
+    const kb = await query<{ n: number }>(
+      `select count(*)::int n from tenant."Knowledge_Case" where tenant_id = $1 and area_type = $2`,
+      [tenantId, cls.areaType],
+    );
+    // Grounding floor: low confidence + no KB precedent ⇒ degrade (BR-B3).
+    degraded = cls.confidence < floor && (kb[0]?.n ?? 0) === 0;
+    await query(
+      `update tenant."Diagnosed_Problem"
+          set area_type = $2, confidence = $3,
+              status = case when $4 then 'needs_human' else status end,
+              provenance_by_field = provenance_by_field
+                || jsonb_build_object('area_type','[C]','confidence','[C]')
+        where problem_id = $1 and tenant_id = $5`,
+      [problemId, cls.areaType, cls.confidence, degraded, tenantId],
+    );
 
-  // B.3 issue-tree (provider ranks the deterministic seed) + B.4 lazy-fetch the single top source (BR-B2).
-  // Grounded on reviewed cases for THIS area: falsified branches get pushed lower (set-equality holds).
-  const rankExamples = await fetchGrounding(tenantId, cls.areaType);
-  const ranked = await reasoning.rankPaths({
-    areaType: cls.areaType,
-    hypotheses: HYPOTHESES[cls.areaType] ?? ["unclassified hypothesis"],
-    examples: rankExamples,
-  });
-  if (ranked.length === 0) throw new Error("runDiagnosis: rankPaths returned no paths (fail-closed)");
+    // B.3 issue-tree: provider ranks the deterministic seed. Grounded on reviewed cases for THIS area:
+    // falsified branches get pushed lower (set-equality holds — the model may only permute the seed).
+    const rankExamples = await fetchGrounding(tenantId, cls.areaType);
+    ranked = await reasoning.rankPaths({
+      areaType: cls.areaType,
+      hypotheses: HYPOTHESES[cls.areaType] ?? ["unclassified hypothesis"],
+      examples: rankExamples,
+    });
+    if (ranked.length === 0) throw new Error("runDiagnosis: rankPaths returned no paths (fail-closed)");
+  } catch (e) {
+    // fail-closed (§3.7 / BR-B3): a reasoning-provider failure degrades the case to needs_human — never
+    // leaves it 'open' as if it were never diagnosed. Re-throw so the caller knows the run degraded.
+    await query(
+      `update tenant."Diagnosed_Problem"
+          set status = 'needs_human',
+              provenance_by_field = provenance_by_field || jsonb_build_object('status','[C]')
+        where problem_id = $1 and tenant_id = $2`,
+      [problemId, tenantId],
+    );
+    throw e;
+  }
   const tree: IssueTree = {
     paths: ranked.map((p) => ({
       path_id: p.path_id,

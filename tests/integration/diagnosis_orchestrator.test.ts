@@ -134,6 +134,26 @@ describe("05B EPIC-B1 — runDiagnosis (E2E sequencing, §14 anti-fake, fail-clo
     expect(seen.classify?.some((c) => c.pattern === "late payout pattern")).toBe(true);
   });
 
+  it("BR-B3 fail-closed: a provider rank failure degrades the case to needs_human (not left open)", async () => {
+    // The live set-equality guard THROWS when the model invents/drops/duplicates a hypothesis. The
+    // orchestrator must translate that into the needs_human degrade (BR-B3) — never leave the case 'open'
+    // as if it were never touched. (Codex P1: the guard threw but runDiagnosis didn't catch → stayed open.)
+    const problemId = await seedReactive();
+    const throwingRank: DiagnosisReasoning = {
+      classifyArea: async () => ({ areaType: "finance", confidence: 0.9 }),
+      rankPaths: async () => {
+        throw new Error("rankPaths: output is not a permutation of the seed hypotheses");
+      },
+    };
+    await expect(runDiagnosis(problemId, "POOL-DIAG", throwingRank)).rejects.toThrow();
+    const r = await rows<{ status: string }>(
+      pool,
+      `select status from tenant."Diagnosed_Problem" where problem_id=$1`,
+      [problemId],
+    );
+    expect(r[0]?.status).toBe("needs_human"); // degraded, not left 'open'
+  });
+
   it("BR-B3 fail-closed: unclassifiable text + no KB ⇒ degrade-to-human (status needs_human)", async () => {
     await pool.query(`
       insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date)

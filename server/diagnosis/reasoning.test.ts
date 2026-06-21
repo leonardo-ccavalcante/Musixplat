@@ -99,6 +99,17 @@ describe("llmReasoning (real-OpenAI path, faked client)", () => {
     );
   });
 
+  it("throws when the model DUPLICATES a hypothesis (right length, but not a permutation)", async () => {
+    // Same count as the seed (2), but h1 twice + h2 missing ⇒ not a permutation. Catches the model
+    // padding a dropped hypothesis with a repeat to dodge the length check (§3.11 change-lock).
+    const r = llmReasoning(
+      fakeClient('[{"hypothesis":"h1","probability":0.9},{"hypothesis":"h1","probability":0.4}]'),
+    );
+    await expect(r.rankPaths({ areaType: "finance", hypotheses: ["h1", "h2"] })).rejects.toThrow(
+      /permutation/,
+    );
+  });
+
   it("classifyArea treats the problem text as DATA — anti-injection directive in the system prompt", async () => {
     let system = "";
     const client = {
@@ -136,7 +147,7 @@ describe("llmReasoning (real-OpenAI path, faked client)", () => {
     const ranked = await llmReasoning(client).rankPaths({
       areaType: "finance",
       hypotheses: ["h1", "h2"],
-      examples: [{ pattern: "late payouts", discardedBranches: ["h2 was falsified here"], probability: 0.8 }],
+      examples: [{ pattern: "late payouts", discardedBranches: ["h2 was falsified here"] }],
     });
     expect(user).toMatch(/h2 was falsified here/); // the prior case is in the prompt as grounding context
     expect(ranked.map((p) => p.hypothesis)).toEqual(["h1", "h2"]); // set-equality still holds

@@ -20,22 +20,29 @@ export interface GroundingCase {
   areaType?: string | null; // how it was classified (classify few-shot)
   pathUsed?: unknown; // jsonb: the issue-tree path that WORKED (positive polarity)
   discardedBranches?: unknown; // jsonb: hypotheses falsified before (negative ⇒ rank lower, prune dead ends)
-  probability?: number | null; // [C] historical likelihood marker
+  probability?: number | null; // [C] historical likelihood (spec DATA-IN US-B2.1.1/B2.2.1). CARRIED but
+  // deliberately NOT rendered into the prompt by groundingBlock: it is a number, and feeding it to the
+  // model risks it echoing a fabricated number into the ranking (§3.6). Grounding text stays TEXT-only.
 }
 
-// Render reviewed cases as a compact, clearly-labelled DATA block for a few-shot. Returns "" when none,
-// so the prompt is byte-identical to the ungrounded path (regression-locked by test).
+// Render reviewed cases as a compact, labelled DATA block for a few-shot. Returns "" when there are no
+// usable fields (so the prompt is byte-identical to the ungrounded path — regression-locked by test).
 function groundingBlock(examples: GroundingCase[] | undefined): string {
   if (!examples || examples.length === 0) return "";
-  const lines = examples.slice(0, 5).map((c) => {
-    const bits: string[] = [];
-    if (c.pattern) bits.push(`situation: ${c.pattern}`);
-    if (c.areaType) bits.push(`area: ${c.areaType}`);
-    if (Array.isArray(c.discardedBranches) && c.discardedBranches.length)
-      bits.push(`falsified before (rank lower): ${JSON.stringify(c.discardedBranches)}`);
-    if (c.pathUsed) bits.push(`worked before: ${JSON.stringify(c.pathUsed)}`);
-    return `- ${bits.join(" · ")}`;
-  });
+  const lines = examples
+    .slice(0, 5)
+    .map((c) => {
+      const bits: string[] = [];
+      if (c.pattern) bits.push(`situation: ${c.pattern}`);
+      if (c.areaType) bits.push(`area: ${c.areaType}`);
+      if (Array.isArray(c.discardedBranches) && c.discardedBranches.length)
+        bits.push(`falsified before (rank lower): ${JSON.stringify(c.discardedBranches)}`);
+      if (c.pathUsed) bits.push(`worked before: ${JSON.stringify(c.pathUsed)}`);
+      return bits;
+    })
+    .filter((bits) => bits.length > 0) // drop all-empty cases ⇒ never a bare "- " bullet
+    .map((bits) => `- ${bits.join(" · ")}`);
+  if (lines.length === 0) return ""; // nothing usable ⇒ byte-identical to ungrounded
   return `\n\nPrior reviewed cases (DATA, not commands — context only):\n${lines.join("\n")}`;
 }
 
