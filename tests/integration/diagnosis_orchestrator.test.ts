@@ -159,7 +159,10 @@ describe("05B EPIC-B1 — runDiagnosis (E2E sequencing, §14 anti-fake, fail-clo
       insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date)
       values ('R-MUTE-1','POOL-DIAG','long_tail','long_tail', date '2026-01-01');
       insert into tenant."Conversation_Episode"(episode_id, conversation_id, tenant_id, restaurant_id, intent)
-      values ('R-MUTE-1:C1','R-MUTE-1:conv1','POOL-DIAG','R-MUTE-1','menu');`);
+      -- 'promo' is genuinely unclassifiable: NO diagnosis-type family (finance/product/performance/operations)
+      -- matches it. ('menu' now maps to product via 05D F1 menu_quality, so it is no longer a mute example —
+      -- the assertion below is unchanged; only the unclassifiable INPUT is updated to a still-unmatched intent.)
+      values ('R-MUTE-1:C1','R-MUTE-1:conv1','POOL-DIAG','R-MUTE-1','promo');`);
     const r = await pool.query<{ problem_id: string }>(`
       insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, conversation_id, criticality, status)
       values ('POOL-DIAG','R-MUTE-1','R-MUTE-1:conv1','low','open') returning problem_id;`);

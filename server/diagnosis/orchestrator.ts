@@ -28,6 +28,7 @@ const HYPOTHESES: Record<string, string[]> = {
   finance: ["payment was not executed", "refund dispute concentrated", "balance mismatch"],
   product: ["feature adoption dropped", "product defect"],
   performance: ["latency / connection window"],
+  operations: ["restaurant rejecting orders (out of stock / closed)", "kitchen overload at peak hours", "menu availability not synced"],
 };
 
 // 05D F0 — concentration axis allowlist: maps a descriptor's concentration_dim (closed enum) to a
@@ -117,7 +118,7 @@ export async function runDiagnosis(
           [prob.conversation_id, tenantId],
         )
       )[0]?.intent ?? ""
-    : "payments process monitor — proactive non-payment sweep";
+    : `${descriptor.label} — proactive ${descriptor.area_type} sweep`; // 05D F1: descriptor-derived (NOT the hard-coded "payments" text) so a typed proactive sweep classifies to its OWN area, not finance (Codex P1)
   guardInjection(text); // signal is audit-only; never executes embedded instructions.
 
   // B.2 classify + B.3 rank — the AGENTE provider (TEXT only, §8). Grounded on prior reviewed cases
