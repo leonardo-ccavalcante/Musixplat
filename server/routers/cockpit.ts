@@ -5,9 +5,16 @@ import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
 import { type Level } from "../conversation/min.js";
-import { cockpitReleaseInput, cockpitSendDispatchInput, type NbaCockpitRow } from "../../shared/contracts.js";
+import {
+  cockpitReleaseInput,
+  cockpitSendDispatchInput,
+  cockpitProposeInput,
+  type NbaCockpitRow,
+  type AutoActionRow,
+} from "../../shared/contracts.js";
 import { renderArtifact, buildCopyInput } from "../cockpit/renderArtifact.js";
 import { restaurantCopy } from "../cockpit/copywriter.js";
+import { proposeAndAutoActForCohort, proposeForPool } from "../cockpit/runNbaForCohort.js";
 
 const LEVEL_RANK: Record<Level, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 };
 
@@ -79,14 +86,19 @@ export async function listCockpitRows(tenantId: string, exec: Exec): Promise<Nba
   return raw.map(toRow);
 }
 
-// 02:F-1.2 — the "your week" proof strip: count human release/pause decisions in the last 7 days, scoped to
-// this pool (same cohort→pool presence rule as the list). A READ of gov."Release_Batch" (the decision trace),
-// never a fabricated number (§14). counts cast ::int so node-pg returns numbers, not bigint strings.
+// 02:F-1.2 / 02:CP2 — the "your week" proof strip: HUMAN release/pause decisions (origin <> 'auto') in the
+// last 7 days PLUS auto_acted = the actions the AI handled ALONE (origin='auto'). Scoped to this pool (same
+// cohort→pool presence rule as the list). A READ of gov."Release_Batch" ⋈ Decision_Trace, never fabricated
+// (§14). The trace ORIGIN is what separates a human decision from an autonomous one — a release counted as
+// "you released" must be a human's (a left join + `is distinct from 'auto'` keeps a null-origin row human).
+// counts cast ::int so node-pg returns numbers, not bigint strings.
 const WEEK_SQL = `
   select
-    count(*) filter (where rb.action = 'RELEASE')::int as released,
-    count(*) filter (where rb.action = 'PAUSE')::int   as paused
+    count(*) filter (where rb.action = 'RELEASE' and dt.origin is distinct from 'auto'::public.trace_origin)::int as released,
+    count(*) filter (where rb.action = 'PAUSE'   and dt.origin is distinct from 'auto'::public.trace_origin)::int as paused,
+    count(*) filter (where rb.action = 'RELEASE' and dt.origin = 'auto'::public.trace_origin)::int as auto_acted
   from gov."Release_Batch" rb
+  left join gov."Decision_Trace" dt on dt.trace_id = rb.decision_trace_id
   where rb.created_at >= now() - interval '7 days'
     and exists (
       select 1 from cohort."Cohort_Membership_Snapshot" cms
@@ -96,9 +108,32 @@ const WEEK_SQL = `
         and cms.cohort_rule_version = (select value from catalog."Config_Knobs" where key='cohort_rule_version_current')
     )`;
 
-export async function weekSummary(tenantId: string, exec: Exec): Promise<{ released: number; paused: number }> {
-  const r = await exec<{ released: number; paused: number }>(WEEK_SQL, [tenantId]);
-  return { released: r[0]?.released ?? 0, paused: r[0]?.paused ?? 0 };
+export async function weekSummary(
+  tenantId: string,
+  exec: Exec,
+): Promise<{ released: number; paused: number; auto_acted: number }> {
+  const r = await exec<{ released: number; paused: number; auto_acted: number }>(WEEK_SQL, [tenantId]);
+  return { released: r[0]?.released ?? 0, paused: r[0]?.paused ?? 0, auto_acted: r[0]?.auto_acted ?? 0 };
+}
+
+// 02:CP2 — the autonomous-actions registry: what the AI did ALONE (origin='auto'), pool-scoped, recent
+// first. Reads each dispatch's rendered title + reach + the applied autonomy level ([V], §14) — never a
+// fabricated number. The decision_trace_id ⋈ origin='auto' is what proves the AI, not a human, acted.
+const AUTO_ACTIONS_SQL = `
+  select ad.dispatch_id::text as dispatch_id, ad.nba_id, ad.cohort_id, p.action_type,
+         ad.content->>'title' as title, ad.target_count,
+         m.effective_level::text as effective_level, ad.created_at
+    from gov."Action_Dispatch" ad
+    join gov."Decision_Trace" dt on dt.trace_id = ad.decision_trace_id and dt.origin = 'auto'::public.trace_origin
+    left join gov."NBA_Proposal" p on p.nba_id::text = ad.nba_id
+    left join lateral (
+      select effective_level from gov."min_calculation" where nba_id = ad.nba_id order by computed_at desc limit 1
+    ) m on true
+   where ad.tenant_id = $1
+   order by ad.created_at desc limit 50`;
+
+export async function listAutoActions(tenantId: string, exec: Exec): Promise<AutoActionRow[]> {
+  return exec<AutoActionRow>(AUTO_ACTIONS_SQL, [tenantId]);
 }
 
 // 02:1C / F-1.2 / BR-1 / BR-9 / BR-LOG-3 — a human releases or pauses a proposal. Override is ONLY DOWN:
@@ -356,4 +391,16 @@ export const cockpitRouter = router({
       ),
     ),
   ),
+
+  // 02:CP2 — "Run NBA": the engine proposes for the cohort + the AI auto-acts on the safe non-money ones.
+  // tenant resolved server-side; the cohort must be in this pool (enforced in proposeAndAutoActForCohort).
+  propose: tenantProcedure
+    .input(cockpitProposeInput)
+    .mutation(({ ctx, input }) => proposeAndAutoActForCohort(input.cohort_id, ctx.tenantId)),
+
+  // 02:CP2 — pool-wide "Run NBA": loop the engine across the pool's problem cohorts (the cockpit button).
+  proposePool: tenantProcedure.mutation(({ ctx }) => proposeForPool(ctx.tenantId)),
+
+  // 02:CP2 — the autonomous-actions registry: what the AI did ALONE (origin='auto'), pool-scoped (read, §14).
+  autoActions: tenantProcedure.query(({ ctx }) => listAutoActions(ctx.tenantId, query)),
 });
