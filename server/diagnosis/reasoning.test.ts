@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type Anthropic from "@anthropic-ai/sdk";
+import type { ChatClient } from "../_core/llm.js";
 import { deterministicReasoning, llmReasoning } from "./reasoning";
 
 // 05B AGENTE seam. The deterministic provider drives the CI gate (no key/network). The LLM provider
@@ -7,10 +7,10 @@ import { deterministicReasoning, llmReasoning } from "./reasoning";
 // it must parse TEXT only (§8), clamp confidence to [0,1], and THROW on any off-contract output so
 // the orchestrator fail-closes (BR-B3) — never invent an area/number.
 
-function fakeClient(text: string): Anthropic {
+function fakeClient(text: string): ChatClient {
   return {
-    messages: { create: async () => ({ content: [{ type: "text", text }] }) },
-  } as unknown as Anthropic;
+    chat: { completions: { create: async () => ({ choices: [{ message: { content: text } }] }) } },
+  } as unknown as ChatClient;
 }
 
 describe("deterministicReasoning (gate provider, no LLM)", () => {
@@ -35,7 +35,7 @@ describe("deterministicReasoning (gate provider, no LLM)", () => {
   });
 });
 
-describe("llmReasoning (real-Claude path, faked client)", () => {
+describe("llmReasoning (real-OpenAI path, faked client)", () => {
   it("parses TEXT-only JSON and clamps confidence into [0,1]", async () => {
     const r = llmReasoning(fakeClient('{"areaType":"finance","confidence":1.5}'));
     expect(await r.classifyArea({ text: "no le cayó el pago" })).toEqual({
@@ -54,11 +54,11 @@ describe("llmReasoning (real-Claude path, faked client)", () => {
     await expect(r.classifyArea({ text: "x" })).rejects.toThrow(/off-contract/);
   });
 
-  it("throws when the model returns no text block", async () => {
+  it("throws when the model returns an empty response", async () => {
     const noText = {
-      messages: { create: async () => ({ content: [{ type: "tool_use" }] }) },
-    } as unknown as Anthropic;
-    await expect(llmReasoning(noText).classifyArea({ text: "x" })).rejects.toThrow(/no text block/);
+      chat: { completions: { create: async () => ({ choices: [{ message: { content: null } }] }) } },
+    } as unknown as ChatClient;
+    await expect(llmReasoning(noText).classifyArea({ text: "x" })).rejects.toThrow(/empty response/);
   });
 
   it("ranks paths from a JSON array and assigns path_ids most-likely first", async () => {

@@ -60,6 +60,25 @@ describe("05C ArtifactModal", () => {
     expect(screen.getByText(/fix_internal/)).toBeInTheDocument();
   });
 
+  it("P06: cites the KB source when the answer was grounded (content.body.sources → Sources region)", () => {
+    const grounded = artifact({
+      content: {
+        kind: "internal_email",
+        subject: "Action — finance issue",
+        body: { root: {}, who_affected: [], impact: {}, how: "x", route: "fix_internal", sources: "Sources: policy.md (Policy)" },
+      },
+    });
+    render(<ArtifactModal artifact={grounded} onClose={() => {}} onDecide={() => {}} busyId={null} />);
+    const sources = screen.getByRole("region", { name: /^Sources$/i });
+    expect(within(sources).getByText(/policy\.md \(Policy\)/)).toBeInTheDocument();
+  });
+
+  it("P06: no Sources region when nothing was grounded (never a faked citation, §3.7)", () => {
+    // The default fixture body carries no `sources` — the region must be absent, not an empty/fake one.
+    render(<ArtifactModal artifact={artifact()} onClose={() => {}} onDecide={() => {}} busyId={null} />);
+    expect(screen.queryByRole("region", { name: /^Sources$/i })).not.toBeInTheDocument();
+  });
+
   it("pending_review ⇒ Approve fires onDecide(id, 'approve') (the human gate, in view)", () => {
     const onDecide = vi.fn();
     render(<ArtifactModal artifact={artifact()} onClose={() => {}} onDecide={onDecide} busyId={null} />);

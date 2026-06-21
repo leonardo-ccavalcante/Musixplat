@@ -61,7 +61,11 @@ export function ArtifactModal({
             {who.length === 0 ? (
               <p className="mt-1 text-mxm-content-secondary">No population resolved (fail-closed).</p>
             ) : (
-              <ul className="mt-1.5 max-h-44 space-y-0.5 overflow-y-auto">
+              <ul
+                tabIndex={0}
+                aria-label="Affected restaurants (scrollable)"
+                className="mt-1.5 max-h-44 space-y-0.5 overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
+              >
                 {who.map((a, i) => (
                   <li key={str(a.restaurant_id, `r${i}`)} className="flex justify-between gap-3 text-xs">
                     <span className="text-mxm-content">{str(a.restaurant_id)}</span>
@@ -84,6 +88,18 @@ export function ArtifactModal({
             <dt className="text-mxm-content-secondary">Route</dt>
             <dd className="text-mxm-content">{str(body.route)}</dd>
           </dl>
+
+          {/* P06 §8 — CITE the knowledge-base docs this answer was grounded in (kb_doc_refs → content.body.sources).
+              Read-only render of the produced `Sources: filename (docType)` line; provenance [C] (computed by the
+              deterministic spine, never invented). Hidden when the base held nothing relevant — never a fake. */}
+          {typeof body.sources === "string" && body.sources && (
+            <section aria-label="Sources" className="rounded-mxm border border-mxm-border p-3">
+              <p className="text-xs uppercase tracking-wide text-mxm-content-tertiary">Sources · grounded in the knowledge base</p>
+              <p className="mt-0.5 text-xs text-mxm-content">
+                {str(body.sources)} <span className="text-mxm-content-tertiary">[C]</span>
+              </p>
+            </section>
+          )}
 
           {pending ? (
             <div className="flex flex-wrap gap-2 border-t border-mxm-border pt-3">

@@ -6,9 +6,9 @@ import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CockpitBoard, groupRows, type GroupBy } from "@/features/cockpit/CockpitBoard";
 import { CockpitHero } from "@/features/cockpit/CockpitHero";
 import { CatalogDrawer } from "@/features/cockpit/CatalogDrawer";
-import { NbaModal } from "@/features/cockpit/NbaModal";
+import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
-import { type RowAction, type RowState } from "@/features/cockpit/CockpitRow";
+import { type RowAction, type RowState, type KbReview } from "@/features/cockpit/CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
 const GROUP_OPTIONS: { key: GroupBy; label: string }[] = [
@@ -82,6 +82,28 @@ export function CockpitPage() {
     setOpenGroups({}); // reset to per-group defaults for the new axis
   };
 
+  // P06 NBA tie-in — per-row KB impact (TEXT signal only, §3.3): does the base hold a Policy/Terms doc
+  // relevant to this NBA? Batched over httpBatchLink into one request. Fail-closed: pending/error rows
+  // are simply omitted from the map, so the badge never shows a false signal.
+  const impactQueries = trpc.useQueries((t) =>
+    rows.map((r) => t.knowledge.nbaImpact({ nbaId: r.nba_id }, { enabled: ready, retry: false, staleTime: 60_000 })),
+  );
+  const kbReviews = useMemo(() => {
+    const m: Record<string, KbReview> = {};
+    rows.forEach((r, i) => {
+      const d = impactQueries[i]?.data;
+      if (d) m[r.nba_id] = { shouldReview: d.shouldReview, note: d.note };
+    });
+    return m;
+  }, [rows, impactQueries]);
+
+  const openImpact: KbImpact | undefined = useMemo(() => {
+    if (!openNba) return undefined;
+    const i = rows.findIndex((r) => r.nba_id === openNba.nba_id);
+    const d = i >= 0 ? impactQueries[i]?.data : undefined;
+    return d ? { shouldReview: d.shouldReview, evidence: d.evidence, note: d.note } : undefined;
+  }, [openNba, rows, impactQueries]);
+
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2.5vw,2.25rem)]">
       <header className="mb-6">
@@ -126,11 +148,17 @@ export function CockpitPage() {
             </div>
           </div>
 
-          <CockpitBoard groups={groups} openGroups={openGroups} onToggle={toggle} onAction={onAction} onOpen={setOpenNba} actionState={actionState} />
+          <CockpitBoard groups={groups} openGroups={openGroups} onToggle={toggle} onAction={onAction} onOpen={setOpenNba} actionState={actionState} kbReviews={kbReviews} />
         </>
       )}
 
-      <NbaModal row={openNba} onClose={() => setOpenNba(null)} onAction={onAction} state={openNba ? actionState[openNba.nba_id] : undefined} />
+      <NbaModal
+        row={openNba}
+        onClose={() => setOpenNba(null)}
+        onAction={onAction}
+        state={openNba ? actionState[openNba.nba_id] : undefined}
+        kbImpact={openImpact}
+      />
       <CatalogDrawer open={catalogOpen} onClose={() => setCatalogOpen(false)} />
     </main>
   );

@@ -2,6 +2,24 @@ import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
 import { generateFromDossier } from "../artifact/generateFromDossier.js";
+import { ingestDocument } from "../knowledge/store.js";
+
+// P06 Task 9 — render an artifact's jsonb content into a flat markdown body so it can be embedded and
+// retrieved as a Knowledge_Document. Deterministic + lossless of the produced fields (no LLM, §3.6/§14);
+// stringifies any nested object value so a citation line ("Sources: …") survives into the indexed text.
+function renderArtifactMarkdown(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!content || typeof content !== "object") return "";
+  const c = content as Record<string, unknown>;
+  const lines: string[] = [];
+  if (typeof c.subject === "string") lines.push(`# ${c.subject}`);
+  const body = (c.body && typeof c.body === "object") ? (c.body as Record<string, unknown>) : c;
+  for (const [k, v] of Object.entries(body)) {
+    if (v == null) continue;
+    lines.push(`${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+  }
+  return lines.join("\n");
+}
 import {
   generateArtifactInput,
   artifactDecisionInput,
@@ -50,7 +68,7 @@ export const artifactRouter = router({
         );
         throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool artifact blocked" });
       }
-      return withTx(async (client) => {
+      const decision = await withTx(async (client) => {
         // Lock the state transition. Only one terminal decision may leave pending_review.
         const artifact = (
           await client.query<{
@@ -98,6 +116,35 @@ export const artifactRouter = router({
         await client.query(`select gov.fn_roi_1_10($1)`, [ctx.tenantId]);
         return { artifact_id: input.artifactId, status, trace_id: dec.decision_id };
       });
+
+      // P06 Task 9 — write-back (the living base): an APPROVED dossier grows the Knowledge Base. The
+      // decision above is the committed source of truth; this is a derived enrichment that runs AFTER the
+      // commit, so a flaky embedding never reverses an approval (fail-closed: log + return the decision).
+      // The producer (ingestDocument) fills the embedding at runtime — never seeded (§14). source marks
+      // its provenance ('accepted_dossier'); the doc is retrievable immediately (the operator's "flag").
+      if (decision.status === "approved") {
+        try {
+          const a = await query<{ content: unknown }>(
+            `select content from gov."Generated_Artifact" where artifact_id=$1 and tenant_id=$2`,
+            [input.artifactId, ctx.tenantId],
+          );
+          const text = renderArtifactMarkdown(a[0]?.content);
+          if (text.length > 0) {
+            await ingestDocument(ctx.tenantId, {
+              filename: `accepted-${input.artifactId}.md`,
+              mime: "text/markdown",
+              text,
+              source: "accepted_dossier",
+            });
+          }
+        } catch (err) {
+          await query(
+            `insert into gov."Security_Log"(tenant_id, kind, detail) values ($1, 'kb_writeback_failed', $2)`,
+            [ctx.tenantId, JSON.stringify({ piece: "P06:artifact.decide.writeback", artifactId: input.artifactId, error: String(err) })],
+          );
+        }
+      }
+      return decision;
     }),
 
   list: tenantProcedure.query(({ ctx }): Promise<ArtifactRow[]> =>

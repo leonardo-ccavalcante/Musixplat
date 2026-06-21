@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc.js";
-import { query } from "../db/pool.js";
+import { query, withTx } from "../db/pool.js";
 import { assertSingleVersion } from "../_core/antimix.js";
-import { runP01 } from "../jobs/p01.js";
+import { runP01, deriveRunWindow } from "../jobs/p01.js";
 import type { CohortsRunResult } from "../../shared/contracts.js";
+import { parseCsv } from "../cohorts/parseCsv.js";
+import { CSV_COLUMNS } from "../cohorts/csvSchema.js";
 
 // Read-only projections of P01 results. All tenant-scoped server-side (RLS guard); cohort-zone
 // reads honor k-anon (k_suppression_applied) and anti-mix (single cohort_rule_version).
@@ -56,22 +58,25 @@ function status(c: CohortRow): "pending" | "suppressed" | "collapsed" | "ok" {
   return "ok";
 }
 
-// Demo windows the in-product trigger computes (deterministic ref date; the 2nd week enables the delta).
-const RUN_WEEKS = ["2026-05-25", "2026-06-15"] as const;
-const RUN_REF_DATE = "2026-06-17";
-
 export const cohortsRouter = router({
   // 01 operability — the PRODUCT triggers the P01 batch in-product (mirrors diagnosis.run, Gate 1), so a
   // human can drive the Cohorts Explorer with no `pnpm db:p01` terminal. runP01 is deterministic and writes
   // via UPSERT, so a re-run never duplicates (idempotent). Numbers are PRODUCED by the SQL producers over the
   // seeded population, then READ back here — never seeded as results (§14). tenantProcedure = authed.
+  // Window is derived from max(order_date) so ANY uploaded dataset cohortizes regardless of its dates.
   run: tenantProcedure.mutation(async (): Promise<CohortsRunResult> => {
     // Prototype: relax k-anon to 1 so the long-tail cuisine×zone×tier cells render instead of suppressing
     // (they fall under production k=5). k_anon_threshold is a NAMED knob (§3.8) so this tunes WITHOUT code;
     // the suppression mechanism stays intact and is still tested at k=5. Mirrors scripts/run-p01.ts.
     await query(`update catalog."Config_Knobs" set value='1' where key='k_anon_threshold'`);
-    await runP01({ week: RUN_WEEKS[0], refDate: RUN_REF_DATE });
-    await runP01({ week: RUN_WEEKS[1], refDate: RUN_REF_DATE, prevSemana: RUN_WEEKS[0] });
+    // Prototype: relax n_min to 3 so smaller/sparser uploaded bases still rank cells instead of all
+    // collapsing to qualitative (production default 20). Named knob (§3.8) — tunes WITHOUT code; the gate
+    // mechanism is unchanged and still tested at 20 (the seed value, restored on reset). SEPARATE from k-anon (§3.2).
+    await query(`update catalog."Config_Knobs" set value='3' where key='n_min_threshold'`);
+    const w = await deriveRunWindow();
+    if (!w) return { weeks: [], cohorts: 0, memberships: 0 }; // empty base ⇒ honest zero (fail-closed)
+    await runP01({ week: w.prevWeek, refDate: w.refDate });
+    await runP01({ week: w.week, refDate: w.refDate, prevSemana: w.prevWeek });
     const v = await current();
     const c = await query<{ n: number }>(
       `select count(*)::int n from cohort."Cohort" where cohort_rule_version=$1 and n_accounts is not null`,
@@ -81,7 +86,40 @@ export const cohortsRouter = router({
       `select count(*)::int n from cohort."Cohort_Membership_Snapshot" where cohort_rule_version=$1`,
       [v],
     );
-    return { weeks: [...RUN_WEEKS], cohorts: c[0]?.n ?? 0, memberships: m[0]?.n ?? 0 };
+    return { weeks: [w.prevWeek, w.week], cohorts: c[0]?.n ?? 0, memberships: m[0]?.n ?? 0 };
+  }),
+
+  // Demo operability — generate a deterministic, gate-passing example base (reuses the seed generator,
+  // DRY). Clears business data first so it's a clean load. restaurants bounded [50, 5000]; default 5000.
+  // det_int ⇒ reproducible; all RESULTS stay NULL until Run Flow (§14). The generated rows are anchored
+  // to a fixed ref date, but the run window derives from the data anyway (so cohortization aligns).
+  generateExample: tenantProcedure
+    .input(z.object({ restaurants: z.number().int().min(50).max(5000).default(5000) }))
+    .mutation(async ({ input }): Promise<{ restaurants: number }> => {
+      await query(`truncate
+        cohort."Prioritized_NBA_Event", cohort."Cohort_Membership_Snapshot", cohort."Subgroup", cohort."Cohort",
+        tenant."Weekly_Connection", tenant."Conversation_Episode", tenant."Order", tenant."Restaurant"
+        restart identity cascade;`);
+      await query(`select public.fn_generate_business_base($1, date '2026-06-17')`, [input.restaurants]);
+      return { restaurants: input.restaurants };
+    }),
+
+  // Demo operability — clear the business base so the operator can load a fresh dataset live.
+  // INTENTIONALLY global (ALL tenants/pools): this is the operator's "clear entire database" demo-reset
+  // action, a deliberate exception to the per-tenant RLS scoping used everywhere else. Not an oversight.
+  // Truncates ONLY business + cohort-result tables; PRESERVES catalog (knobs by name, rule versions,
+  // named queries, NBA/intent catalogs) and gov.User — wiping those would break the producers (§3.8).
+  // Destructive + demo-scoped: guarded by a confirm dialog client-side; tenantProcedure = authed.
+  clearBusinessData: tenantProcedure.mutation(async (): Promise<{ cleared: true }> => {
+    await query(`
+      truncate
+        cohort."Prioritized_NBA_Event", cohort."Cohort_Membership_Snapshot",
+        cohort."Subgroup", cohort."Cohort",
+        tenant."Weekly_Connection", tenant."Conversation_Episode",
+        tenant."Order", tenant."Restaurant"
+      restart identity cascade;
+    `);
+    return { cleared: true };
   }),
 
   // F-2.1 / F-4.1 — cohort cells + semaphore status.
@@ -158,6 +196,97 @@ export const cohortsRouter = router({
       `select version_id, effective_date::text as effective_date, what_changed, baseline_effect, provenance
        from catalog."Cohort_Rule_Version" order by effective_date`,
     );
+  }),
+
+  // Demo onboarding — upload one Order-grain CSV. Server dedups restaurants, bulk-inserts orders, and
+  // SYNTHESIZES neutral Weekly_Connection (connected=committed) so the v2 rank's connection INNER JOIN
+  // is satisfied (else every percentile NULLs out). Atomic (withTx): a bad row rejects the whole file
+  // (fail-closed §7). Only brutos inserted; all RESULTS stay NULL until Run Flow (§14). tenant_id is taken
+  // from the CSV per the agreed contract (demo); cross-pool data is allowed here (single operator demo).
+  uploadCsv: tenantProcedure
+    .input(z.object({ filename: z.string().min(1), contentBase64: z.string().min(1) }))
+    .mutation(async ({ input }): Promise<{ restaurants: number; orders: number }> => {
+      // TODO(demo-only): before promoting beyond the demo, assert every row.tenant_id === ctx.tenantId
+      // (anti-spoofing, §3 rule 4). Cross-pool CSV rows are intentionally allowed for the single-operator demo.
+      const text = Buffer.from(input.contentBase64, "base64").toString("utf8");
+      const rows = parseCsv(text);
+
+      const restMap = new Map<string, (typeof rows)[number]>();
+      for (const r of rows) if (!restMap.has(r.restaurant_id)) restMap.set(r.restaurant_id, r);
+      const rests = [...restMap.values()];
+
+      await withTx(async (c) => {
+        // Bulk insert via unnest() — ONE round-trip per table (was a per-row loop that took >5min and
+        // tripped the gateway timeout at 100k rows → client saw a non-JSON "upstream error"). Column arrays
+        // are cast explicitly: ::numeric[] keeps decimals like 12.57 (no integer inference); enum/::boolean[]
+        // casts preserve NULLs. Validation + cross-row conflict already happened in parseCsv (fail-closed).
+        await c.query(
+          `insert into tenant."Restaurant"
+             (restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week, status)
+           select u.rid, u.tid, u.tb::public.tier_base, u.seg::public.segment, u.sd::date, u.zn, u.cz, u.chw, 'active'
+           from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::numeric[])
+             as u(rid, tid, tb, seg, sd, zn, cz, chw)`,
+          [
+            rests.map((r) => r.restaurant_id), rests.map((r) => r.tenant_id), rests.map((r) => r.tier_base),
+            rests.map((r) => r.segment), rests.map((r) => r.signup_date), rests.map((r) => r.zone),
+            rests.map((r) => r.cuisine), rests.map((r) => r.committed_hours_week),
+          ],
+        );
+        await c.query(
+          `insert into tenant."Order"
+             (restaurant_id, order_date, gross_value, fee, payment_status, cancelled_by, discount_pct, has_photo, has_description, zone, cuisine, channel, provenance)
+           select u.rid, u.od::date, u.gv, u.fee, u.ps::public.payment_status, u.cb::public.cancelled_by,
+                  u.dp, u.hp, u.hd, u.zn, u.cz, 'csv', '[V]'
+           from unnest($1::text[], $2::text[], $3::numeric[], $4::numeric[], $5::text[], $6::text[], $7::numeric[], $8::boolean[], $9::boolean[], $10::text[], $11::text[])
+             as u(rid, od, gv, fee, ps, cb, dp, hp, hd, zn, cz)`,
+          [
+            rows.map((o) => o.restaurant_id), rows.map((o) => o.order_date), rows.map((o) => o.gross_value),
+            rows.map((o) => o.fee ?? 0), rows.map((o) => o.payment_status), rows.map((o) => o.cancelled_by ?? null),
+            rows.map((o) => o.discount_pct ?? 0), rows.map((o) => o.has_photo ?? null), rows.map((o) => o.has_description ?? null),
+            rows.map((o) => o.zone), rows.map((o) => o.cuisine),
+          ],
+        );
+        await c.query(
+          `insert into tenant."Weekly_Connection"(restaurant_id, week, connected_hours, committed_hours)
+           select r.restaurant_id,
+                  (date_trunc('week', m.maxd)::date - (w * 7)),
+                  r.committed_hours_week, r.committed_hours_week
+           from tenant."Restaurant" r
+           cross join (select max(order_date) maxd from tenant."Order") m
+           cross join generate_series(0, 12) w
+           on conflict (restaurant_id, week) do nothing`,
+        );
+      });
+      return { restaurants: rests.length, orders: rows.length };
+    }),
+
+  // Demo onboarding — the downloadable CSV template: exact header + 2 VALID example rows (one ok order,
+  // one failed/cancelled — demonstrates order-grain + cancelled_by rule) + a per-column legend with
+  // name/type/desc/example so the modal can render rich column guidance. Static (no DB).
+  csvTemplate: tenantProcedure.query(async () => {
+    const example = [
+      "POOL-001,R-PIZZA-01,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-06-10,120.00,24.00,ok,,0,true,true",
+      "POOL-001,R-PIZZA-01,long_tail,long_tail,2025-06-01,downtown,pizza,50,2026-06-12,90.00,18.00,failed,customer,0,false,true",
+    ];
+    const columns: { name: string; type: string; desc: string; example: string }[] = [
+      { name: "tenant_id",              type: "text",              desc: "pool / RLS id",                                                         example: "POOL-001"    },
+      { name: "restaurant_id",          type: "text",              desc: "groups all rows of one restaurant",                                     example: "R-PIZZA-01"  },
+      { name: "tier_base",              type: "enum",              desc: "managed_brand · managed_midmarket · long_tail",                         example: "long_tail"   },
+      { name: "segment",                type: "enum",              desc: "managed · long_tail",                                                   example: "long_tail"   },
+      { name: "signup_date",            type: "date (YYYY-MM-DD)", desc: "must be ≤ the latest order_date",                                       example: "2025-06-01"  },
+      { name: "zone",                   type: "text",              desc: "cohort axis",                                                           example: "downtown"    },
+      { name: "cuisine",                type: "text",              desc: "cohort axis",                                                           example: "pizza"       },
+      { name: "committed_hours_week",   type: "number",            desc: "committed weekly hours (also the connection denominator)",              example: "50"          },
+      { name: "order_date",             type: "date (YYYY-MM-DD)", desc: "the order's date",                                                     example: "2026-06-10"  },
+      { name: "gross_value",            type: "number",            desc: "≥ 0",                                                                  example: "120.00"      },
+      { name: "fee",                    type: "number",            desc: "≥ 0 (optional, default 0)",                                            example: "24.00"       },
+      { name: "payment_status",         type: "enum",              desc: "ok · failed · pending",                                                example: "ok"          },
+      { name: "cancelled_by",           type: "enum",              desc: "restaurant · customer (only when payment_status=failed; else blank)",  example: "customer"    },
+      { name: "discount_pct",           type: "number",            desc: "0–100 (optional, default 0)",                                          example: "0"           },
+      { name: "has_photo",              type: "boolean",           desc: "true · false (optional)",                                              example: "true"        },
+      { name: "has_description",        type: "boolean",           desc: "true · false (optional)",                                              example: "true"        },
+    ];
+    return { csv: [CSV_COLUMNS.join(","), ...example].join("\n"), columns };
   }),
 
   // F-3.3 / F-3.4 — raw ticket distribution intent × cohort, tenant-scoped, k-anon respected.

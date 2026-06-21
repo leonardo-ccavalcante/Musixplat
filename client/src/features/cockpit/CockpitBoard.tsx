@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { CockpitRow, type RowAction, type RowState } from "./CockpitRow";
+import { CockpitRow, type RowAction, type RowState, type KbReview } from "./CockpitRow";
 import { NBA_LABEL } from "./nbaCatalog";
 import type { NbaCockpitRow } from "@shared/contracts";
 
@@ -77,6 +77,7 @@ export function CockpitBoard({
   onAction,
   onOpen,
   actionState,
+  kbReviews,
 }: {
   groups: GroupView[];
   openGroups: Record<string, boolean>;
@@ -84,6 +85,7 @@ export function CockpitBoard({
   onAction: (row: NbaCockpitRow, action: RowAction) => void;
   onOpen?: (row: NbaCockpitRow) => void;
   actionState: Record<string, RowState | undefined>;
+  kbReviews?: Record<string, KbReview | undefined>;
 }) {
   if (groups.length === 0) return <EmptyState>The AI has proposed no actions yet.</EmptyState>;
 
@@ -119,7 +121,7 @@ export function CockpitBoard({
             </summary>
             <div className="border-t border-mxm-border px-[clamp(0.75rem,1.5vw,1.25rem)]">
               {g.rows.map((r) => (
-                <CockpitRow key={r.nba_id} row={r} onAction={onAction} onOpen={onOpen} state={actionState[r.nba_id]} muted={r.status === "auto"} />
+                <CockpitRow key={r.nba_id} row={r} onAction={onAction} onOpen={onOpen} state={actionState[r.nba_id]} muted={r.status === "auto"} kbReview={kbReviews?.[r.nba_id]} />
               ))}
             </div>
           </details>

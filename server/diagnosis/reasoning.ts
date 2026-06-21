@@ -4,9 +4,9 @@
 // Two providers, one interface:
 //   - deterministicReasoning (here): keyword classify + order-preserving rank; reproducible, no LLM,
 //     testable E2E. The CI gate injects this so it never needs a network/key.
-//   - llmReasoning(client): real Claude (AGENTE pieces US-B2.1.1/US-B2.2.1). Used by scripts/run-05b.
+//   - llmReasoning(client): real OpenAI (AGENTE pieces US-B2.1.1/US-B2.2.1). Used by scripts/run-05b.
 //     TEXT only; on any API/parse error it THROWS so the caller fail-closes (BR-B3), never guesses.
-import type Anthropic from "@anthropic-ai/sdk";
+import { chatText, type ChatClient } from "../_core/llm.js";
 
 export interface ClassifyInput {
   text: string; // episode intent (reactive) or a proactive context line — treated as DATA (EC-B10)
@@ -68,20 +68,10 @@ const ALLOWED_AREAS = new Set(["finance", "product", "performance", "unclassifie
 const unfence = (s: string): string =>
   s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
-/** Real-Claude provider for the working prototype. TEXT only (§8). Parses strict JSON; anything
+/** Real-OpenAI provider for the working prototype. TEXT only (§8). Parses strict JSON; anything
  *  malformed or off-list THROWS ⇒ the orchestrator degrades-to-human (BR-B3), never an optimistic guess. */
-export function llmReasoning(client: Anthropic, model = "claude-sonnet-4-6"): DiagnosisReasoning {
-  const ask = async (system: string, user: string): Promise<string> => {
-    const res = await client.messages.create({
-      model,
-      max_tokens: 256,
-      system,
-      messages: [{ role: "user", content: user }],
-    });
-    const block = res.content.find((b) => b.type === "text");
-    if (!block || block.type !== "text") throw new Error("llmReasoning: no text block");
-    return block.text;
-  };
+export function llmReasoning(client: ChatClient): DiagnosisReasoning {
+  const ask = (system: string, user: string): Promise<string> => chatText(client, system, user, 256);
   return {
     async classifyArea({ text, hint }) {
       const raw = await ask(
