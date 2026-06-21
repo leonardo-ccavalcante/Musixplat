@@ -29,17 +29,9 @@ describe("validateHypothesis", () => {
     const c = await pool.connect();
     try {
       await c.query("begin");
-      // No DB row needed for `confirmed`; still exercise with a real client.
-      const real = await validateHypothesis(breach("A1"), "r", "c", "tier-mtest", c);
+      const real = await validateHypothesis(breach("A1"), "tier-mtest", "pool-A", c);
       expect(real.confirmed).toBe(true);
-
-      const ok = await validateHypothesis(
-        { action_code: "A1", verdict: "ok", gap: null } as never,
-        "r",
-        "c",
-        "tier-mtest",
-        c,
-      );
+      const ok = await validateHypothesis({ action_code: "A1", verdict: "ok", gap: null } as never, "tier-mtest", "pool-A", c);
       expect(ok.confirmed).toBe(false);
     } finally {
       await c.query("rollback");
@@ -47,25 +39,25 @@ describe("validateHypothesis", () => {
     }
   });
 
-  it("inRange = action_code ∈ allowed_today.auto_actions for the cohort tier", async () => {
+  it("inRange = action_code ∈ allowed_today, read ONLY from a policy signed within the caller's tenant (P1-4 §3.4)", async () => {
     const c = await pool.connect();
     try {
       await c.query("begin");
-      // Throwaway tier: A1/A4 are human-approved; A3 (money) is NOT in the set.
+      // pool-A signs a policy for a SHARED tier; A1/A4 approved, A3 (money) not. The signer must be in-pool.
+      await c.query(`insert into gov."User"(user_id, tenant_id, org_level, role) values ('u-mtest-A','pool-A','team','agent_manager_senior')`);
       await c.query(
-        `insert into gov."Policy_Tier" (policy_id, tier_id, policy_version, tier_cap, allowed_today)
-         values ('pol-mtest', 'tier-mtest', 'mtest-0.0.1', 'LOW', '{"auto_actions":["A1","A4"]}'::jsonb)`,
+        `insert into gov."Policy_Tier" (policy_id, tier_id, policy_version, tier_cap, allowed_today, human_signature)
+         values ('pol-mtest-A', 'tier-mtest', 'mtest-0.0.1', 'LOW', '{"auto_actions":["A1","A4"]}'::jsonb, 'u-mtest-A')`,
       );
 
-      const inSet = await validateHypothesis(breach("A1"), "r", "c", "tier-mtest", c);
-      expect(inSet.inRange).toBe(true);
+      expect((await validateHypothesis(breach("A1"), "tier-mtest", "pool-A", c)).inRange).toBe(true);
+      expect((await validateHypothesis(breach("A3"), "tier-mtest", "pool-A", c)).inRange).toBe(false); // money not approved
 
-      const moneyLever = await validateHypothesis(breach("A3"), "r", "c", "tier-mtest", c);
-      expect(moneyLever.inRange).toBe(false);
+      // P1-4: pool-B sees the SAME tier but pool-A's allowed_today must NOT authorize pool-B (cross-pool §3.4).
+      expect((await validateHypothesis(breach("A1"), "tier-mtest", "pool-B", c)).inRange).toBe(false);
 
-      // Unknown tier ⇒ fail-closed to inRange=false (§7), never an optimistic default.
-      const unknownTier = await validateHypothesis(breach("A1"), "r", "c", "tier-absent", c);
-      expect(unknownTier.inRange).toBe(false);
+      // Unknown tier ⇒ fail-closed to inRange=false (§7).
+      expect((await validateHypothesis(breach("A1"), "tier-absent", "pool-A", c)).inRange).toBe(false);
     } finally {
       await c.query("rollback");
       c.release();

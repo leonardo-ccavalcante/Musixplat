@@ -17,19 +17,21 @@ export interface Validation {
 
 export async function validateHypothesis(
   lever: NbaVerdict,
-  _restaurantId: string,
-  _cohortId: string,
   tierId: string,
+  tenantId: string,
   client: pg.PoolClient,
 ): Promise<Validation> {
   const confirmed = (lever.verdict === "below" || lever.verdict === "above") && lever.gap != null;
   // jsonb `@>` containment on the action_code; coalesce ⇒ false when allowed_today lacks auto_actions.
-  // No row for tierId ⇒ rows[0] is undefined ⇒ fail-closed to false (§7).
+  // P1-4 (§3.4): a tier spans pools, so read ONLY a policy SIGNED within this tenant — the lexicographically
+  // latest GLOBAL policy could belong to another pool and authorize an action this pool never approved. No
+  // tenant-owned row ⇒ rows[0] undefined ⇒ fail-closed to false (§7).
   const r = await client.query<{ ok: boolean }>(
     `select coalesce(allowed_today->'auto_actions' @> to_jsonb($2::text), false) as ok
-       from gov."Policy_Tier" where tier_id = $1
-       order by policy_version desc limit 1`,
-    [tierId, lever.action_code],
+       from gov."Policy_Tier"
+      where tier_id = $1 and human_signature in (select user_id from gov."User" where tenant_id = $3)
+      order by policy_version desc limit 1`,
+    [tierId, lever.action_code, tenantId],
   );
   return { confirmed, inRange: r.rows[0]?.ok ?? false };
 }

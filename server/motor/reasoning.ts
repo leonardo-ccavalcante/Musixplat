@@ -20,7 +20,9 @@ export interface MotorReasoning {
   proposeHypothesis(input: {
     verdicts: NbaVerdict[];
     discarded: { action_code: string; reason: string }[];
-    grounding: { pattern: string; outcome: string; not_resolved_reason: string | null }[];
+    // Both polarities (P2-3): resolution = what worked (replicate); discarded_branches = what was falsified
+    // (prune). All TEXT/[C] — grounding steers the pick, never injects a number (§8).
+    grounding: { pattern: string; outcome: string; resolution: string | null; not_resolved_reason: string | null; discarded_branches: unknown }[];
   }): Promise<MotorHypothesis>;
 }
 

@@ -40,13 +40,19 @@ export async function writeMotorCase(k: MotorCase, client: pg.PoolClient): Promi
   return r.rows[0]!.kb_case_id;
 }
 
-export async function readGrounding(
-  tenantId: string,
-  areas: string[],
-  client: pg.PoolClient,
-): Promise<{ pattern: string; outcome: string; not_resolved_reason: string | null }[]> {
-  const r = await client.query<{ pattern: string; outcome: string; not_resolved_reason: string | null }>(
-    `select pattern, outcome, not_resolved_reason from tenant."Knowledge_Case"
+export interface GroundingCase {
+  pattern: string;
+  outcome: string;
+  resolution: string | null; // POSITIVE polarity: the action that WORKED (replicate it) — P2-3
+  not_resolved_reason: string | null; // NEGATIVE polarity: why it failed
+  discarded_branches: unknown; // the hypotheses already falsified (prune them) — P2-3
+}
+
+export async function readGrounding(tenantId: string, areas: string[], client: pg.PoolClient): Promise<GroundingCase[]> {
+  // P2-3: carry BOTH polarities so the LLM can replicate what worked (resolution) AND prune what didn't
+  // (discarded_branches) — not just the pattern/outcome. Reviewed-only (BR-B16 RL-guard). All TEXT, no number.
+  const r = await client.query<GroundingCase>(
+    `select pattern, outcome, resolution, not_resolved_reason, discarded_branches from tenant."Knowledge_Case"
       where tenant_id=$1 and reviewed=true and outcome is not null and area_type = any($2)
       order by created_at desc limit 8`,
     [tenantId, areas],

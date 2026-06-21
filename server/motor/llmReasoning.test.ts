@@ -40,9 +40,17 @@ describe("llmMotorReasoning", () => {
     expect(h.confidence).toBeNull();
   });
 
-  it("refuses to act on a non-problem lever even if the model names it (only below/above are eligible)", async () => {
+  it("returns the 'ok' lever the model picked so SQL can FALSIFY it downstream (loop reachable, P1-9)", async () => {
     const r = llmMotorReasoning(fakeClient(JSON.stringify({ action_code: "A4", confidence: 0.9, reasoning: "x" })));
     const h = await r.proposeHypothesis({ verdicts: [v("A1", "m_connection", "below", -0.2), v("A4", "m_quality", "ok", null)], discarded: [], grounding: [] });
-    expect(h.lever).toBeNull(); // A4 is 'ok' ⇒ not a problem ⇒ escalate, never fabricate a gap
+    expect(h.lever?.action_code).toBe("A4"); // mapped back to the REAL verdict (no number invented, §8)
+    expect(h.lever?.verdict).toBe("ok"); // validateHypothesis.confirmed will be false ⇒ falsified ⇒ retry, not refused here
+  });
+
+  it("fails closed on a non-finite confidence — NaN never slips past the floor (P1-8)", async () => {
+    const r = llmMotorReasoning(fakeClient(JSON.stringify({ action_code: "A1", reasoning: "x" }))); // confidence omitted
+    const h = await r.proposeHypothesis({ verdicts: [v("A1", "m_connection", "below", -0.2)], discarded: [], grounding: [] });
+    expect(h.lever?.action_code).toBe("A1");
+    expect(h.confidence).toBeNull(); // runMotor escalates on null — never acts on a NaN confidence
   });
 });

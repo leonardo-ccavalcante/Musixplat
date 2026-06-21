@@ -5,6 +5,8 @@ import { runP01 } from "../../server/jobs/p01";
 import { runMotorForCohort } from "../../server/motor/runMotorFanout";
 import { stubMotorReasoning } from "../../server/motor/reasoning";
 import { getControls, setControls, listEscalations } from "../../server/motor/controls";
+import { appRouter } from "../../server/routers/_app";
+import type { Context } from "../../server/_core/context";
 
 // 02C MOTOR-LLM — the controls + escalations surface end to end against the REAL substrate. We DO NOT call
 // run/runPool with the live LLM (no API key in CI); the money-0 sanity drives runMotorForCohort with the
@@ -185,4 +187,19 @@ describe("02C — motor controls + escalations (real substrate)", () => {
     ).rows[0]!.n;
     expect(money).toBe(0); // the AI NEVER auto-released money (the hard-no holds even with A3/A7 in range)
   }, 120_000);
+
+  it("controls.set requires a senior manager role (P1-2 §6 — human owns the boundary)", async () => {
+    const { tenantId } = await pickProblemCohort();
+    const mgr = (
+      await pool.query<{ user_id: string }>(`select user_id from gov."User" where tenant_id=$1 and role='agent_manager_senior' order by user_id limit 1`, [tenantId])
+    ).rows[0]!.user_id;
+    const nonMgr = (
+      await pool.query<{ user_id: string }>(`select user_id from gov."User" where tenant_id=$1 and role<>'agent_manager_senior' order by user_id limit 1`, [tenantId])
+    ).rows[0]?.user_id;
+    expect(nonMgr).toBeTruthy(); // the seed has a non-manager role to test against
+    const caller = (uid: string) =>
+      appRouter.createCaller({ session: { user_id: uid, tenant_id: tenantId, org_level: "team" }, tenantId, userId: uid } as Context);
+    await expect(caller(nonMgr!).motor.controls.set({ knob_key: "motor_max_loops", knob_value: "3" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller(mgr).motor.controls.set({ knob_key: "motor_max_loops", knob_value: "3" })).resolves.toMatchObject({ ok: true });
+  });
 });

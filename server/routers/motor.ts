@@ -1,4 +1,4 @@
-import { router, tenantProcedure } from "../_core/trpc.js";
+import { router, tenantProcedure, managerProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 import { motorRunInput, motorControlsSetInput } from "../../shared/contracts.js";
 import { runMotorForCohort, runMotorForPool } from "../motor/runMotorFanout.js";
@@ -27,6 +27,7 @@ export const motorRouter = router({
   // The human-editable Autonomy Controls (the approved range + loop knobs + RLHF queue).
   controls: router({
     get: tenantProcedure.query(({ ctx }) => getControls(ctx.tenantId, query)),
-    set: tenantProcedure.input(motorControlsSetInput).mutation(({ ctx, input }) => setControls(ctx.tenantId, input, query)),
+    // P1-2: editing the boundary (range / knobs / learning approval) requires the governance role.
+    set: managerProcedure.input(motorControlsSetInput).mutation(({ ctx, input }) => setControls(ctx.tenantId, input, query)),
   }),
 });

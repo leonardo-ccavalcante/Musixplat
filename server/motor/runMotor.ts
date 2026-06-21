@@ -6,17 +6,11 @@ import { recordUsageSafe } from "../_core/usage.js";
 import { proposeNba } from "../agente/nba_engine.js";
 import { autoDispatch } from "../cockpit/autoDispatch.js";
 import type { NbaVerdict } from "../agente/reasoning.js";
-import { type MotorReasoning, leverAdapter } from "./reasoning.js";
+import { type MotorReasoning, type MotorHypothesis, leverAdapter } from "./reasoning.js";
 import { validateHypothesis } from "./validateHypothesis.js";
 import { writeMotorCase, readGrounding } from "./learn.js";
 
-export interface MotorAttemptInput {
-  restaurantId: string;
-  cohortId: string;
-  week: string;
-  tenantId: string;
-  tierId: string;
-}
+export interface MotorAttemptInput { restaurantId: string; cohortId: string; week: string; tenantId: string; tierId: string; }
 export interface MotorAttemptResult {
   outcome: "acted" | "escalated";
   reason: string; // acted ⇒ the chosen action_code ; escalated ⇒ why (out_of_range / exhausted_3_loops / …)
@@ -45,16 +39,21 @@ export async function runMotorAttempt(i: MotorAttemptInput, reasoning: MotorReas
   const discarded: { action_code: string; reason: string }[] = [];
 
   for (let k = 0; k < maxLoops; k++) {
-    const hyp = await reasoning.proposeHypothesis({ verdicts, discarded, grounding });
-    // Cost of the attention (P07): record THIS iteration's tokens against the attempt (best-effort — a
-    // telemetry write must never fail the decision). The stub omits usage ⇒ no row (deterministic CI).
+    // P1-7 fail-closed (§7): a provider/parse failure degrades THIS attempt to human, never aborts the run.
+    let hyp: MotorHypothesis;
+    try {
+      hyp = await reasoning.proposeHypothesis({ verdicts, discarded, grounding });
+    } catch {
+      return escalate(i, attemptId, "provider_failed", null, discarded, k + 1);
+    }
+    // Cost of the attention (P07): record this iteration's tokens (best-effort). Stub omits usage ⇒ no row.
     if (hyp.usage) await recordUsageSafe({ tenantId: i.tenantId, processType: "motor", kind: "chat", model: CHAT_MODEL, refId: attemptId, usage: hyp.usage });
     // No-suppose (Leo): no confident in-range candidate ⇒ escalate, never guess.
     if (!hyp.lever || hyp.confidence == null || hyp.confidence < minConf) {
       return escalate(i, attemptId, "no_confident_hypothesis", null, discarded, k + 1);
     }
     const lever = hyp.lever;
-    const val = await withTx((c) => validateHypothesis(lever, i.restaurantId, i.cohortId, i.tierId, c));
+    const val = await withTx((c) => validateHypothesis(lever, i.tierId, i.tenantId, c));
     if (!val.confirmed) {
       discarded.push(discardItem(lever, "sql_no_gap")); // falsified ⇒ the next iteration grounds on it
       continue;
@@ -75,13 +74,12 @@ export async function runMotorAttempt(i: MotorAttemptInput, reasoning: MotorReas
     )[0];
     if (gate?.ar === true && gate.fc !== "direct") {
       try {
-        await withTx((c) => autoDispatch(res.nbaId, i.tenantId, c));
-        await withTx((c) =>
-          writeMotorCase(
-            { tenantId: i.tenantId, areaType: lever.dimension ?? "nba", pattern: `${lever.dimension}_${lever.verdict}`, outcome: "resolved", resolution: hyp.rootCause, discarded, attemptId, nbaId: res.nbaId },
-            c,
-          ),
-        );
+        // P1-6 audit atomicity: dispatch + its learning record commit TOGETHER (one tx). A case-write failure
+        // rolls back the dispatch too ⇒ nothing sent ⇒ 'dispatch_failed' is accurate (never sent-without-case).
+        await withTx(async (c) => {
+          await autoDispatch(res.nbaId, i.tenantId, c);
+          await writeMotorCase({ tenantId: i.tenantId, areaType: lever.dimension ?? "nba", pattern: `${lever.dimension}_${lever.verdict}`, outcome: "resolved", resolution: hyp.rootCause, discarded, attemptId, nbaId: res.nbaId }, c);
+        });
         return { outcome: "acted", reason: lever.action_code, nbaId: res.nbaId, loops: k + 1, attemptId };
       } catch {
         return escalate(i, attemptId, "dispatch_failed", lever, discarded, k + 1);

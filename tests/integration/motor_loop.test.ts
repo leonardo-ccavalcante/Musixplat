@@ -113,4 +113,29 @@ describe("02C — runMotorAttempt (≤3 loop, real engine + stub provider)", () 
     expect(out.outcome).toBe("escalated");
     expect(out.reason).toBe("no_confident_hypothesis");
   });
+
+  it("LOOP REACHABLE (P1-9): an 'ok' lever is FALSIFIED by SQL ⇒ retry ⇒ acts on iter 2", async () => {
+    await arrange('{"auto_actions":["A1","A4","A6"]}');
+    let call = 0;
+    const falsifyThenAct: MotorReasoning = {
+      proposeHypothesis: async ({ verdicts }) => {
+        call++;
+        // iter1: pick an 'ok' lever (SQL has no gap ⇒ confirmed=false ⇒ falsified). iter2: pick the real A1.
+        const pick = call === 1 ? verdicts.find((v) => v.verdict === "ok") : verdicts.find((v) => v.action_code === "A1");
+        return { lever: pick ?? null, rootCause: "scripted", confidence: 0.9, reasoning: "test" };
+      },
+    };
+    const out = await runMotorAttempt(input(), falsifyThenAct);
+    expect(out.outcome).toBe("acted"); // the falsified hypothesis did not block the real one
+    expect(out.loops).toBe(2); // it genuinely iterated past the falsified branch (loop is NOT dead code)
+  });
+
+  it("FAIL-CLOSED (P1-7): a provider failure ⇒ escalate THIS attempt, never abort the run", async () => {
+    await arrange('{"auto_actions":["A1","A4","A6"]}');
+    const boom: MotorReasoning = { proposeHypothesis: async () => { throw new Error("openai 500"); } };
+    const out = await runMotorAttempt(input(), boom);
+    expect(out.outcome).toBe("escalated");
+    expect(out.reason).toBe("provider_failed");
+    expect(out.nbaId).toBeNull();
+  });
 });

@@ -11,10 +11,14 @@ type Exec = <T extends pg.QueryResultRow>(sql: string, params: readonly unknown[
 // tenant-scoped (un-reviewed cases this human must approve before they ground future runs). tiers/knobs are
 // governance-global in this substrate (see setControls honesty note).
 export async function getControls(tenantId: string, exec: Exec): Promise<MotorControls> {
+  // P1-3 (§3.4): show ONLY the tiers whose policy was signed within this tenant — a tier spans pools, so an
+  // unscoped read would surface (and let the human edit) another pool's approved range.
   const tierRows = await exec<{ tier_id: string | null; auto_actions: unknown }>(
-    `select tier_id, coalesce(allowed_today->'auto_actions', '[]'::jsonb) as auto_actions
-       from gov."Policy_Tier" order by tier_id`,
-    [],
+    `select distinct on (tier_id) tier_id, coalesce(allowed_today->'auto_actions', '[]'::jsonb) as auto_actions
+       from gov."Policy_Tier"
+      where human_signature in (select user_id from gov."User" where tenant_id=$1)
+      order by tier_id, policy_version desc`,
+    [tenantId],
   );
   const tiers = tierRows
     .filter((t): t is { tier_id: string; auto_actions: unknown } => t.tier_id != null)
@@ -32,23 +36,32 @@ export async function getControls(tenantId: string, exec: Exec): Promise<MotorCo
     [tenantId],
   );
 
-  return { tiers, knobs, pending_cases: pending };
+  // P1-5: the REAL action catalog (A1..A8) the runtime whitelist compares against — so the controls toggle the
+  // actions the motor actually evaluates, not invented names. financial_class lets the UI mark money actions
+  // (which §7 never auto-acts, even if toggled on).
+  const availableActions = await exec<{ code: string; label: string; financial_class: string }>(
+    `select code, label, financial_class::text as financial_class from catalog."NBA_Catalogo" order by code`,
+    [],
+  );
+
+  return { tiers, knobs, pending_cases: pending, available_actions: availableActions };
 }
 
 // setControls — apply whichever ONE op is present.
 export async function setControls(tenantId: string, input: MotorControlsSetInput, exec: Exec): Promise<{ ok: true }> {
   if (input.auto_actions && input.tier_id) {
-    // HONESTY (§4, no-fake-scope): Policy_Tier is keyed by TIER, not tenant, in this substrate (inherited from
-    // the floor's governance model). This edit is tier-GLOBAL — every pool sharing the tier sees it. Per-tenant
-    // range scoping is a known follow-up gap; we do NOT add a tenant filter we cannot enforce here.
+    // P1-3 (§3.4): scope the range edit to a policy SIGNED within this tenant — never mutate another pool's
+    // approved range for a shared tier. A tier with no tenant-owned policy ⇒ no-op (0 rows), fail-closed.
     await exec(
       `update gov."Policy_Tier"
           set allowed_today = jsonb_set(coalesce(allowed_today,'{}'::jsonb), '{auto_actions}', $2::jsonb)
-        where tier_id=$1`,
-      [input.tier_id, JSON.stringify(input.auto_actions)],
+        where tier_id=$1 and human_signature in (select user_id from gov."User" where tenant_id=$3)`,
+      [input.tier_id, JSON.stringify(input.auto_actions), tenantId],
     );
   } else if (input.knob_key && input.knob_value != null) {
-    // Config_Knobs is GLOBAL config (no tenant column) — also tier/global, same caveat as above.
+    // Config_Knobs is GLOBAL config (no tenant column) — the motor loop knobs are platform-wide. The
+    // managerProcedure role gate (P1-2) restricts WHO can change them; per-tenant knob scoping is a substrate
+    // follow-up (the knob table has no tenant dimension).
     await exec(`update catalog."Config_Knobs" set value=$2 where key=$1`, [input.knob_key, input.knob_value]);
   } else if (input.approve_case_id) {
     // THIS op IS tenant-scoped and enforced: the RLHF approval only flips the caller's own case (anti cross-tenant).
