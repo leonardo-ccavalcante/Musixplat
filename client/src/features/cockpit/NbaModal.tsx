@@ -3,7 +3,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { AutonomyBadge } from "./AutonomyBadge";
-import { fmtNum } from "@/lib/utils";
+import { readSignal, fmtValue, fmtGap, labelOf } from "@shared/signalFormat";
 import type { RowAction, RowState } from "./CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
@@ -16,20 +16,18 @@ const REASON_TEXT: Record<NonNullable<NbaCockpitRow["reason"]>, string> = {
   gates: "A sample-size / policy / k-anon gate is not satisfied — held for you (fail-closed).",
 };
 
+// The structured projection in each dimension's natural unit (rate→%, percentile, €) via the shared
+// formatter, keeping the measured → standard arrow. Degrades to a conservative line on a bad payload.
 function PathView({ j }: { j: unknown }) {
-  if (j && typeof j === "object") {
-    const o = j as { dimension?: unknown; measured?: unknown; standard?: unknown; gap?: unknown };
-    if (typeof o.dimension === "string" && typeof o.measured === "number" && typeof o.standard === "number") {
-      return (
-        <span>
-          {o.dimension}: <span className="text-mxm-content">{fmtNum(o.measured)}</span> →{" "}
-          <span className="text-mxm-content">{fmtNum(o.standard)}</span>
-          {typeof o.gap === "number" ? ` · gap ${fmtNum(o.gap)}` : ""}
-        </span>
-      );
-    }
-  }
-  return <span>no projected path (rendered conservatively)</span>;
+  const s = readSignal(j);
+  if (!s) return <span>no projected path (rendered conservatively)</span>;
+  return (
+    <span>
+      {labelOf(s.dimension)}: <span className="text-mxm-content">{fmtValue(s.dimension, s.measured)}</span> →{" "}
+      <span className="text-mxm-content">{fmtValue(s.dimension, s.standard)}</span>
+      {s.gap != null ? ` · gap ${fmtGap(s.dimension, s.gap)}` : ""}
+    </span>
+  );
 }
 
 export function NbaModal({

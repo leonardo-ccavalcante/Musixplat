@@ -235,14 +235,17 @@ export const cockpitDispatchDetail = z.object({
   reach_count: z.number(),
   reach_preview: z.array(z.object({ restaurant_id: z.string(), tier_base: z.string() })),
   artifact_kind: z.string(),
-  content: z.object({ action: z.string(), cohort: z.string(), root: z.string(), path: z.string(), how: z.string() }),
+  // title = heading; evidence = the measured "why" ([V], read-only); body = the editable message.
+  content: z.object({ title: z.string(), evidence: z.string(), body: z.string() }),
 });
 export type CockpitDispatchDetail = z.infer<typeof cockpitDispatchDetail>;
 
-// 02:1a — Send: writes Release_Batch + Decision_Trace + Action_Dispatch atomically.
+// 02:1a — Send: writes Release_Batch + Decision_Trace + Action_Dispatch atomically. body = the
+// operator-reviewed (possibly edited) message; the measured evidence stays server-rendered ([V]).
 export const cockpitSendDispatchInput = z.object({
   nba_id: z.string().min(1),
   resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  body: z.string().min(1).max(5000),
 });
 export type CockpitSendDispatchInput = z.infer<typeof cockpitSendDispatchInput>;
 

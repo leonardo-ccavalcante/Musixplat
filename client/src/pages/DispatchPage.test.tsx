@@ -13,30 +13,36 @@ const detail: CockpitDispatchDetail = {
   reach_preview: [{ restaurant_id: "R1", tier_base: "long_tail" }],
   artifact_kind: "email_offer",
   content: {
-    action: "Propose promo/bonus",
-    cohort: "long_tail · 0-3m",
-    root: "price percentile high",
-    path: "price_pctile: 82 → 60",
-    how: "human releases the money",
+    title: "Propose promo/bonus · long_tail · 0-3m",
+    evidence: "Price percentile vs peers 82 pctile vs 60 pctile standard · gap +22 pts",
+    body: "Re: Propose promo/bonus — cohort long_tail · 0-3m.\n\nWhat we measured: …\n\nRecommended next steps:\n…",
   },
 };
 
 describe("02:1a DispatchView", () => {
-  it("shows reach + artifact kind + a single Send primary, and 'and N more'", () => {
+  it("shows reach, the read-only measured evidence, and the editable message body", () => {
     render(<DispatchView detail={detail} sending={false} onSend={() => {}} onCancel={() => {}} />);
     expect(screen.getByText(/Reaches/)).toHaveTextContent("17");
-    expect(screen.getByText(/Email offer/)).toBeInTheDocument();
     expect(screen.getByText(/and 16 more/)).toBeInTheDocument();
+    expect(screen.getByText(/82 pctile vs 60 pctile/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/The message/)).toHaveValue(detail.content.body);
     expect(screen.getByRole("button", { name: /Send to all 17 restaurants/ })).toBeInTheDocument();
   });
 
-  it("Send fires onSend; sending state disables + relabels", () => {
+  it("Send fires onSend with the (edited) body; sending state disables + relabels", () => {
     const onSend = vi.fn();
     const { rerender } = render(<DispatchView detail={detail} sending={false} onSend={onSend} onCancel={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/The message/), { target: { value: "Edited message body" } });
     fireEvent.click(screen.getByRole("button", { name: /Send to all 17 restaurants/ }));
-    expect(onSend).toHaveBeenCalled();
+    expect(onSend).toHaveBeenCalledWith("Edited message body");
     rerender(<DispatchView detail={detail} sending={true} onSend={onSend} onCancel={() => {}} />);
     expect(screen.getByRole("button", { name: /Sending…/ })).toBeDisabled();
+  });
+
+  it("Send is disabled when the message is emptied (never send a blank artifact)", () => {
+    render(<DispatchView detail={detail} sending={false} onSend={() => {}} onCancel={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/The message/), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: /Send to all 17 restaurants/ })).toBeDisabled();
   });
 
   it("the Experiment button is present but disabled (1b placeholder)", () => {

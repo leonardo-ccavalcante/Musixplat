@@ -256,7 +256,7 @@ export async function dispatchDetail(nbaId: string, tenantId: string, exec: Exec
 // 02:1a — Send: the release (Release_Batch + Decision_Trace, reusing recordRelease) AND the Action_Dispatch
 // row in ONE tx. Trace failure ⇒ nothing persists (caller's tx). Unique nba_id ⇒ no double dispatch.
 export async function sendDispatch(
-  i: Omit<ReleaseInput, "action">,
+  i: Omit<ReleaseInput, "action"> & { body: string },
   client: pg.PoolClient,
 ): Promise<{ dispatchId: string; traceId: string }> {
   const rel = await recordRelease({ ...i, action: "RELEASE" }, client);
@@ -293,11 +293,14 @@ export async function sendDispatch(
     before_after_expected: d.before_after_expected,
     playbook: d.playbook,
   });
+  // The operator owns the outgoing TEXT (they may have edited the body); the measured evidence stays
+  // server-rendered ([V], §14 — the human never authors the number).
+  const content = { ...art.content, body: i.body };
   const ins = await client.query<{ dispatch_id: string }>(
     `insert into gov."Action_Dispatch"(nba_id, cohort_id, tenant_id, artifact_kind, content, target_count, status, decision_trace_id)
      values ($1, $2, $3, $4, $5::jsonb, $6, 'sent', $7)
      returning dispatch_id::text as dispatch_id`,
-    [i.nbaId, d.cohort_id, i.tenantId, art.artifact_kind, JSON.stringify(art.content), target_count, rel.traceId],
+    [i.nbaId, d.cohort_id, i.tenantId, art.artifact_kind, JSON.stringify(content), target_count, rel.traceId],
   );
   return { dispatchId: ins.rows[0]!.dispatch_id, traceId: rel.traceId };
 }
@@ -318,7 +321,13 @@ export const cockpitRouter = router({
   sendDispatch: tenantProcedure.input(cockpitSendDispatchInput).mutation(({ ctx, input }) =>
     withTx((client) =>
       sendDispatch(
-        { tenantId: ctx.tenantId, operatorId: ctx.userId, nbaId: input.nba_id, resultingLevel: input.resulting_level },
+        {
+          tenantId: ctx.tenantId,
+          operatorId: ctx.userId,
+          nbaId: input.nba_id,
+          resultingLevel: input.resulting_level,
+          body: input.body,
+        },
         client,
       ),
     ),

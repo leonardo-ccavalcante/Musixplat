@@ -63,14 +63,19 @@ describe("02:1a dispatch — reach + atomic send (§14, idempotent, no cross-poo
 
       const d = await dispatchDetail(res.nbaId, tId, exec);
       expect(d!.reach_count).toBeGreaterThanOrEqual(1);
-      expect(d!.reach_count).toBe(d!.reach_preview.length <= 6 ? d!.reach_count : d!.reach_count); // sanity
-      expect(d!.content.action.length).toBeGreaterThan(0);
+      expect(d!.content.title.length).toBeGreaterThan(0);
+      expect(d!.content.body).toContain("Recommended next steps"); // a real, readable message
+      expect(d!.content.body).not.toMatch(/measured=0\.\d{6}/); // no raw-float leak (§3.10)
 
       // foreign pool sees nothing (no cross-pool leak)
       expect(await dispatchDetail(res.nbaId, "tenant-does-not-exist", exec)).toBeNull();
 
       const op = await firstOperator(c, tId);
-      const out = await sendDispatch({ tenantId: tId, operatorId: op, nbaId: res.nbaId, resultingLevel: "LOW" }, c);
+      const edited = "Operator-reviewed message — ready to send.";
+      const out = await sendDispatch(
+        { tenantId: tId, operatorId: op, nbaId: res.nbaId, resultingLevel: "LOW", body: edited },
+        c,
+      );
       expect(out.dispatchId).toBeTruthy();
       const post = await c.query<{ status: string; decision_trace_id: string | null; target_count: number }>(
         `select status, decision_trace_id, target_count from gov."Action_Dispatch" where nba_id=$1`,
@@ -82,7 +87,7 @@ describe("02:1a dispatch — reach + atomic send (§14, idempotent, no cross-poo
 
       // idempotent: a second send is rejected (unique nba_id)
       await expect(
-        sendDispatch({ tenantId: tId, operatorId: op, nbaId: res.nbaId, resultingLevel: "LOW" }, c),
+        sendDispatch({ tenantId: tId, operatorId: op, nbaId: res.nbaId, resultingLevel: "LOW", body: edited }, c),
       ).rejects.toThrow();
     } finally {
       await c.query("rollback");

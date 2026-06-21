@@ -3,6 +3,7 @@
 //   - deterministicReasoning (here): worst-relative-gap problem; reproducible, no LLM, testable E2E.
 //   - (future) an LLM provider doing real /problem-solving + /sat — plugs into this SAME interface,
 //     still calling fn_nba_test for every number. Tests inject a stub so CI stays deterministic.
+import { labelOf, fmtValue, fmtGap } from "../../shared/signalFormat.js";
 
 export interface NbaVerdict {
   action_code: string;
@@ -49,8 +50,11 @@ export const deterministicReasoning: NbaReasoning = {
 
     const ranked = problems.slice(0, 3).map((v) => v.action_code); // HARD CAP 3 (cost discipline)
     const lever = problems[0] ?? null;
+    // [C] interpretation, formatted in the signal's natural unit (rate→%, percentile, €) — no raw floats
+    // (§3.10 no false precision). The NUMBER still comes only from fn_nba_test; we just render it readably.
+    const dim = lever?.dimension ?? "signal";
     const rootCause = lever
-      ? `${lever.dimension} ${lever.verdict} standard (measured=${lever.measured}, standard=${lever.standard}, gap=${lever.gap})`
+      ? `${labelOf(dim)} ${lever.verdict} standard — ${fmtValue(dim, lever.measured!)} vs ${fmtValue(dim, lever.standard!)} (gap ${fmtGap(dim, lever.gap!)})`
       : "no attributable cause — all funnel dimensions within range or no_data";
     return { ranked, lever, rootCause };
   },
