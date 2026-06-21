@@ -49,7 +49,8 @@ export function llmCopy(client: ChatClient) {
       `Issue we measured (use these figures verbatim): ${i.evidence}\n` +
       `Internal action (translate into plain owner-facing help, do not copy the wording): ${i.actionLabel}\n` +
       `Internal playbook (a hint for the steps, rewrite for the owner): ${i.playbook}`;
-    const raw = unfence(await chatText(client, SYSTEM, user, 320));
+    const { text } = await chatText(client, SYSTEM, user, 320);
+    const raw = unfence(text);
     for (const n of i.numbers) {
       if (n && !raw.includes(n)) throw new Error(`llmCopy: dropped required figure ${n}`); // fail-closed (§14)
     }
