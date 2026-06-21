@@ -4,9 +4,10 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CockpitBoard, groupRows, type GroupBy } from "@/features/cockpit/CockpitBoard";
-import { CockpitHero, type RunResult } from "@/features/cockpit/CockpitHero";
+import { CockpitHero, type RunResult, type MotorRunResult } from "@/features/cockpit/CockpitHero";
 import { CatalogDrawer } from "@/features/cockpit/CatalogDrawer";
 import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
+import { EscalatedList } from "@/features/cockpit/EscalatedList";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
 import { type RowAction, type RowState, type KbReview } from "@/features/cockpit/CockpitRow";
@@ -30,7 +31,9 @@ export function CockpitPage() {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [registryOpen, setRegistryOpen] = useState(false);
+  const [escalationsOpen, setEscalationsOpen] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [motorResult, setMotorResult] = useState<MotorRunResult | null>(null);
 
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
@@ -38,6 +41,7 @@ export function CockpitPage() {
   const week = trpc.cockpit.weekSummary.useQuery(undefined, { enabled: ready });
   const release = trpc.cockpit.release.useMutation();
   const propose = trpc.cockpit.proposePool.useMutation();
+  const runMotor = trpc.motor.runPool.useMutation();
 
   // 02:CP2 — "Run NBA": fire the engine across the pool; on success refresh the board + "your week" + the
   // registry (the autonomous actions it just took), and surface the spectrum inline.
@@ -48,6 +52,21 @@ export function CockpitPage() {
         void utils.cockpit.list.invalidate();
         void utils.cockpit.weekSummary.invalidate();
         void utils.cockpit.autoActions.invalidate();
+      },
+    });
+  };
+
+  // 02C:6a — "Run Motor": fire the LLM autonomous engine pool-wide (mirrors Run NBA's pool decision — the
+  // board spans cohorts, so there's no single focused cohort to target). The OpenAI call is slow; the hero
+  // shows an explicit busy state, never a fake-instant success. On success refresh the escalations feed + the
+  // auto-actions registry + "your week" (the motor may have acted alone and left traces).
+  const onRunMotor = () => {
+    runMotor.mutate(undefined, {
+      onSuccess: (res) => {
+        setMotorResult(res);
+        void utils.motor.escalations.invalidate();
+        void utils.cockpit.autoActions.invalidate();
+        void utils.cockpit.weekSummary.invalidate();
       },
     });
   };
@@ -144,6 +163,10 @@ export function CockpitPage() {
             onRunNba={onRunNba}
             running={propose.isPending}
             runResult={runResult}
+            onRunMotor={onRunMotor}
+            motorRunning={runMotor.isPending}
+            motorResult={motorResult}
+            onOpenEscalations={() => setEscalationsOpen(true)}
           />
 
           <div className="mb-3 mt-[clamp(1.5rem,3vw,2.25rem)] flex flex-wrap items-center justify-between gap-3">
@@ -186,6 +209,7 @@ export function CockpitPage() {
       />
       <CatalogDrawer open={catalogOpen} onClose={() => setCatalogOpen(false)} />
       <AutonomousRegistry open={registryOpen} onClose={() => setRegistryOpen(false)} />
+      <EscalatedList open={escalationsOpen} onClose={() => setEscalationsOpen(false)} />
     </main>
   );
 }
