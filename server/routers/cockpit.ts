@@ -15,6 +15,9 @@ import {
 import { renderArtifact, buildCopyInput } from "../cockpit/renderArtifact.js";
 import { restaurantCopy } from "../cockpit/copywriter.js";
 import { proposeAndAutoActForCohort, proposeForPool } from "../cockpit/runNbaForCohort.js";
+import { provisionCockpit } from "../cockpit/provision.js";
+import { uploadCockpitConfig, buildConfigTemplate } from "../cockpit/configUpload.js";
+import { cockpitConfigInput } from "../../shared/contracts_cockpit_config.js";
 
 const LEVEL_RANK: Record<Level, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 };
 
@@ -409,4 +412,14 @@ export const cockpitRouter = router({
 
   // 02:CP2 — the autonomous-actions registry: what the AI did ALONE (origin='auto'), pool-scoped (read, §14).
   autoActions: tenantProcedure.query(({ ctx }) => listAutoActions(ctx.tenantId, query)),
+
+  // 02:CP — "Preparar cockpit": one in-app action to take an empty pool to a working cockpit (P01 if cohorts
+  // are absent + governance floor + propose). Idempotent, tenant-scoped, §14 (numbers produced, read back).
+  provision: tenantProcedure.mutation(({ ctx }) => provisionCockpit(ctx.tenantId)),
+
+  // 02:CP — the downloadable config template (operator governance: Policy_Tier + named knobs), §14-safe.
+  configTemplate: tenantProcedure.query(({ ctx }) => buildConfigTemplate(ctx.tenantId)),
+
+  // 02:CP — upload the cockpit config (atomic, fail-closed, tenant-scoped; never writes a RESULT, §14).
+  uploadConfig: tenantProcedure.input(cockpitConfigInput).mutation(({ ctx, input }) => uploadCockpitConfig(input, ctx.tenantId)),
 });

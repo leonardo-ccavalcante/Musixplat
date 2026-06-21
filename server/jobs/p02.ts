@@ -18,7 +18,9 @@ export interface P02Result {
 }
 
 // Root policies (operator-signed, 1st generation ⇒ born_from_trace NULL) — the 3rd min() arm. Idempotent.
-async function bootstrapPolicies(): Promise<void> {
+// Exported so the in-app "Preparar cockpit" provision (server/cockpit/provision.ts) reuses the SAME bootstrap
+// the hosted seed uses (on-conflict do nothing ⇒ never clobbers an operator-uploaded policy).
+export async function bootstrapPolicies(): Promise<void> {
   await query(
     `insert into gov."Policy_Tier"(policy_id, tier_id, policy_version, tier_cap, how_measured, human_signature)
      values ('PT-brand','managed_brand','pv-brand','MEDIUM','root policy (operator-signed)','U-OP-001'),
