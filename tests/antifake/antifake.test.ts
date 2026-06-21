@@ -190,4 +190,38 @@ describe("05D F0 anti-fake — general path reports a problem with NO produced r
     expect(r[0]!.revenue_lost).toBeNull();
     expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
   });
+
+  it("cancellation: revenue_lost is NULL and Affected is empty for a freshly-reported problem", async () => {
+    const POOL = "POOL-AF-CANCEL";
+    // INPUT only — one high-cancel restaurant (no producer runs at report time). 1 restaurant-cancelled
+    // order + 1 'ok' ⇒ rate 0.50, but report computes NOTHING.
+    await pool.query(
+      `insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week)
+       values ('R-AFK-1', $1, 'long_tail','long_tail'::segment, date '2026-01-01','Centro','pizza',50)`,
+      [POOL],
+    );
+    await pool.query(
+      `insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status, cancelled_by, zone)
+       values ('R-AFK-1', current_date, 100, 20, 'failed', 'restaurant', 'Centro')`,
+    );
+    await pool.query(
+      `insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status, zone)
+       values ('R-AFK-1', current_date, 100, 20, 'ok', 'Centro')`,
+    );
+
+    const reported = await caller(POOL).diagnosis.reportProblem({
+      restaurantId: "R-AFK-1",
+      problem_type: "cancellation",
+    });
+    expect(reported.created).toBe(true);
+
+    // §14: the cancellation report path computes NOTHING — revenue_lost NULL, zero Affected rows.
+    const r = await rows<{ revenue_lost: number | null }>(
+      pool,
+      `select revenue_lost from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [reported.problem_id],
+    );
+    expect(r[0]!.revenue_lost).toBeNull();
+    expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
+  });
 });

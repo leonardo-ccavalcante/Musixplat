@@ -54,7 +54,14 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('sla_target_hours',          '24',  '[V]', 'leo'),
   -- 05D diagnosis threshold — DISTINCT from the A1 nba_connection_min_ratio ACTION policy (§3.8 by name):
   -- this decides what COUNTS as a diagnosed connection problem; the A1 knob decides when to PROPOSE reconnect.
-  ('connection_min_ratio',      '0.80', '[C]', 'leo');
+  ('connection_min_ratio',      '0.80', '[C]', 'leo'),
+  -- 05D cancellation diagnosis threshold — DISTINCT from the A6 nba_cancel_rate_max ACTION policy (§3.8 by name).
+  ('cancel_rate_max',           '0.10', '[C]', 'leo')
+-- idempotent: the 05D diagnosis knobs (connection_min_ratio, cancel_rate_max) are ALSO inserted by the
+-- 20260621000006 migration (hosted-safe, Codex P1). rebuild_db.sh runs migrations THEN this seed, so this
+-- block must skip the already-present rows — else the duplicate aborts the whole block (dropping window_silent
+-- etc.). On a fresh resetDb (seed-only) the table is empty ⇒ on-conflict never fires; every knob inserts.
+on conflict (key) do nothing;
 
 -- ── 02 NBA action-threshold knobs ([C] placeholders — the human-approved ranges that gate autonomy,
 --    read BY NAME §3.8. "value está en el mecanismo": Leo ratifies the numbers in the cockpit). ──

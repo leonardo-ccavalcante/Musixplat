@@ -28,6 +28,7 @@ const HYPOTHESES: Record<string, string[]> = {
   finance: ["payment was not executed", "refund dispute concentrated", "balance mismatch"],
   product: ["feature adoption dropped", "product defect"],
   performance: ["latency / connection window"],
+  operations: ["restaurant rejecting orders (out of stock / closed)", "kitchen overload at peak hours", "menu availability not synced"],
 };
 
 // 05D F0 — concentration axis allowlist: maps a descriptor's concentration_dim (closed enum) to a

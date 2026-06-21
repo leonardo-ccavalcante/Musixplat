@@ -27,6 +27,18 @@ export const PROBLEM_TYPES: Record<string, ProblemDescriptor> = {
     hypotheses: ["restaurant device/app disconnected", "POS/integration failure", "staff not logging in during committed hours"],
     metric: "restore_connection_uptime", origin: "builtin",
   },
+  cancellation: {
+    problem_type: "cancellation", area_type: "operations", label: "Restaurant cancellations",
+    // restaurant-side cancel rate over the window = count(payment_status='failed' AND cancelled_by='restaurant')
+    // / count(payment_status IN ('ok','failed')) (concluded orders) — the SAME raw definition the cohort
+    // signal cancel_by_restaurant uses (baseline_kpi_v2 / nba_signals). affected when ABOVE the diagnosis
+    // knob (operator 'gt'). threshold read BY NAME (§3.8) — cancel_rate_max is the DIAGNOSIS threshold,
+    // DISTINCT from the A6 nba_cancel_rate_max ACTION policy (same Codex split as connection_min_ratio).
+    affected: { table: "Order", signal: "cancel_rate_restaurant > cancel_rate_max", operator: "gt", threshold_knob: "cancel_rate_max" },
+    impact: { kind: "at_risk_gmv" }, concentration_dim: "zone",
+    hypotheses: ["restaurant rejecting orders (out of stock / closed)", "kitchen overload at peak hours", "menu item availability not synced"],
+    metric: "reduce_restaurant_cancellations", origin: "builtin",
+  },
 };
 export function getDescriptor(t: string): ProblemDescriptor {
   const d = PROBLEM_TYPES[t];
