@@ -9,7 +9,7 @@ import { type MotorReasoning, stubMotorReasoning } from "./reasoning.js";
 // pools (04 §3.2), so cohort presence ≠ tenant ownership — EVERY restaurant/cohort query joins
 // tenant."Restaurant" and constrains r.tenant_id, and a foreign cohort hits FORBIDDEN. Mirrors
 // runNbaForCohort.ts line-for-line for the SQL guards (the bug class a reviewer caught 5× before).
-export interface MotorCohortResult { acted: number; escalated: number; attempts: number; }
+export interface MotorCohortResult { acted: number; escalated: number; skipped: number; attempts: number; }
 export interface MotorPoolResult extends MotorCohortResult { cohorts: number; }
 
 const PROBLEM = `(m_connection<0.55 or m_quality<0.55 or price_pctile_in_cohort>78 or cancel_by_restaurant>0.08)`;
@@ -27,7 +27,26 @@ export async function runMotorForCohort(
       where cms.cohort_id = $1 limit 1`,
     [cohortId, tenantId],
   );
-  if (!inPool.length) throw new TRPCError({ code: "FORBIDDEN", message: "cohort not in this pool" });
+  if (!inPool.length) {
+    // round2 P2-1 (§3.4): a cross-pool attempt aborts AND leaves an audit trail (separate connection ⇒ the
+    // log survives the thrown abort).
+    await query(`insert into gov."Security_Log"(tenant_id, kind, detail) values ($1,'cross_pool',$2::jsonb)`, [
+      tenantId,
+      JSON.stringify({ piece: "02C:motor.run", cohort_id: cohortId }),
+    ]);
+    throw new TRPCError({ code: "FORBIDDEN", message: "cohort not in this pool" });
+  }
+
+  // (1b) round2 P1-4 anti-mezcla (§3.5): reject a stale-version cohort — runMotorForPool only feeds current
+  // cohorts, but motor.run takes an arbitrary cohortId, and fn_nba_test_all reads CURRENT-version signals.
+  const ver = await query<{ v: string | null; cur: string | null }>(
+    `select (select distinct cohort_rule_version from cohort."Cohort_Membership_Snapshot" where cohort_id=$1 limit 1) as v,
+            (select value from catalog."Config_Knobs" where key='cohort_rule_version_current') as cur`,
+    [cohortId],
+  );
+  if (ver[0]?.v == null || ver[0].v !== ver[0].cur) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "stale cohort_rule_version (anti-mezcla §3.5)" });
+  }
 
   // (2) week = the cohort's latest snapshot (PRECONDITION_FAILED if none — run P01 first).
   const wk = await query<{ week: string }>(
@@ -55,13 +74,11 @@ export async function runMotorForCohort(
     [cohortId, week, tenantId],
   );
 
-  const out: MotorCohortResult = { acted: 0, escalated: 0, attempts: 0 };
+  const out: MotorCohortResult = { acted: 0, escalated: 0, skipped: 0, attempts: 0 };
   for (const r of sample) {
-    const res = await runMotorAttempt(
-      { restaurantId: r.restaurant_id, cohortId, week, tenantId, tierId },
-      reasoning,
-    );
+    const res = await runMotorAttempt({ restaurantId: r.restaurant_id, cohortId, week, tenantId, tierId }, reasoning);
     if (res.outcome === "acted") out.acted++;
+    else if (res.outcome === "skipped") out.skipped++; // round2 P2-2: already-dispatched cohort action, not a failure
     else out.escalated++;
     out.attempts++;
   }
@@ -85,11 +102,12 @@ export async function runMotorForPool(
       order by cms.cohort_id limit 8`,
     [tenantId],
   );
-  const agg: MotorPoolResult = { acted: 0, escalated: 0, attempts: 0, cohorts: 0 };
+  const agg: MotorPoolResult = { acted: 0, escalated: 0, skipped: 0, attempts: 0, cohorts: 0 };
   for (const c of cohorts) {
     const r = await runMotorForCohort(c.cohort_id, tenantId, reasoning);
     agg.acted += r.acted;
     agg.escalated += r.escalated;
+    agg.skipped += r.skipped;
     agg.attempts += r.attempts;
     if (r.attempts > 0) agg.cohorts++;
   }

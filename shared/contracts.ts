@@ -311,17 +311,18 @@ export const motorControlsSetInput = z
     knob_value: z.string().optional(),
     approve_case_id: z.string().optional(), // flip Knowledge_Case.reviewed=true (tenant-scoped)
   })
-  // P2-1: bound the knob values at the API so a caller can't disable the motor (loops 0/huge), bypass the
-  // confidence floor (>1 or <0), or trigger runaway paid LLM calls. max_loops ∈ [1,10] int; confidence ∈ [0,1].
+  // P2-1 + round2 P1-6: bound the knob values at the API so a caller can't disable the motor, bypass the
+  // confidence floor, or run more than the promised ≤3 hypotheses. max_loops ∈ [1,3] int (the contract/UI/
+  // escalation message all promise ≤3); confidence ∈ [0,1].
   .refine(
     (d) => {
       if (d.knob_key == null || d.knob_value == null) return true;
       const n = Number(d.knob_value);
       if (!Number.isFinite(n)) return false;
-      if (d.knob_key === "motor_max_loops") return Number.isInteger(n) && n >= 1 && n <= 10;
+      if (d.knob_key === "motor_max_loops") return Number.isInteger(n) && n >= 1 && n <= 3;
       return n >= 0 && n <= 1; // motor_min_confidence
     },
-    { message: "knob_value out of bounds (motor_max_loops 1..10 int; motor_min_confidence 0..1)" },
+    { message: "knob_value out of bounds (motor_max_loops 1..3 int; motor_min_confidence 0..1)" },
   );
 export type MotorControlsSetInput = z.infer<typeof motorControlsSetInput>;
 

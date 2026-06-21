@@ -81,7 +81,7 @@ export async function listEscalations(tenantId: string, exec: Exec): Promise<Mot
     `select kc.kb_case_id::text as kb_case_id, kc.area_type, coalesce(kc.pattern,'') as pattern,
             kc.not_resolved_reason, kc.discarded_branches, c.cost as cost_usd, kc.created_at::text as created_at
        from tenant."Knowledge_Case" kc
-       left join (select ref_id, sum(cost_usd) as cost from gov.v_llm_cost group by ref_id) c
+       left join (select ref_id, sum(cost_usd)::float8 as cost from gov.v_llm_cost group by ref_id) c
               on c.ref_id = kc.path_used->>'attempt_id'
       where kc.tenant_id=$1 and kc.outcome='escalated'
       order by kc.created_at desc limit 50`,

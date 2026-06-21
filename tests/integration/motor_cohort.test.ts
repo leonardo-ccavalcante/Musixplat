@@ -76,7 +76,7 @@ describe("02C:3c — runMotorForCohort (tenant-scoped fan-out)", () => {
     await arrange('{"auto_actions":["A1","A4","A6"]}');
     const out = await runMotorForCohort(ctx.cohortId, ctx.tenantId, stubMotorReasoning);
     expect(out.attempts).toBeGreaterThan(0);
-    expect(out.acted + out.escalated).toBe(out.attempts);
+    expect(out.acted + out.escalated + out.skipped).toBe(out.attempts); // skipped = idempotent dedup (round2 P2-2)
     expect(out.acted).toBeGreaterThan(0); // the engine cleared at least one alone
   });
 });

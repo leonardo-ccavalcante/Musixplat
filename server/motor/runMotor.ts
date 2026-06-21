@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { TRPCError } from "@trpc/server";
 import { query, withTx } from "../db/pool.js";
 import { knobNum } from "../_core/knobs.js";
 import { CHAT_MODEL } from "../_core/llm.js";
@@ -12,8 +13,8 @@ import { writeMotorCase, readGrounding } from "./learn.js";
 
 export interface MotorAttemptInput { restaurantId: string; cohortId: string; week: string; tenantId: string; tierId: string; }
 export interface MotorAttemptResult {
-  outcome: "acted" | "escalated";
-  reason: string; // acted ⇒ the chosen action_code ; escalated ⇒ why (out_of_range / exhausted_3_loops / …)
+  outcome: "acted" | "escalated" | "skipped"; // skipped = the cohort action was already dispatched (idempotent)
+  reason: string; // acted ⇒ the chosen action_code ; escalated ⇒ why ; skipped ⇒ 'already_dispatched'
   nbaId: string | null;
   loops: number;
   attemptId: string;
@@ -81,7 +82,12 @@ export async function runMotorAttempt(i: MotorAttemptInput, reasoning: MotorReas
           await writeMotorCase({ tenantId: i.tenantId, areaType: lever.dimension ?? "nba", pattern: `${lever.dimension}_${lever.verdict}`, outcome: "resolved", resolution: hyp.rootCause, discarded, attemptId, nbaId: res.nbaId }, c);
         });
         return { outcome: "acted", reason: lever.action_code, nbaId: res.nbaId, loops: k + 1, attemptId };
-      } catch {
+      } catch (e) {
+        // round2 P2-2: a cohort/action dedup CONFLICT means another restaurant already dispatched this action —
+        // an idempotent SKIP, not a failure (don't flood the human queue with a bogus 'dispatch_failed').
+        if (e instanceof TRPCError && e.code === "CONFLICT") {
+          return { outcome: "skipped", reason: "already_dispatched", nbaId: null, loops: k + 1, attemptId };
+        }
         return escalate(i, attemptId, "dispatch_failed", lever, discarded, k + 1);
       }
     }
