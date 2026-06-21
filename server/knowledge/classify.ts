@@ -3,7 +3,11 @@
 //   - llmClassify(client): real Claude proposes ONE type from the closed MECE list; TEXT only (§3.6),
 //     never a number. Off-list / malformed ⇒ THROWS so classifyDocType fail-closes to deterministic.
 // classifyDocType degrades to deterministic on ANY LLM error — it NEVER throws to the caller (§3.7).
-import { chatText, openaiChatClient, type ChatClient } from "../_core/llm.js";
+import { chatText, openaiChatClient, CHAT_MODEL, type ChatClient, type TokenUsage } from "../_core/llm.js";
+
+// Optional sink: the live classifier reports its chat token usage so the caller (ingestDocument) can
+// log cost-per-process (P07). The deterministic path is free and never calls it ⇒ tests stay silent.
+export type ClassifyUsageSink = (usage: TokenUsage) => void;
 
 // Closed MECE taxonomy (matches public.kb_doc_type SQL enum + docType Zod contract).
 export const DOC_TYPES = ["Policy", "Context", "FAQ", "Terms", "Runbook", "Other"] as const;
@@ -37,12 +41,13 @@ const unfence = (s: string): string =>
   s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
 /** Real-LLM provider (OpenAI). TEXT only (§3.6). Off-list or malformed output THROWS ⇒ caller fail-closes. */
-export function llmClassify(client: ChatClient) {
+export function llmClassify(client: ChatClient, onUsage?: ClassifyUsageSink, model: string = CHAT_MODEL) {
   const system =
     `Classify a company document into EXACTLY one of: ${DOC_TYPES.join(", ")}. ` +
     'Reply ONLY compact JSON {"docType":"...","confidence":0..1}. No prose.';
   return async (text: string): Promise<DocClassification> => {
-    const raw = await chatText(client, system, text.slice(0, 6000), 64);
+    const { text: raw, usage } = await chatText(client, system, text.slice(0, 6000), 64, model);
+    onUsage?.(usage);
     const out = JSON.parse(unfence(raw)) as { docType: unknown; confidence: unknown };
     if (!isDocType(out.docType) || typeof out.confidence !== "number") {
       throw new Error("llmClassify: off-contract output"); // fail-closed, no guess
@@ -52,11 +57,15 @@ export function llmClassify(client: ChatClient) {
 }
 
 /** Prod uses OpenAI when the key is present; on ANY error degrades to deterministic. Never throws (§3.7). */
-export async function classifyDocType(text: string): Promise<DocClassification> {
+export async function classifyDocType(
+  text: string,
+  onUsage?: ClassifyUsageSink,
+  model: string = CHAT_MODEL,
+): Promise<DocClassification> {
   // Tests NEVER call the paid LLM — deterministic under vitest (hermetic, free, stable). Prod uses OpenAI.
   if (process.env.VITEST || !process.env.OPENAI_API_KEY) return deterministicClassify(text);
   try {
-    return await llmClassify(await openaiChatClient())(text);
+    return await llmClassify(await openaiChatClient(), onUsage, model)(text);
   } catch {
     return deterministicClassify(text); // degrade to deterministic, never throw to the caller
   }

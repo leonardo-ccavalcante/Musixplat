@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ChatClient } from "../_core/llm.js";
+import type { ChatClient, TokenUsage } from "../_core/llm.js";
 import { deterministicReasoning, llmReasoning } from "./reasoning";
 
 // 05B AGENTE seam. The deterministic provider drives the CI gate (no key/network). The LLM provider
@@ -73,5 +73,22 @@ describe("llmReasoning (real-OpenAI path, faked client)", () => {
   it("throws on an empty rank (fail-closed: never proceed with no path)", async () => {
     const r = llmReasoning(fakeClient("[]"));
     await expect(r.rankPaths({ areaType: "finance", hypotheses: [] })).rejects.toThrow(/empty/);
+  });
+
+  it("reports per-call token usage to the onUsage sink (so cost-per-process can be logged)", async () => {
+    const seen: { op: string; usage: TokenUsage }[] = [];
+    const client = {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [{ message: { content: '{"areaType":"finance","confidence":0.8}' } }],
+            usage: { prompt_tokens: 30, completion_tokens: 5 },
+          }),
+        },
+      },
+    } as unknown as ChatClient;
+    const r = llmReasoning(client, (usage, op) => seen.push({ op, usage }));
+    await r.classifyArea({ text: "pago" });
+    expect(seen).toEqual([{ op: "classify", usage: { inputTokens: 30, outputTokens: 5 } }]);
   });
 });

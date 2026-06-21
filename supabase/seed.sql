@@ -167,3 +167,12 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('kb_similarity_threshold',    '0.30', '[C]', 'p06'),
   ('kb_classification_floor',    '0.55', '[C]', 'p06')
 on conflict (key) do nothing;
+
+-- ── P07 LLM token PRICES: USD per 1,000,000 tokens, BY NAME per model (§3.8, [C] config). Cost is
+--    derived in gov.v_llm_cost (never seeded). Update these as vendor pricing changes / on OpenRouter. ──
+insert into catalog."Config_Knobs"(key, value, provenance, owner) values
+  ('llm_price_in_per_mtok:gpt-4o-mini',             '0.15', '[C]', 'cost'),
+  ('llm_price_out_per_mtok:gpt-4o-mini',            '0.60', '[C]', 'cost'),
+  ('llm_price_in_per_mtok:text-embedding-3-small',  '0.02', '[C]', 'cost'),
+  ('llm_price_out_per_mtok:text-embedding-3-small', '0',    '[C]', 'cost')
+on conflict (key) do nothing;
