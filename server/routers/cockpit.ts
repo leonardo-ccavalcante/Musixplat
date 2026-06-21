@@ -92,6 +92,8 @@ const WEEK_SQL = `
       select 1 from cohort."Cohort_Membership_Snapshot" cms
       join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1
       where cms.cohort_id = rb.cohort_id
+        -- same current-version pool-presence rule as the list (anti-mezcla §3.5 consistency)
+        and cms.cohort_rule_version = (select value from catalog."Config_Knobs" where key='cohort_rule_version_current')
     )`;
 
 export async function weekSummary(tenantId: string, exec: Exec): Promise<{ released: number; paused: number }> {
@@ -320,7 +322,7 @@ export const cockpitRouter = router({
 
   // 02:1a — the dispatch screen read: reach + rendered artifact for a released NBA (pool-scoped).
   dispatchDetail: tenantProcedure
-    .input(z.object({ nba_id: z.string().min(1) }))
+    .input(z.object({ nba_id: z.string().uuid() }))
     .query(({ ctx, input }) => dispatchDetail(input.nba_id, ctx.tenantId, query)),
 
   // 02:1a — Send: Release_Batch + Decision_Trace + Action_Dispatch in one tx (no-trace-no-action).
