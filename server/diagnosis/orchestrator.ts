@@ -40,7 +40,7 @@ async function fetchGrounding(tenantId: string, areaType?: string): Promise<Grou
     area_type: string;
     path_used: unknown;
     discarded_branches: unknown;
-    probability: number | null;
+    probability: string | null; // node-pg returns a numeric column as a STRING — coerce below (honest type)
   }>(
     `select pattern, area_type, path_used, discarded_branches, probability
        from tenant."Knowledge_Case"
@@ -54,7 +54,7 @@ async function fetchGrounding(tenantId: string, areaType?: string): Promise<Grou
     areaType: r.area_type,
     pathUsed: r.path_used,
     discardedBranches: r.discarded_branches,
-    probability: r.probability,
+    probability: r.probability == null ? null : Number(r.probability), // numeric(string) → number | null
   }));
 }
 
