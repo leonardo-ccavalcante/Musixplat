@@ -26,3 +26,24 @@
 - **Fix now (12):** all 9 P1 + P2-1/3/4/5.
 - **Defer w/ rationale (1):** P2-2 (inherited floor prefilter; the named-threshold gate is fn_nba_test; aligning the prefilter touches the floor — separate follow-up).
 - **Pattern:** the tenant-scoping class (P1-3/4) is the SAME class Codex caught in CP2 (I flagged it but didn't fully enforce) → the shared tenant-scoping primitive is overdue. The fail-closed gaps (P1-7/8) + loop-unreachability (P1-9) are the deepest — the green gate + self-review missed all of them.
+
+---
+
+# Round 2 (re-Codex, after the round-1 fixes) — 7 P1 + 4 P2
+
+The round-1 fixes passed their tests but re-Codex found deeper SEMANTIC/governance violations:
+
+## P1
+1. **LLM confidence gates autonomy (§2 violation)** — `runMotor.ts:52`. The model's numeric `confidence < minConf` decides act-vs-escalate ⇒ an LLM NUMBER authorizes autonomy (deterministic-never-LLM). **[GENUINE — fix: drop the numeric gate; the LLM ABSTAINS via lever=null (TEXT/categorical "no-suppose"), confidence becomes [C] display-only. §2-compliant + faithful to "devem dizer".]**
+2. **Lexical policy-version ordering** — `validateHypothesis.ts:31`. `order by policy_version desc` ⇒ v9 > v10 (the floor's loadArms warned about exactly this). A removed action on the newer policy stays authorized. **[GENUINE — fix: resolve current/semantic version or fail-closed on ambiguity.]**
+3. **Controls rewrite signed policy history** — `controls.ts:56`. The UPDATE mutates a signed policy referenced by historical Decision_Traces ⇒ traces no longer identify the policy that authorized them. **[GENUINE — fix: write a NEW signed policy version, never mutate signed history.]**
+4. **Stale-cohort anti-mezcla (§3.5)** — `runMotorFanout.ts:51`. `motor.run(cohortId)` never checks `cohort_rule_version_current`; a historical cohort mixes current-version signals onto an old cohort. **[GENUINE — fix: reject non-current cohorts in fan-out.]**
+5. **Dispatch marked as measured 'resolved' (§14)** — `runMotor.ts:80`. A successful SEND writes `Knowledge_Case.outcome='resolved'`, but 'resolved' is a MEASURED outcome — nothing was measured. readGrounding then teaches it as "worked". **[GENUINE — fix: acted ⇒ outcome=NULL (pending measurement) + action in path_used; only a measurement producer sets resolved/not_resolved.]**
+6. **Loop cap 3 not enforced** — `contracts.ts:321`. The Zod bound allows motor_max_loops up to 10 while the contract/UI promise ≤3 and the code reports 'exhausted_3_loops' — up to 10 paid calls mislabeled. **[GENUINE — fix: cap the bound at 3 (or make the message use the real cap).]**
+7. **cost_usd numeric returned as string ⇒ client crash** — `controls.ts:84`. `sum(cost_usd)` is pg numeric ⇒ node-postgres returns a STRING ⇒ the client's `toFixed` throws ⇒ opening the Escalated list crashes in prod. **[GENUINE — fix: cast `sum(cost_usd)::float8`.]**
+
+## P2
+1. **No Security_Log on blocked cross-pool cohort** — `runMotorFanout.ts:30`. The §3.4 audit trail is missing on the FORBIDDEN. **[fix.]**
+2. **Duplicate dispatch conflict ⇒ false 'dispatch_failed'** — `runMotor.ts:84`. Fan-out restaurant #2 picking the same cohort-action hits autoDispatch's dedup ⇒ escalates as failed, flooding the human queue. **[fix: treat the dedup conflict as an idempotent skip, not an escalation.]**
+3. **Usage swallowed before execution** — `runMotor.ts:49`. recordUsageSafe swallows ⇒ a dispatch with no cost row (done-when wants a motor usage row). **[debatable — telemetry-must-not-fail-the-decision vs cost-attribution; lean: keep best-effort but flag.]**
+4. **Escalations lack cohort/restaurant context** — `learn.ts:21`. The case stores only attempt_id ⇒ the human feed can't show which cohort. **[fix: persist restaurant_id + cohort_id on the case.]**
