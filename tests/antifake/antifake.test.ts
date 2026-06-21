@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { makePool, resetDb, count, rows } from "../helpers/db";
+import { appRouter } from "../../server/routers/_app";
+import type { Context } from "../../server/_core/context";
 
 // ── §14 ANTI-FAKE GATE (MASTER) ──────────────────────────────────────────────
 // After seed (raw only) and BEFORE any producer runs, every RESULT column must be
@@ -117,5 +119,46 @@ describe("MODEL v2 — correlated raw present (5000), results still NULL", () =>
     // Raw are present, but the derived connection value must still be NULL (§14).
     expect(await count(pool, 'tenant."KPI" where current_value is not null')).toBe(0);
     expect(await count(pool, 'cohort."Cohort" where descriptive_baseline is not null')).toBe(0);
+  });
+});
+
+// ── 05D F0 §14 — the GENERAL (descriptor) path does NOT pre-seed results ───────────────────────
+// A freshly-reported payment problem (via reportProblem, the general path) must have revenue_lost
+// NULL and ZERO Affected rows BEFORE the orchestrator/producers run. Proves the registry/dispatch
+// refactor kept the anti-fake invariant: results come only from the named producers, never the
+// report step. Runs LAST (stages its own pool) so it never perturbs the emptiness assertions above.
+describe("05D F0 anti-fake — general path reports a problem with NO produced results", () => {
+  function caller(tenantId: string, userId = "U-AF-001"): ReturnType<typeof appRouter.createCaller> {
+    const ctx: Context = { session: { user_id: userId, tenant_id: tenantId, org_level: "team" }, tenantId, userId };
+    return appRouter.createCaller(ctx);
+  }
+
+  it("revenue_lost is NULL and Affected is empty for a freshly-reported payment problem", async () => {
+    const POOL = "POOL-AF";
+    // INPUT only — one failed-payment restaurant (no producer runs here).
+    await pool.query(
+      `insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date, zone)
+       values ('R-AF-1', $1, 'long_tail','long_tail'::segment, date '2026-01-01','Centro')`,
+      [POOL],
+    );
+    await pool.query(
+      `insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status, zone)
+       values ('R-AF-1', current_date, 100, 20, 'failed','Centro')`,
+    );
+
+    const reported = await caller(POOL).diagnosis.reportProblem({
+      restaurantId: "R-AF-1",
+      problem_type: "payment",
+    });
+    expect(reported.created).toBe(true);
+
+    // §14: report does NOT compute — revenue_lost is NULL and there are ZERO Affected rows.
+    const r = await rows<{ revenue_lost: number | null }>(
+      pool,
+      `select revenue_lost from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [reported.problem_id],
+    );
+    expect(r[0]!.revenue_lost).toBeNull();
+    expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
   });
 });
