@@ -4,9 +4,12 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CockpitBoard, groupRows, type GroupBy } from "@/features/cockpit/CockpitBoard";
-import { CockpitHero, type RunResult } from "@/features/cockpit/CockpitHero";
+import { CockpitHero, type RunResult, type MotorRunResult } from "@/features/cockpit/CockpitHero";
 import { CatalogDrawer } from "@/features/cockpit/CatalogDrawer";
 import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
+import { EscalatedList } from "@/features/cockpit/EscalatedList";
+import { AutonomyControls } from "@/features/cockpit/AutonomyControls";
+import { Button } from "@/components/ui/Button";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
 import { type RowAction, type RowState, type KbReview } from "@/features/cockpit/CockpitRow";
@@ -30,7 +33,12 @@ export function CockpitPage() {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [registryOpen, setRegistryOpen] = useState(false);
+  const [escalationsOpen, setEscalationsOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [motorResult, setMotorResult] = useState<MotorRunResult | null>(null);
+  const [motorError, setMotorError] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
@@ -38,10 +46,14 @@ export function CockpitPage() {
   const week = trpc.cockpit.weekSummary.useQuery(undefined, { enabled: ready });
   const release = trpc.cockpit.release.useMutation();
   const propose = trpc.cockpit.proposePool.useMutation();
+  const runMotor = trpc.motor.runPool.useMutation();
 
   // 02:CP2 — "Run NBA": fire the engine across the pool; on success refresh the board + "your week" + the
-  // registry (the autonomous actions it just took), and surface the spectrum inline.
+  // registry (the autonomous actions it just took), and surface the spectrum inline. On a new run we clear the
+  // prior result + error first so a stale success line never lingers; on failure we surface it explicitly (P2-5).
   const onRunNba = () => {
+    setRunResult(null);
+    setRunError(null);
     propose.mutate(undefined, {
       onSuccess: (res) => {
         setRunResult(res);
@@ -49,6 +61,27 @@ export function CockpitPage() {
         void utils.cockpit.weekSummary.invalidate();
         void utils.cockpit.autoActions.invalidate();
       },
+      onError: (e) => setRunError(e.message),
+    });
+  };
+
+  // 02C:6a — "Run Motor": fire the LLM autonomous engine pool-wide (mirrors Run NBA's pool decision — the
+  // board spans cohorts, so there's no single focused cohort to target). The OpenAI call is slow; the hero
+  // shows an explicit busy state, never a fake-instant success. On success refresh the escalations feed + the
+  // auto-actions registry + "your week" (the motor may have acted alone and left traces). P2-5: clear the prior
+  // result + error on a new run so a stale success line never persists; on API/LLM failure surface it explicitly
+  // (fail-closed, §7 — the operator must SEE the error, never a silently vanished busy state).
+  const onRunMotor = () => {
+    setMotorResult(null);
+    setMotorError(null);
+    runMotor.mutate(undefined, {
+      onSuccess: (res) => {
+        setMotorResult(res);
+        void utils.motor.escalations.invalidate();
+        void utils.cockpit.autoActions.invalidate();
+        void utils.cockpit.weekSummary.invalidate();
+      },
+      onError: (e) => setMotorError(e.message),
     });
   };
 
@@ -123,11 +156,17 @@ export function CockpitPage() {
 
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2.5vw,2.25rem)]">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-mxm-content">Autonomy Cockpit</h1>
-        <p className="mt-1 max-w-[70ch] text-sm text-mxm-content-secondary">
-          Where is my AI fleet acting on its own — and exactly where do I need to step in?
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-mxm-content">Autonomy Cockpit</h1>
+          <p className="mt-1 max-w-[70ch] text-sm text-mxm-content-secondary">
+            Where is my AI fleet acting on its own — and exactly where do I need to step in?
+          </p>
+        </div>
+        {/* 02C:6b — the human-editable boundary the motor acts within (range · knobs · learnings to approve). */}
+        <Button variant="ghost" onClick={() => setControlsOpen(true)} aria-haspopup="dialog">
+          Autonomy Controls
+        </Button>
       </header>
 
       {!ready || list.isLoading ? (
@@ -144,7 +183,41 @@ export function CockpitPage() {
             onRunNba={onRunNba}
             running={propose.isPending}
             runResult={runResult}
+            onRunMotor={onRunMotor}
+            motorRunning={runMotor.isPending}
+            motorResult={motorResult}
+            onOpenEscalations={() => setEscalationsOpen(true)}
           />
+
+          {/* P2-5 — explicit, visible failure for the two engine runs. The hero owns the busy + success lines;
+              an API/LLM failure (or a FORBIDDEN from the role gate on a senior-only control) must NOT vanish
+              silently. role=alert + ✕ glyph (icon + text, not color alone) so the operator always sees it. */}
+          {(runError || motorError) && (
+            <div className="mt-3 space-y-1.5" aria-live="assertive">
+              {runError && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-mxm border border-mxm-red/40 bg-mxm-red/10 px-3 py-2 text-xs text-mxm-red"
+                >
+                  <span aria-hidden className="mt-px">✕</span>
+                  <span>
+                    <b className="font-semibold">Run NBA failed.</b> {runError}
+                  </span>
+                </p>
+              )}
+              {motorError && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-mxm border border-mxm-red/40 bg-mxm-red/10 px-3 py-2 text-xs text-mxm-red"
+                >
+                  <span aria-hidden className="mt-px">✕</span>
+                  <span>
+                    <b className="font-semibold">Run Motor failed.</b> {motorError}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="mb-3 mt-[clamp(1.5rem,3vw,2.25rem)] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -186,6 +259,8 @@ export function CockpitPage() {
       />
       <CatalogDrawer open={catalogOpen} onClose={() => setCatalogOpen(false)} />
       <AutonomousRegistry open={registryOpen} onClose={() => setRegistryOpen(false)} />
+      <EscalatedList open={escalationsOpen} onClose={() => setEscalationsOpen(false)} />
+      <AutonomyControls open={controlsOpen} onClose={() => setControlsOpen(false)} />
     </main>
   );
 }

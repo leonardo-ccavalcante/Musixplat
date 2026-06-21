@@ -29,6 +29,15 @@ export interface RunResult {
   cohorts: number;
 }
 
+// 02C:6a — the result of running the MOTOR (the LLM autonomous engine, distinct from "Run NBA"): how many
+// cohorts it walked, where it acted alone within range, and where it escalated back to a human (§14, read).
+export interface MotorRunResult {
+  acted: number;
+  escalated: number;
+  attempts: number;
+  cohorts: number;
+}
+
 export function CockpitHero({
   counts,
   week,
@@ -37,6 +46,10 @@ export function CockpitHero({
   onRunNba,
   running,
   runResult,
+  onRunMotor,
+  motorRunning,
+  motorResult,
+  onOpenEscalations,
 }: {
   counts: FleetCounts;
   week?: { released: number; paused: number; auto_acted: number };
@@ -45,6 +58,10 @@ export function CockpitHero({
   onRunNba: () => void;
   running: boolean;
   runResult?: RunResult | null;
+  onRunMotor: () => void;
+  motorRunning: boolean;
+  motorResult?: MotorRunResult | null;
+  onOpenEscalations: () => void;
 }) {
   const { total, cohorts, autos, money, level, gate } = counts;
   const needs = money + level + gate;
@@ -107,6 +124,34 @@ export function CockpitHero({
             )}
           </span>
         </div>
+
+        {/* 02C:6a — run the MOTOR: the LLM autonomous engine (≤3 hypothesis loop). It reasons over each
+            cohort's problem restaurants, acts ALONE inside the range you approved, and escalates the rest to
+            you. The OpenAI call is slow — the button stays busy until it's truly done (never a fake-instant
+            success). Counts are read from what the loop produced (§14). */}
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button variant="ghost" onClick={onRunMotor} disabled={motorRunning} aria-busy={motorRunning} className="text-mxm-brand">
+            {motorRunning ? "Motor reasoning…" : "Run Motor"}
+          </Button>
+          <span aria-live="polite" className="text-xs text-mxm-content-secondary">
+            {motorRunning ? (
+              "The motor is reasoning through each cohort — this calls the LLM, so it takes a moment."
+            ) : motorResult ? (
+              motorResult.attempts === 0 ? (
+                "No in-range gaps this run — the motor found nothing to act on."
+              ) : (
+                <>
+                  <b className="tabnum text-mxm-green">AI acted alone on {motorResult.acted}</b> ·{" "}
+                  <b className="tabnum text-mxm-amber">escalated {motorResult.escalated} to you</b>{" "}
+                  across <b className="tabnum text-mxm-content">{motorResult.cohorts}</b> cohort
+                  {motorResult.cohorts === 1 ? "" : "s"}.
+                </>
+              )
+            ) : (
+              "The autonomous engine reasons over each cohort and acts alone within your approved range."
+            )}
+          </span>
+        </div>
       </div>
 
       {/* The "depois": every decision is traced — last 7 days (read from Release_Batch ⋈ Decision_Trace, §14,
@@ -139,6 +184,16 @@ export function CockpitHero({
           <p className="mt-2 text-xs text-mxm-content-tertiary">
             Every release, pause, and autonomous action is recorded as a decision trace.
           </p>
+          {/* 02C:6a — the motor's hand-backs: cases it couldn't resolve in-range and escalated to a human.
+              The amber ▲ (icon + text, not color alone) signals "needs you", opens the full reasoning trail. */}
+          <button
+            type="button"
+            onClick={onOpenEscalations}
+            aria-haspopup="dialog"
+            className="mt-3 flex w-full items-center gap-1.5 rounded border-t border-mxm-border pt-3 text-left text-xs text-mxm-amber underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
+          >
+            <span aria-hidden>▲</span> The motor escalated cases to you — review what it tried →
+          </button>
         </div>
         <Button variant="ghost" onClick={onOpenCatalog} aria-haspopup="dialog" className="self-start text-mxm-brand">
           What are these actions? →

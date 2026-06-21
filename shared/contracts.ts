@@ -294,3 +294,58 @@ export interface CohortsRunResult {
   cohorts: number;
   memberships: number;
 }
+
+// 02C MOTOR-LLM — "Run motor" for one cohort: the ≤3 hypothesis loop fans out over the cohort's PROBLEM
+// restaurants of THIS pool. cohort_id is DATA within the pool; tenant is resolved server-side (§7).
+export const motorRunInput = z.object({ cohort_id: z.string() });
+export type MotorRunInput = z.infer<typeof motorRunInput>;
+
+// 02C — human-editable "Autonomy Controls". THREE mutually-exclusive ops; the handler applies whichever is
+// present. tier/knob edits are governance-global in this substrate (flagged honestly, not faked as scoped);
+// the case-approval IS tenant-scoped (RLHF gate, BR-B16) and enforced as such.
+export const motorControlsSetInput = z
+  .object({
+    tier_id: z.string().optional(),
+    auto_actions: z.array(z.string()).optional(), // set Policy_Tier.allowed_today.auto_actions for tier_id
+    knob_key: z.enum(["motor_max_loops", "motor_min_confidence"]).optional(),
+    knob_value: z.string().optional(),
+    approve_case_id: z.string().optional(), // flip Knowledge_Case.reviewed=true (tenant-scoped)
+  })
+  // P2-1 + round2 P1-6: bound the knob values at the API so a caller can't disable the motor, bypass the
+  // confidence floor, or run more than the promised ≤3 hypotheses. max_loops ∈ [1,3] int (the contract/UI/
+  // escalation message all promise ≤3); confidence ∈ [0,1].
+  .refine(
+    (d) => {
+      if (d.knob_key == null || d.knob_value == null) return true;
+      const n = Number(d.knob_value);
+      if (!Number.isFinite(n)) return false;
+      if (d.knob_key === "motor_max_loops") return Number.isInteger(n) && n >= 1 && n <= 3;
+      return n >= 0 && n <= 1; // motor_min_confidence
+    },
+    { message: "knob_value out of bounds (motor_max_loops 1..3 int; motor_min_confidence 0..1)" },
+  );
+export type MotorControlsSetInput = z.infer<typeof motorControlsSetInput>;
+
+// 02C — the escalations feed: cases the motor handed to a human (outcome='escalated'), most-recent-first.
+// cost_usd is the LLM spend for the attempt that drove it (NULL when the stub drove it / no priced LLM rows,
+// §3.7 fail-closed). Every field READS from Knowledge_Case + v_llm_cost; no number is fabricated (§14).
+export interface MotorEscalationRow {
+  kb_case_id: string;
+  area_type: string;
+  pattern: string;
+  not_resolved_reason: string | null;
+  discarded_branches: unknown;
+  cost_usd: number | null;
+  created_at: string;
+}
+
+// 02C — the Autonomy Controls read: the approved range (tier auto_actions), the loop knobs, and the
+// pending RLHF queue (un-reviewed cases the human must approve before they ground future runs, BR-B16).
+export interface MotorControls {
+  tiers: { tier_id: string; auto_actions: string[] }[];
+  knobs: { key: string; value: string }[];
+  pending_cases: { kb_case_id: string; pattern: string; outcome: string }[];
+  // P1-5: the REAL NBA action catalog (A1..A8) — the controls toggle THESE codes, not invented names.
+  // financial_class lets the UI flag money actions (which §7 never auto-acts, even if toggled on).
+  available_actions: { code: string; label: string; financial_class: string }[];
+}

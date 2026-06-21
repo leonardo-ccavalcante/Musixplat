@@ -45,4 +45,25 @@ describe("recordUsage", () => {
     );
     expect(params[4]).toBeNull();
   });
+
+  it("records a 'motor' process row (02C — autonomous NBA loop token cost)", async () => {
+    let params: readonly unknown[] = [];
+    const exec = async (_sql: string, p: readonly unknown[]) => {
+      params = p;
+      return [];
+    };
+    await recordUsage(
+      {
+        tenantId: "t1",
+        processType: "motor",
+        kind: "chat",
+        model: "gpt-4o-mini",
+        refId: "attempt-1",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+      exec,
+    );
+    expect(params[1]).toBe("motor");
+    expect(params[5]).toBe(10);
+  });
 });
