@@ -58,6 +58,25 @@ describe("cohorts.uploadCsv", () => {
     expect(fee.rows[0]!.fee).toBe("12.57"); // decimals survive the bulk numeric[] cast
   });
 
+  it("cross-batch self-heal: an early batch's restaurant keeps connection IN the engine window after a later batch raises max(order_date) (rank not zeroed)", async () => {
+    const mkAt = (rid: string, od: string) =>
+      `POOL-001,${rid},long_tail,long_tail,2024-01-01,downtown,pizza,50,${od},100,20,ok,,0,true,true`;
+    // Batch 1 carries OLD orders; batch 2 carries the NEWEST order → raises the global max(order_date).
+    await caller().cohorts.uploadCsv({ filename: "old.csv", contentBase64: b64([HEADER, mkAt("RA", "2025-01-01")].join("\n")) });
+    await caller().cohorts.uploadCsv({ filename: "new.csv", contentBase64: b64([HEADER, mkAt("RZ", "2026-06-01")].join("\n")) });
+    // The cohort engine INNER-joins connection over (max(order_date) - 63d, max(order_date)]. RA's
+    // first-batch weeks were anchored on the old max; batch 2 must re-anchor RA on the new global max
+    // so RA still has connection IN the window — else RA gets a NULL percentile (dropped from the rank).
+    // This is exactly why the synthesis is intentionally NOT scoped to the batch.
+    const r = await pool.query<{ n: number }>(
+      `select count(*)::int n from tenant."Weekly_Connection" wc
+       where wc.restaurant_id = 'RA'
+         and wc.week >  (select max(order_date) from tenant."Order") - 63
+         and wc.week <= (select max(order_date) from tenant."Order")`,
+    );
+    expect(r.rows[0]!.n).toBeGreaterThan(0);
+  });
+
   it("rejects a bad enum value citing the row + column (fail-closed, nothing inserted)", async () => {
     const before = await count(pool, 'tenant."Order"');
     const bad = [HEADER, `POOL-001,RBAD,WRONG_TIER,long_tail,2024-01-01,downtown,pizza,50,2026-03-01,100,20,ok,,0,true,true`].join("\n");
