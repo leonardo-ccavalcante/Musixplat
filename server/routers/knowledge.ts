@@ -54,6 +54,9 @@ export const knowledgeRouter = router({
       // Embedding/indexing failed after bounded retry (terminal — e.g. AI quota/rate-limit). ingest is
       // atomic, so NOTHING was written: no orphan to clean up. Surface a clear, retryable reason so the
       // operator can fix the cause and re-upload the same file cleanly (§3.7 fail-closed).
+      // Log the real error server-side: the operator only sees a generic retryable reason, so without
+      // this the true cause (bad knob, OpenAI status, parse) is invisible in prod logs (observability).
+      console.error("[knowledge.upload] ingest failed:", e);
       return {
         docId: null,
         proposedType: "Other" as const,
