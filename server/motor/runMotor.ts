@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { query, withTx } from "../db/pool.js";
 import { knobNum } from "../_core/knobs.js";
+import { CHAT_MODEL } from "../_core/llm.js";
+import { recordUsageSafe } from "../_core/usage.js";
 import { proposeNba } from "../agente/nba_engine.js";
 import { autoDispatch } from "../cockpit/autoDispatch.js";
 import type { NbaVerdict } from "../agente/reasoning.js";
@@ -44,6 +46,9 @@ export async function runMotorAttempt(i: MotorAttemptInput, reasoning: MotorReas
 
   for (let k = 0; k < maxLoops; k++) {
     const hyp = await reasoning.proposeHypothesis({ verdicts, discarded, grounding });
+    // Cost of the attention (P07): record THIS iteration's tokens against the attempt (best-effort — a
+    // telemetry write must never fail the decision). The stub omits usage ⇒ no row (deterministic CI).
+    if (hyp.usage) await recordUsageSafe({ tenantId: i.tenantId, processType: "motor", kind: "chat", model: CHAT_MODEL, refId: attemptId, usage: hyp.usage });
     // No-suppose (Leo): no confident in-range candidate ⇒ escalate, never guess.
     if (!hyp.lever || hyp.confidence == null || hyp.confidence < minConf) {
       return escalate(i, attemptId, "no_confident_hypothesis", null, discarded, k + 1);

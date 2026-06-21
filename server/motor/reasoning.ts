@@ -5,6 +5,7 @@
 // change-locked floor (§3.11); this file adds a CI stub honoring a `discarded` set (falsified levers),
 // so a real LLM provider can later plug into this SAME interface while CI stays deterministic.
 import type { NbaVerdict, NbaReasoning, NbaSelection } from "../agente/reasoning.js";
+import type { TokenUsage } from "../_core/llm.js";
 import { labelOf, fmtValue, fmtGap } from "../../shared/signalFormat.js";
 
 export interface MotorHypothesis {
@@ -12,6 +13,7 @@ export interface MotorHypothesis {
   rootCause: string; // [C] bounded by the verdict, never asserts a number SQL didn't return
   confidence: number | null; // [C] self-confidence 0..1; null ⇒ escalate
   reasoning: string; // [C] narrative
+  usage?: TokenUsage; // tokens spent on THIS call ⇒ the loop records cost per attempt (P07); stub omits it
 }
 
 export interface MotorReasoning {
