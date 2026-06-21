@@ -14,11 +14,14 @@ export interface ReconcileResult {
   silentStatus: "evaluable" | "not_evaluable";
 }
 
-/** B.5.2b — run the anti-join producer for a problem within its tenant + window. */
+/** B.5.2b — run the anti-join producer for a problem within its tenant + window.
+ *  05D F0: fn_hunt_silent is now a DISPATCHER (reads problem_type) with an optional segment slice;
+ *  segment defaults to null (whole pool) so the payment path is unchanged. */
 export async function huntSilent(
   problemId: string,
   tenantId: string,
   windowDays?: number,
+  segment?: string | null,
 ): Promise<SilentResult> {
   // window BY NAME from catalog (CLAUDE.md §3.8); explicit override wins. Knob is fail-closed:
   // knob_required_num raises if 'window_silent' is absent (never a silent default).
@@ -33,11 +36,13 @@ export async function huntSilent(
     );
 
   // The anti-join (Order failed ∖ Conversation) lives in SQL; TS only orchestrates (§3.6). tenant +
-  // window are passed to the producer (BR-B6 cross-tenant hard-no; B-block-2 bounded sweep).
-  await query(`select tenant.fn_hunt_silent($1::uuid, $2::text, $3::int) as n`, [
+  // window + segment are passed to the dispatcher (BR-B6 cross-tenant hard-no; bounded sweep; the
+  // dispatcher routes on problem_type and applies the optional segment filter).
+  await query(`select tenant.fn_hunt_silent($1::uuid, $2::text, $3::int, $4::text) as n`, [
     problemId,
     tenantId,
     window,
+    segment ?? null,
   ]);
 
   // Counts are READ from the producer output — never the inserted-rows return (a re-run hits

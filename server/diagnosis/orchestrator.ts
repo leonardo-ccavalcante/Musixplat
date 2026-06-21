@@ -21,6 +21,7 @@ import {
 import { searchKnowledge } from "../knowledge/store.js";
 import type { Embedder } from "../knowledge/embedder.js";
 import type { Criticality } from "../../shared/contracts_05b.js";
+import { getDescriptor } from "../../shared/problem_types.js";
 
 // Deterministic candidate hypotheses per area (seed set; the provider only RANKS these, §8).
 const HYPOTHESES: Record<string, string[]> = {
@@ -28,6 +29,11 @@ const HYPOTHESES: Record<string, string[]> = {
   product: ["feature adoption dropped", "product defect"],
   performance: ["latency / connection window"],
 };
+
+// 05D F0 — concentration axis allowlist: maps a descriptor's concentration_dim (closed enum) to a
+// REAL Restaurant column. Allowlist (never raw interpolation) so the generic concentration query
+// stays injection-proof even though the dim comes from our own vetted registry (§8 defense-in-depth).
+const CONCENTRATION_DIMS: Record<string, string> = { zone: "zone", cuisine: "cuisine" };
 
 /** Threshold BY NAME (§3.8), FAIL-CLOSED: knob_required_num RAISES if the knob is absent — never a
  *  silent literal default (mirrors silent.ts). Both knobs are seeded in seed.sql + the migration. */
@@ -86,13 +92,21 @@ export async function runDiagnosis(
   embedder?: Embedder, // DI: tests inject deterministicEmbedder (hermetic/free); prod passes none ⇒ OpenAI.
 ): Promise<DiagnosisResult> {
   const prob = (
-    await query<{ conversation_id: string | null; criticality: Criticality | null }>(
-      `select conversation_id, criticality from tenant."Diagnosed_Problem"
+    await query<{
+      conversation_id: string | null;
+      criticality: Criticality | null;
+      problem_type: string;
+      segment: string | null;
+    }>(
+      `select conversation_id, criticality, problem_type, segment from tenant."Diagnosed_Problem"
         where problem_id = $1 and tenant_id = $2`,
       [problemId, tenantId],
     )
   )[0];
   if (!prob) throw new Error("runDiagnosis: unknown problem (fail-closed)");
+  // 05D F0 — the descriptor the engine dispatches on (concentration axis, etc.). Fail-closed:
+  // getDescriptor RAISES on an unregistered type (never a silent wrong pipeline, §8).
+  const descriptor = getDescriptor(prob.problem_type);
 
   // text source: episode intent (reactive) or a proactive context line. Treated as DATA (EC-B10).
   const text = prob.conversation_id
@@ -175,7 +189,8 @@ export async function runDiagnosis(
   );
 
   // B.5 silent-hunt (SQL anti-join) — the affected/silent counts are PRODUCED here, never seeded (BR-B4, §14).
-  const s = await huntSilent(problemId, tenantId);
+  // 05D F0: the dispatcher routes on problem_type; segment (null ⇒ whole pool) is the optional slice.
+  const s = await huntSilent(problemId, tenantId, undefined, prob.segment);
   const rec = await reconcileAffected(problemId);
   const tids = await query<{ tenant_id: string }>(
     `select distinct tenant_id from tenant."Affected" where problem_id = $1`,
@@ -242,12 +257,20 @@ export async function runDiagnosis(
     agile: null,
   });
 
-  // B.8 route + replicable case (where_concentrated = REAL zone concentration) + dossier gate.
+  // B.8 route + replicable case (where_concentrated = REAL concentration on the descriptor's axis)
+  // + dossier gate. 05D F0: GENERIC concentration — derived from the Affected set joined to
+  // Restaurant, grouped by the descriptor's concentration_dim (no per-type filter; the Affected set
+  // already encodes the type). dim is a CLOSED enum from the vetted registry ('zone'|'cuisine') and
+  // is allowlist-checked before interpolation (defense-in-depth, never raw user SQL, §8).
+  const dim = CONCENTRATION_DIMS[descriptor.concentration_dim];
+  if (!dim) throw new Error(`runDiagnosis: unknown concentration_dim (fail-closed): ${descriptor.concentration_dim}`);
   const conc = (
-    await query<{ zone: string | null; n: number }>(
-      `select o.zone, count(*)::int n from tenant."Order" o
-         join tenant."Affected" a on a.restaurant_id = o.restaurant_id and a.problem_id = $1
-        where o.payment_status = 'failed' group by o.zone order by n desc limit 1`,
+    await query<{ value: string | null; n: number }>(
+      `select r.${dim} as value, count(*)::int n
+         from tenant."Affected" a
+         join tenant."Restaurant" r on r.restaurant_id = a.restaurant_id
+        where a.problem_id = $1
+        group by r.${dim} order by n desc, value limit 1`,
       [problemId],
     )
   )[0];
@@ -260,7 +283,7 @@ export async function runDiagnosis(
     [problemId, route, tenantId],
   );
   await upsertCaseRepo(problemId, {
-    where_concentrated: conc ? { dim: "zone", value: conc.zone, n: conc.n } : null,
+    where_concentrated: conc ? { dim: descriptor.concentration_dim, value: conc.value, n: conc.n } : null,
     raw_data: { affected: s.affected, silent: s.silent, revenue_lost: imp.revenueLost },
   });
   const dossier = await emitDossier(problemId);

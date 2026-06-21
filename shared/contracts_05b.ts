@@ -28,10 +28,15 @@ export type CommunicationDecision = "notify" | "do_not_notify";
 // reportProblem input (US-B1.1.1 gate + B.1.3 dedup). NO tenant_id — resolved server-side from
 // the session (anti-spoofing, §7). restaurant_id is DATA within the pool (required, not the
 // frontier). criticality is an optional trigger hint.
+// 05D F0: problem_type selects the descriptor the engine dispatches on (default 'payment' ⇒ the
+// shipped path is unchanged); segment is the optional slicing axis (Restaurant.segment). Both are
+// classification INPUT (DATA, not a §14 result number).
 export const reportProblemInput = z.object({
   restaurantId: z.string().min(1),
   conversationId: z.string().optional(),
   criticality: criticality.optional(),
+  problem_type: z.string().default("payment"),
+  segment: z.string().nullish(),
 });
 export type ReportProblemInput = z.infer<typeof reportProblemInput>;
 
