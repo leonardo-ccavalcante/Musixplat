@@ -11,7 +11,7 @@ import { dispatchPriority, routeNowQueue } from "./priority.js";
 import { routeStub } from "./routing.js";
 import { upsertCaseRepo } from "./case_repo.js";
 import { emitDossier, type DossierGateResult } from "./dossier.js";
-import { deterministicReasoning, type DiagnosisReasoning } from "./reasoning.js";
+import { deterministicReasoning, type DiagnosisReasoning, type GroundingCase } from "./reasoning.js";
 import { searchKnowledge } from "../knowledge/store.js";
 import type { Embedder } from "../knowledge/embedder.js";
 import type { Criticality } from "../../shared/contracts_05b.js";
@@ -28,6 +28,34 @@ const HYPOTHESES: Record<string, string[]> = {
 async function knob(name: string): Promise<number> {
   const r = await query<{ v: number }>(`select catalog.knob_required_num($1) as v`, [name]);
   return Number(r[0]?.v);
+}
+
+/** Fetch prior REVIEWED cases (BR-B16) to ground the agent (BR-B3). Only reviewed cases — never
+ *  unvetted AI text — steer reasoning. Area-scoped when an area is known (rank); tenant-recent when not
+ *  (classify). Returns [] until producers populate Knowledge_Case ⇒ today the agents stay ungrounded
+ *  (no behaviour change), and light up automatically once reviewed cases exist. tenant scope = §3.4. */
+async function fetchGrounding(tenantId: string, areaType?: string): Promise<GroundingCase[]> {
+  const rows = await query<{
+    pattern: string | null;
+    area_type: string;
+    path_used: unknown;
+    discarded_branches: unknown;
+    probability: number | null;
+  }>(
+    `select pattern, area_type, path_used, discarded_branches, probability
+       from tenant."Knowledge_Case"
+      where tenant_id = $1 and reviewed = true
+        and ($2::text is null or area_type = $2)
+      order by created_at desc limit 5`,
+    [tenantId, areaType ?? null],
+  );
+  return rows.map((r) => ({
+    pattern: r.pattern,
+    areaType: r.area_type,
+    pathUsed: r.path_used,
+    discardedBranches: r.discarded_branches,
+    probability: r.probability,
+  }));
 }
 
 export interface DiagnosisResult {
@@ -72,8 +100,10 @@ export async function runDiagnosis(
     : "payments process monitor — proactive non-payment sweep";
   guardInjection(text); // signal is audit-only; never executes embedded instructions.
 
-  // B.2 classify (TEXT only). Grounding floor: low confidence + no KB precedent ⇒ degrade (BR-B3).
-  const cls = await reasoning.classifyArea({ text, hint: prob.criticality });
+  // B.2 classify (TEXT only). Grounded on prior reviewed cases (BR-B3); empty ⇒ ungrounded as before.
+  // Grounding floor: low confidence + no KB precedent ⇒ degrade (BR-B3).
+  const classifyExamples = await fetchGrounding(tenantId);
+  const cls = await reasoning.classifyArea({ text, hint: prob.criticality, examples: classifyExamples });
   const floor = await knob("threshold_classification"); // seeded 05B classify floor (§3.8, fail-closed)
   const kb = await query<{ n: number }>(
     `select count(*)::int n from tenant."Knowledge_Case" where tenant_id = $1 and area_type = $2`,
@@ -91,9 +121,12 @@ export async function runDiagnosis(
   );
 
   // B.3 issue-tree (provider ranks the deterministic seed) + B.4 lazy-fetch the single top source (BR-B2).
+  // Grounded on reviewed cases for THIS area: falsified branches get pushed lower (set-equality holds).
+  const rankExamples = await fetchGrounding(tenantId, cls.areaType);
   const ranked = await reasoning.rankPaths({
     areaType: cls.areaType,
     hypotheses: HYPOTHESES[cls.areaType] ?? ["unclassified hypothesis"],
+    examples: rankExamples,
   });
   if (ranked.length === 0) throw new Error("runDiagnosis: rankPaths returned no paths (fail-closed)");
   const tree: IssueTree = {

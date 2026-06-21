@@ -200,7 +200,7 @@ export type NbaCockpitRow = z.infer<typeof nbaCockpitRow>;
 // server-side from the session, anti-spoofing). resulting_level is the human override — validated
 // server-side to be <= effective_level (override only DOWN, AUT-11 / BR-1).
 export const cockpitReleaseInput = z.object({
-  nba_id: z.string().min(1),
+  nba_id: z.string().uuid(), // fail-fast: a non-uuid would hit `$1::uuid` and 500 instead of a clean 400
   action: z.enum(["RELEASE", "PAUSE"]),
   resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
 });
@@ -243,7 +243,7 @@ export type CockpitDispatchDetail = z.infer<typeof cockpitDispatchDetail>;
 // 02:1a — Send: writes Release_Batch + Decision_Trace + Action_Dispatch atomically. body = the
 // operator-reviewed (possibly edited) message; the measured evidence stays server-rendered ([V]).
 export const cockpitSendDispatchInput = z.object({
-  nba_id: z.string().min(1),
+  nba_id: z.string().uuid(), // fail-fast: non-uuid ⇒ clean 400, not a `$1::uuid` 500
   resulting_level: z.enum(["LOW", "MEDIUM", "HIGH"]),
   body: z.string().min(1).max(5000),
 });

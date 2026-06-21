@@ -33,4 +33,20 @@ describe("chatText", () => {
   it("throws on an empty response so callers fail-closed", async () => {
     await expect(chatText(fakeClient(""), "s", "u")).rejects.toThrow();
   });
+
+  it("pins temperature 0 so classify/rank are reproducible (same input → same label)", async () => {
+    let seen: { temperature?: number } | undefined;
+    const capturing: ChatClient = {
+      chat: {
+        completions: {
+          create: async (args: { temperature?: number }) => {
+            seen = args;
+            return { choices: [{ message: { content: "ok" } }], usage: undefined };
+          },
+        },
+      },
+    } as unknown as ChatClient;
+    await chatText(capturing, "s", "u");
+    expect(seen?.temperature).toBe(0);
+  });
 });

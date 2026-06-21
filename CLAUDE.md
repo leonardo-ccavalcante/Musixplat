@@ -66,6 +66,7 @@ The heart. Every piece obeys these; each maps to a test.
 8. **Config_Perillas by NAME (§3.4).** Every threshold read by name: `k_anon_threshold`, `n_min_threshold`, tenure-bucket borders, `D`, `TTL_baseline`, `umbral_antifrac`, `retencion_PII`, `costo_por_respuesta`. Never a hard-coded literal.
 9. **Phantom denylist (§4).** Do NOT `CREATE TABLE` for `UPSIDE`, `MOVIMIENTO_LOG`, `TRANSICION_DE_COHORT`, `SIMULACION`, `PERFIL_COHORT`, `PerformanceFeed`, etc. They are views / jsonb / derived fields / sandbox.
 10. **Provenance per field; `autonomy_level` is an ordered ENUM** (`'LOW','MEDIUM','HIGH'`, never varchar — declaration order, not alphabetical, drives `least()` fail-closed to LOW). No provenance ⇒ no render/export.
+11. **Invariant-bearing code is change-locked by test.** Never refactor/optimize a query, job, or trigger that produces or guards any rule above without a test that pins the invariant, proven green BEFORE and AFTER the change. Prefer the smallest-surface fix (e.g. client-side) over touching invariant-bearing server code. (A per-batch "optimization" of the connection-synthesis once nearly NULLed cohort percentiles — the win was efficiency that didn't matter, the cost was a silent §3 break.)
 
 ## §4 — Quality per unit (Block D)
 
@@ -96,7 +97,7 @@ The heart. Every piece obeys these; each maps to a test.
 
 Roles: **Claude (ultracode) = primary Writer** of every piece · **Codex = adversarial Reviewer in a fresh context** (refutes the diff vs Done-when; sees only spec + diff + test output, not the writer's rationale). Criterion = *less bug*. Risk-max pieces (anti-fake / money / RLS / k-anon) get **double-implement + behavioral diff**, converging to the stricter implementation; irreconcilable divergence ⇒ escalate to human.
 
-Every build session **opens with `/using-superpowers`** (mandatory): before any action, invoke the relevant skill, announce *"Using [skill] to [purpose]"*, turn its checklist into TodoWrite items, process-skills before implementation-skills. **Skills are invoked, not cited** — the discipline (TDD, systematic debugging, adversarial review) is what reduces bugs.
+Every session **opens by recalling prior lessons** — read the memory index `MEMORY.md` and the RL ledger `rl-iteration-log.md` (funcionou / não-funcionou / melhorar) so past feedback and repeated mistakes steer this session before any new work begins — then **`/using-superpowers`** (mandatory): before any action, invoke the relevant skill, announce *"Using [skill] to [purpose]"*, turn its checklist into TodoWrite items, process-skills before implementation-skills. **Skills are invoked, not cited** — the discipline (TDD, systematic debugging, adversarial review) is what reduces bugs.
 
 Per-piece pipeline (each step = a skill actually called):
 1. `/brainstorming` — align the piece's intent before planning.
