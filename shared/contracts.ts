@@ -206,11 +206,15 @@ export const cockpitReleaseInput = z.object({
 });
 export type CockpitReleaseInput = z.infer<typeof cockpitReleaseInput>;
 
-// 02:F-1.2 — the cockpit's "your week" proof strip: how many proposals the operator released vs paused in
-// the last 7 days. Counted from gov."Release_Batch" (the trace of every human decision) — a READ, never a
-// fabricated number (§14). Pool-scoped server-side. No "auto-handled" count: the AI acting alone leaves no
-// trace in this prototype, so it is not shown rather than invented.
-export const cockpitWeekSummary = z.object({ released: z.number(), paused: z.number() });
+// 02:F-1.2 / 02:CP2 — the cockpit's "your week" proof strip: HUMAN release/pause decisions in the last 7
+// days (origin <> 'auto') PLUS auto_acted = the actions the AI handled ALONE (origin='auto'). All READ from
+// gov."Release_Batch" ⋈ Decision_Trace (the decision trail), never fabricated (§14). Pool-scoped server-side.
+// The AI acting alone now leaves an honest trace, so auto_acted is COUNTED, not invented.
+export const cockpitWeekSummary = z.object({
+  released: z.number(),
+  paused: z.number(),
+  auto_acted: z.number(),
+});
 export type CockpitWeekSummary = z.infer<typeof cockpitWeekSummary>;
 
 // 02:DETAIL — per-action usage for the "What are these actions?" catalog drawer: how many proposals each
@@ -248,6 +252,40 @@ export const cockpitSendDispatchInput = z.object({
   body: z.string().min(1).max(5000),
 });
 export type CockpitSendDispatchInput = z.infer<typeof cockpitSendDispatchInput>;
+
+// 02:CP2 — "Run NBA" for one cohort: the engine diagnoses + proposes, and the AI auto-acts on the
+// auto_releasable, NON-money proposals (money always stays for a human, §7). cohort_id is DATA within the
+// pool; tenant is resolved server-side (anti-spoofing §7). The result is the autonomy SPECTRUM — counts
+// PRODUCED by the engine (proposeNba + the min() gate, §14), never seeded.
+export const cockpitProposeInput = z.object({ cohort_id: z.string().min(1) });
+export type CockpitProposeInput = z.infer<typeof cockpitProposeInput>;
+export const cockpitProposeResult = z.object({
+  proposed: z.number(), // levered (actionable) proposals
+  auto_acted: z.number(), // the AI dispatched alone (auto + non-money)
+  escalated: z.number(), // left for a human (money / failed gate / could-not-act)
+  skipped: z.number(), // no-act contrafactual (A8)
+});
+export type CockpitProposeResult = z.infer<typeof cockpitProposeResult>;
+
+// 02:CP2 — pool-wide "Run NBA": the same spectrum aggregated across the pool's cohorts (cohorts = how many
+// produced a proposal). Counts PRODUCED by the engine (§14), never seeded.
+export const cockpitProposePoolResult = cockpitProposeResult.extend({ cohorts: z.number() });
+export type CockpitProposePoolResult = z.infer<typeof cockpitProposePoolResult>;
+
+// 02:CP2 — the autonomous-actions registry: what the AI did ALONE (origin='auto'), pool-scoped, recent
+// first. Each row READS its rendered title + reach + the €-in-play the diagnosis measured ([V], §14) — the
+// AI's accountability trail, never a fabricated number.
+export const autoActionRow = z.object({
+  dispatch_id: z.string(),
+  nba_id: z.string(),
+  cohort_id: z.string(),
+  action_type: z.string().nullable(),
+  title: z.string(),
+  target_count: z.number(),
+  effective_level: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+  created_at: z.string(),
+});
+export type AutoActionRow = z.infer<typeof autoActionRow>;
 
 // 01 operability — cohorts.run summary. Counts are PRODUCED by the P01 batch (read back after it runs),
 // never seeded as results (§14). weeks = the demo windows computed (the second enables the delta diff).

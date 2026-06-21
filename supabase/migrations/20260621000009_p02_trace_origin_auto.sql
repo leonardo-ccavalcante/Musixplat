@@ -1,0 +1,11 @@
+-- 02:CP2 — autonomous-action audit origin. Until now trace_origin = ('desktop','mobile'): every
+-- Decision_Trace came from a HUMAN surface. Real autonomous execution (the AI acting alone on an
+-- auto_releasable, non-money NBA — 02:BR-5 / 04 §3.3 L280) needs its own honest origin so the registry
+-- can tell "the AI did this alone" apart from a human release, and so independence_guaranteed stays
+-- truthful: an auto trace carries confirmer_id=NULL (the schema already anticipates this — "null =
+-- auto-confirmed [C]", 04 L270 → independence_guaranteed=false). origin='auto' is the §3.6/§14 provenance
+-- marker, NOT a relaxation of any gate: money (financial_class=direct) can NEVER reach this path (§7).
+--
+-- ALTER TYPE ADD VALUE runs inside the migrate() tx on PG12+ (the value is only USED at runtime, in a
+-- later tx — never in this file). IF NOT EXISTS ⇒ idempotent re-runs.
+alter type public.trace_origin add value if not exists 'auto';

@@ -4,8 +4,9 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { CockpitBoard, groupRows, type GroupBy } from "@/features/cockpit/CockpitBoard";
-import { CockpitHero } from "@/features/cockpit/CockpitHero";
+import { CockpitHero, type RunResult } from "@/features/cockpit/CockpitHero";
 import { CatalogDrawer } from "@/features/cockpit/CatalogDrawer";
+import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
 import { type RowAction, type RowState, type KbReview } from "@/features/cockpit/CockpitRow";
@@ -28,12 +29,28 @@ export function CockpitPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("why");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [registryOpen, setRegistryOpen] = useState(false);
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
 
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
   const list = trpc.cockpit.list.useQuery(undefined, { enabled: ready });
   const week = trpc.cockpit.weekSummary.useQuery(undefined, { enabled: ready });
   const release = trpc.cockpit.release.useMutation();
+  const propose = trpc.cockpit.proposePool.useMutation();
+
+  // 02:CP2 — "Run NBA": fire the engine across the pool; on success refresh the board + "your week" + the
+  // registry (the autonomous actions it just took), and surface the spectrum inline.
+  const onRunNba = () => {
+    propose.mutate(undefined, {
+      onSuccess: (res) => {
+        setRunResult(res);
+        void utils.cockpit.list.invalidate();
+        void utils.cockpit.weekSummary.invalidate();
+        void utils.cockpit.autoActions.invalidate();
+      },
+    });
+  };
 
   const onAction = (row: NbaCockpitRow, action: RowAction) => {
     // RELEASE opens the dispatch screen (review reach + artifact, then Send writes the trace there, 02:1a).
@@ -119,7 +136,15 @@ export function CockpitPage() {
         <ErrorState />
       ) : (
         <>
-          <CockpitHero counts={counts} week={week.data} onOpenCatalog={() => setCatalogOpen(true)} />
+          <CockpitHero
+            counts={counts}
+            week={week.data}
+            onOpenCatalog={() => setCatalogOpen(true)}
+            onOpenRegistry={() => setRegistryOpen(true)}
+            onRunNba={onRunNba}
+            running={propose.isPending}
+            runResult={runResult}
+          />
 
           <div className="mb-3 mt-[clamp(1.5rem,3vw,2.25rem)] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -160,6 +185,7 @@ export function CockpitPage() {
         kbImpact={openImpact}
       />
       <CatalogDrawer open={catalogOpen} onClose={() => setCatalogOpen(false)} />
+      <AutonomousRegistry open={registryOpen} onClose={() => setRegistryOpen(false)} />
     </main>
   );
 }

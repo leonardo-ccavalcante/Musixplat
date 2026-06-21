@@ -125,7 +125,7 @@ describe("02:F-1.2 — weekSummary counts traced decisions (read, §14: 0 before
       const users = (await c.query<{ user_id: string }>(`select user_id from gov."User" order by user_id limit 2`)).rows;
 
       // anti-fake: nothing released yet ⇒ the producer (the trace) reports 0, never a seeded number.
-      expect(await weekSummary(row.tenant_id, exec)).toEqual({ released: 0, paused: 0 });
+      expect(await weekSummary(row.tenant_id, exec)).toEqual({ released: 0, paused: 0, auto_acted: 0 });
 
       // a real human RELEASE writes a Release_Batch (the decision trace) for an in-pool cohort.
       await c.query(
@@ -134,9 +134,10 @@ describe("02:F-1.2 — weekSummary counts traced decisions (read, §14: 0 before
         [row.cohort_id, users[0]!.user_id, users[1]!.user_id],
       );
 
-      expect(await weekSummary(row.tenant_id, exec)).toEqual({ released: 1, paused: 0 });
+      // a human/null-origin release counts as `released`, NEVER as auto_acted (origin is distinct from 'auto').
+      expect(await weekSummary(row.tenant_id, exec)).toEqual({ released: 1, paused: 0, auto_acted: 0 });
       // tenant isolation: a foreign pool never counts this decision.
-      expect(await weekSummary("tenant-does-not-exist", exec)).toEqual({ released: 0, paused: 0 });
+      expect(await weekSummary("tenant-does-not-exist", exec)).toEqual({ released: 0, paused: 0, auto_acted: 0 });
     } finally {
       await c.query("rollback");
       c.release();

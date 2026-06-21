@@ -22,14 +22,29 @@ const SEGS = [
 // The signal is the hero, not a CTA — every count here is derived from the produced proposal rows (§14),
 // never fabricated. "Today's proposals" answers the agent-manager's question: where is the AI acting alone,
 // and exactly where must I step in?
+export interface RunResult {
+  proposed: number;
+  auto_acted: number;
+  escalated: number;
+  cohorts: number;
+}
+
 export function CockpitHero({
   counts,
   week,
   onOpenCatalog,
+  onOpenRegistry,
+  onRunNba,
+  running,
+  runResult,
 }: {
   counts: FleetCounts;
-  week?: { released: number; paused: number };
+  week?: { released: number; paused: number; auto_acted: number };
   onOpenCatalog: () => void;
+  onOpenRegistry: () => void;
+  onRunNba: () => void;
+  running: boolean;
+  runResult?: RunResult | null;
 }) {
   const { total, cohorts, autos, money, level, gate } = counts;
   const needs = money + level + gate;
@@ -67,16 +82,42 @@ export function CockpitHero({
             </span>
           ))}
         </div>
+
+        {/* 02:CP2 — run the engine: it proposes + the AI acts ALONE on the safe, non-money ones (money always
+            waits for you). The spectrum is produced live (§14), then surfaced as plain language. */}
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-mxm-border pt-4">
+          <Button onClick={onRunNba} disabled={running} aria-busy={running}>
+            {running ? "Running the engine…" : "Run NBA"}
+          </Button>
+          <span aria-live="polite" className="text-xs text-mxm-content-secondary">
+            {runResult ? (
+              runResult.proposed === 0 ? (
+                "No new actions this run — nothing met the bar."
+              ) : (
+                <>
+                  Proposed <b className="tabnum text-mxm-content">{runResult.proposed}</b> across{" "}
+                  <b className="tabnum text-mxm-content">{runResult.cohorts}</b> cohort
+                  {runResult.cohorts === 1 ? "" : "s"} ·{" "}
+                  <b className="tabnum text-mxm-green">AI acted on {runResult.auto_acted}</b> ·{" "}
+                  <b className="tabnum text-mxm-brand">{runResult.escalated} sent to you</b>.
+                </>
+              )
+            ) : (
+              "The engine diagnoses each cohort, proposes a best-action, and acts alone where it's safe."
+            )}
+          </span>
+        </div>
       </div>
 
-      {/* The "depois": every human decision is traced — show the last 7 days (read from Release_Batch, §14,
-          never fabricated). No "auto-handled" count: the AI acting alone leaves no trace here, so it is omitted. */}
+      {/* The "depois": every decision is traced — last 7 days (read from Release_Batch ⋈ Decision_Trace, §14,
+          never fabricated). The AI acting alone now leaves an honest origin='auto' trace, so "acted alone" is
+          a real count (opens the registry), no longer omitted. */}
       <div className="flex flex-col justify-between gap-4 rounded-mxm border border-mxm-border bg-mxm-bg-elevated p-[clamp(1.1rem,2.2vw,1.4rem)]">
         <div>
           <p className="text-[0.7rem] uppercase tracking-wide text-mxm-content-tertiary">
             Your week so far <span className="normal-case tracking-normal text-mxm-content-tertiary">· from the trace log</span>
           </p>
-          <div className="mt-2 grid grid-cols-2 gap-3">
+          <div className="mt-2 grid grid-cols-3 gap-3">
             <div>
               <div className="text-2xl font-semibold tabnum text-mxm-content">{week ? week.released : "—"}</div>
               <div className="mt-0.5 text-xs text-mxm-content-secondary">you released</div>
@@ -85,8 +126,19 @@ export function CockpitHero({
               <div className="text-2xl font-semibold tabnum text-mxm-content">{week ? week.paused : "—"}</div>
               <div className="mt-0.5 text-xs text-mxm-content-secondary">you paused</div>
             </div>
+            <button
+              type="button"
+              onClick={onOpenRegistry}
+              aria-haspopup="dialog"
+              className="rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
+            >
+              <div className="text-2xl font-semibold tabnum text-mxm-green">{week ? week.auto_acted : "—"}</div>
+              <div className="mt-0.5 text-xs text-mxm-green underline-offset-2 hover:underline">AI acted alone →</div>
+            </button>
           </div>
-          <p className="mt-2 text-xs text-mxm-content-tertiary">Every release and pause is recorded as a decision trace.</p>
+          <p className="mt-2 text-xs text-mxm-content-tertiary">
+            Every release, pause, and autonomous action is recorded as a decision trace.
+          </p>
         </div>
         <Button variant="ghost" onClick={onOpenCatalog} aria-haspopup="dialog" className="self-start text-mxm-brand">
           What are these actions? →
