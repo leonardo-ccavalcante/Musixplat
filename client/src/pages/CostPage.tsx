@@ -79,7 +79,7 @@ export function CostPage() {
 
           {d.unpriced.calls > 0 ? (
             <div className="rounded-mxm border border-mxm-amber/40 p-3 text-sm text-mxm-amber">
-              ⚠ {d.unpriced.calls} call{d.unpriced.calls === 1 ? "" : "s"} have no configured price
+              ⚠ {d.unpriced.calls} call{d.unpriced.calls === 1 ? " has" : "s have"} no configured price
               {d.unpriced.models.length ? ` (model${d.unpriced.models.length === 1 ? "" : "s"}: ${d.unpriced.models.join(", ")})` : ""}
               {" "}— their cost is excluded from totals until a price knob is set.
             </div>
