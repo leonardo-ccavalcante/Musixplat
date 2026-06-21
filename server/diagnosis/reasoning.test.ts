@@ -14,12 +14,22 @@ function fakeClient(text: string): ChatClient {
 }
 
 describe("deterministicReasoning (gate provider, no LLM)", () => {
-  it("classifies finance from a payment/billing signal; unknown ⇒ low-confidence unclassified", async () => {
+  it("classifies finance/operations/product from signals; unknown ⇒ low-confidence unclassified", async () => {
     expect(await deterministicReasoning.classifyArea({ text: "billing" })).toEqual({
       areaType: "finance",
       confidence: 0.7,
     });
+    // 05D F1: operations (cancellation) + product (menu) are REAL classifier rules added with the new types.
+    expect(await deterministicReasoning.classifyArea({ text: "cancellation" })).toEqual({
+      areaType: "operations",
+      confidence: 0.7,
+    });
     expect(await deterministicReasoning.classifyArea({ text: "menu" })).toEqual({
+      areaType: "product",
+      confidence: 0.7,
+    });
+    // 'promo' matches NO diagnosis-type family ⇒ the genuine unclassifiable/degrade example (was 'menu').
+    expect(await deterministicReasoning.classifyArea({ text: "promo" })).toEqual({
       areaType: "unclassified",
       confidence: 0.3,
     });

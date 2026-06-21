@@ -25,4 +25,14 @@ describe("problem_types registry", () => {
     expect(d.affected.threshold_knob).toBe("connection_min_ratio");
     expect(Object.keys(PROBLEM_TYPES)).toContain("connection");
   });
+  it("has cancellation (operations) + menu_quality (product) built-ins with dedicated knobs (05D F1)", () => {
+    const k = getDescriptor("cancellation");
+    expect(k.area_type).toBe("operations");
+    expect(k.affected.threshold_knob).toBe("cancel_rate_max");
+    const m = getDescriptor("menu_quality");
+    expect(m.area_type).toBe("product");
+    expect(m.impact.kind).toBe("at_risk_gmv");
+    expect(m.affected.threshold_knob).toBe("menu_quality_min");
+    expect(Object.keys(PROBLEM_TYPES)).toEqual(expect.arrayContaining(["cancellation", "menu_quality"]));
+  });
 });

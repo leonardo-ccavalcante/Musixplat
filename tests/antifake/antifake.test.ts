@@ -224,4 +224,34 @@ describe("05D F0 anti-fake — general path reports a problem with NO produced r
     expect(r[0]!.revenue_lost).toBeNull();
     expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
   });
+
+  it("menu_quality: revenue_lost is NULL and Affected is empty for a freshly-reported problem", async () => {
+    const POOL = "POOL-AF-MQ";
+    // INPUT only — one low-menu-quality restaurant (no producer runs at report time). 2 orders, both
+    // flags false ⇒ quality 0.0 (< menu_quality_min) but NOTHING is computed by report.
+    await pool.query(
+      `insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date, zone, cuisine, committed_hours_week)
+       values ('R-AFM-1', $1, 'long_tail','long_tail'::segment, date '2026-01-01','Centro','pizza',50)`,
+      [POOL],
+    );
+    await pool.query(
+      `insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status, has_photo, has_description, zone)
+       select 'R-AFM-1', current_date - 5, 120, 20, 'ok', false, false, 'Centro' from generate_series(1,2) k`,
+    );
+
+    const reported = await caller(POOL).diagnosis.reportProblem({
+      restaurantId: "R-AFM-1",
+      problem_type: "menu_quality",
+    });
+    expect(reported.created).toBe(true);
+
+    // §14: the menu_quality report path computes NOTHING — revenue_lost NULL, zero Affected rows.
+    const r = await rows<{ revenue_lost: number | null }>(
+      pool,
+      `select revenue_lost from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [reported.problem_id],
+    );
+    expect(r[0]!.revenue_lost).toBeNull();
+    expect(await count(pool, `tenant."Affected" where problem_id = '${reported.problem_id}'`)).toBe(0);
+  });
 });

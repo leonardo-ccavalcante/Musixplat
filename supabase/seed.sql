@@ -56,7 +56,8 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   -- this decides what COUNTS as a diagnosed connection problem; the A1 knob decides when to PROPOSE reconnect.
   ('connection_min_ratio',      '0.80', '[C]', 'leo'),
   -- 05D cancellation diagnosis threshold — DISTINCT from the A6 nba_cancel_rate_max ACTION policy (§3.8 by name).
-  ('cancel_rate_max',           '0.10', '[C]', 'leo')
+  ('cancel_rate_max',           '0.10', '[C]', 'leo'),
+  ('menu_quality_min',          '0.50', '[C]', 'leo')
 -- idempotent: the 05D diagnosis knobs (connection_min_ratio, cancel_rate_max) are ALSO inserted by the
 -- 20260621000006 migration (hosted-safe, Codex P1). rebuild_db.sh runs migrations THEN this seed, so this
 -- block must skip the already-present rows — else the duplicate aborts the whole block (dropping window_silent

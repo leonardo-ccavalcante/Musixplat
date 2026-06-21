@@ -77,7 +77,7 @@ const AREA_BY_FAMILY: ReadonlyArray<readonly [RegExp, string]> = [
   // cancel/operation text matches, so payment/connection/product are unaffected (none contain this vocab).
   [/cancel|fulfil|operation|kitchen|cocina/i, "operations"],
   [/financ|finanz|cobr|\bpago\b|payment|billing|reembols|refund|saldo|balance|\border\b/i, "finance"],
-  [/produc|\buso\b|feature|adop|defect/i, "product"],
+  [/produc|menu|\buso\b|feature|adop|defect/i, "product"],
   [/perf|laten|connection|conex|desconex|timeout/i, "performance"],
 ];
 

@@ -39,6 +39,17 @@ export const PROBLEM_TYPES: Record<string, ProblemDescriptor> = {
     hypotheses: ["restaurant rejecting orders (out of stock / closed)", "kitchen overload at peak hours", "menu item availability not synced"],
     metric: "reduce_restaurant_cancellations", origin: "builtin",
   },
+  menu_quality: {
+    problem_type: "menu_quality", area_type: "product", label: "Low menu quality",
+    // quality = avg((has_photo::int + has_description::int)/2.0) over the window's orders — the SAME raw
+    // signal cohort.m_quality is built from (read direct from raw Order, §14). affected when BELOW the knob.
+    // threshold read BY NAME (§3.8) — menu_quality_min is the DIAGNOSIS threshold, DISTINCT from the A4
+    // nba_menu_quality_min ACTION policy. Mirrors the connection_min_ratio split.
+    affected: { table: "Order", signal: "menu_quality < menu_quality_min", operator: "lt", threshold_knob: "menu_quality_min" },
+    impact: { kind: "at_risk_gmv" }, concentration_dim: "zone",
+    hypotheses: ["menu items missing photos", "menu items missing descriptions", "stale / incomplete menu listing"],
+    metric: "improve_menu_quality", origin: "builtin",
+  },
 };
 export function getDescriptor(t: string): ProblemDescriptor {
   const d = PROBLEM_TYPES[t];
