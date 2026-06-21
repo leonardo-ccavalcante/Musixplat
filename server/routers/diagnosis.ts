@@ -114,6 +114,9 @@ export const diagnosisRouter = router({
 
       // B.1.3 — create-or-increment. Partial unique (tenant_id, restaurant_id) WHERE open.
       // (xmax = 0) ⇒ this call inserted; otherwise it bumped an existing open problem.
+      // 05D F0 — persist problem_type + segment (classification INPUT) so the orchestrator + the
+      // SQL dispatchers route on them. On a dedup-increment we keep the existing row's type/segment
+      // (the open problem already encodes them); only frequency/last_seen bump.
       const rows = await query<{
         problem_id: string;
         status: string;
@@ -121,13 +124,20 @@ export const diagnosisRouter = router({
         created: boolean;
       }>(
         `insert into tenant."Diagnosed_Problem"
-           (tenant_id, restaurant_id, conversation_id, criticality, status, frequency)
-         values ($1, $2, $3, $4, 'open', 1)
+           (tenant_id, restaurant_id, conversation_id, criticality, status, frequency, problem_type, segment)
+         values ($1, $2, $3, $4, 'open', 1, $5, $6)
          on conflict (tenant_id, restaurant_id) where status = 'open'
            do update set frequency     = tenant."Diagnosed_Problem".frequency + 1,
                          last_seen_ts  = now()
          returning problem_id, status, frequency, (xmax = 0) as created`,
-        [ctx.tenantId, input.restaurantId, input.conversationId ?? null, input.criticality ?? null],
+        [
+          ctx.tenantId,
+          input.restaurantId,
+          input.conversationId ?? null,
+          input.criticality ?? null,
+          input.problem_type,
+          input.segment ?? null,
+        ],
       );
       const r = rows[0];
       if (!r) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "report failed" });
