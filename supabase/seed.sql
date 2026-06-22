@@ -23,6 +23,8 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('cohort_rule_version_current', 'v1', '[V]', 'leo'),
   ('p90_percentile_cut',      '90', '[C]', 'leo'),
   ('at_risk_percentile_max',    '25', '[C]', 'leo'),
+  -- 05D Part D: weeks after an acted week to re-measure the signal (prove-it-resolved). Engineering default.
+  ('resolution_verify_window',   '1',  '[I]', 'leo'),
   -- MODEL v2 composite-ranking weights (Leo ratified 2026-06-18) — read BY NAME, never literals.
   ('weight_score_orders',        '0.40', '[V]', 'leo'),
   ('weight_score_connection',      '0.30', '[V]', 'leo'),
