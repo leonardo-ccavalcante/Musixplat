@@ -71,6 +71,24 @@ describe("05D Part C — diagnosis.decide (human decision capture → learning, 
       caller("POOL-DIAG").diagnosis.decide({ problemId: "nope-0000", areaType: "finance", rationale: "x y z" }),
     ).rejects.toThrow();
   });
+
+  it("idempotent: a replay (already-decided) is CONFLICT — no duplicate reviewed precedent (Codex)", async () => {
+    const problemId = await seedProblem();
+    await caller("POOL-DIAG").diagnosis.decide({ problemId, areaType: "finance", rationale: "first decision" });
+    await expect(
+      caller("POOL-DIAG").diagnosis.decide({ problemId, areaType: "operations", rationale: "second decision" }),
+    ).rejects.toThrow(); // claimed 0 rows (no longer needs_human) ⇒ CONFLICT
+    const n = (await pool.query(`select 1 from tenant."Knowledge_Case" where tenant_id='POOL-DIAG'`)).rowCount;
+    expect(n).toBe(1); // exactly ONE case, not two
+  });
+
+  it("rejects a problem that is not awaiting a decision (status 'open' ⇒ CONFLICT)", async () => {
+    const problemId = await seedProblem("POOL-DIAG", "open");
+    await expect(
+      caller("POOL-DIAG").diagnosis.decide({ problemId, areaType: "finance", rationale: "not in the queue" }),
+    ).rejects.toThrow();
+    expect((await pool.query(`select 1 from tenant."Knowledge_Case" where tenant_id='POOL-DIAG'`)).rowCount).toBe(0);
+  });
 });
 
 describe("05D Part C — diagnosis.recentlyVerified (decision #2 audit: what Part D auto-approved)", () => {
