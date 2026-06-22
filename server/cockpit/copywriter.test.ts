@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deterministicCopy, llmCopy, restaurantCopy, type CopyInput } from "./copywriter";
-import type { ChatClient } from "../_core/llm";
+import type { ChatClient, TokenUsage } from "../_core/llm";
 
 const input: CopyInput = {
   actionLabel: "Investigate fraud/risk",
@@ -46,5 +46,42 @@ describe("02:1a copywriter — restaurant-facing copy, [V] numbers preserved (§
 
   it("restaurantCopy under vitest is deterministic (never calls the paid LLM)", async () => {
     expect(await restaurantCopy(input)).toBe(deterministicCopy(input));
+  });
+
+  it("llmCopy reports token usage to the optional sink (P07 — the copywriter was the only unlogged LLM call-site)", async () => {
+    const clientWithUsage: ChatClient = {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [{ message: { content: "We noticed 16.7% of orders cancelled vs 5% typical. 1) Check prep times. You've got this." } }],
+            usage: { prompt_tokens: 120, completion_tokens: 40 },
+          }),
+        },
+      },
+    };
+    const seen: { usage: TokenUsage; model: string }[] = [];
+    await llmCopy(clientWithUsage, "gpt-4o-mini", (usage, model) => seen.push({ usage, model }))(input);
+    expect(seen).toHaveLength(1); // the call-site now sees the cost (it didn't before)
+    expect(seen[0]!.usage.inputTokens).toBe(120);
+    expect(seen[0]!.usage.outputTokens).toBe(40);
+    expect(seen[0]!.model).toBe("gpt-4o-mini"); // the model actually used, logged alongside the counts
+  });
+
+  it("llmCopy surfaces usage to the sink EVEN when the figure-guard rejects — the tokens were spent (Codex P1)", async () => {
+    const dropsFigure: ChatClient = {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [{ message: { content: "We saw more cancellations than usual lately. 1) Check prep times." } }],
+            usage: { prompt_tokens: 90, completion_tokens: 30 },
+          }),
+        },
+      },
+    };
+    const seen: TokenUsage[] = [];
+    // The reply omits the required "16.7%"/"5%" ⇒ llmCopy THROWS, but onUsage fired first.
+    await expect(llmCopy(dropsFigure, "gpt-4o-mini", (u) => seen.push(u))(input)).rejects.toThrow(/dropped required figure/);
+    expect(seen).toHaveLength(1); // surfaced before the throw ⇒ restaurantCopy's finally still logs the real cost
+    expect(seen[0]!.inputTokens).toBe(90);
   });
 });

@@ -291,7 +291,7 @@ export async function dispatchDetail(nbaId: string, tenantId: string, exec: Exec
   // The body is the restaurant-facing copy: LLM on the live path (warm, plain, actionable), deterministic
   // template under vitest / no key / any error (fail-closed §3.7). The measured [V] figures are preserved
   // verbatim by the agent's number-guard (§14). evidence/title stay server-rendered (read-only [V]).
-  const body = await restaurantCopy(buildCopyInput(renderInput));
+  const body = await restaurantCopy(buildCopyInput(renderInput), { tenantId, refId: p.nba_id });
   return {
     nba_id: p.nba_id,
     action_type: p.action_type,
