@@ -35,6 +35,7 @@ export function CockpitRow({
   state,
   muted,
   kbReview,
+  focused,
 }: {
   row: NbaCockpitRow;
   onAction: (row: NbaCockpitRow, action: RowAction) => void;
@@ -42,12 +43,21 @@ export function CockpitRow({
   state?: RowState;
   muted?: boolean;
   kbReview?: KbReview;
+  // 02:CP focus — this row's cohort was just handed off (?focus=). Ring it so the eye lands here. Applied on
+  // the row's OWN root (not a wrapper) so `last:border-b-0` keeps working (a wrapper makes every row last-child).
+  focused?: boolean;
 }) {
   const busy = state?.status === "pending";
   const canAct = row.effective_level != null && state?.status !== "done";
   const detail = describe(row.before_after_expected, row.root_cause);
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-mxm-border py-3.5 text-sm last:border-b-0">
+    <div
+      data-focused={focused ? "true" : undefined}
+      className={cn(
+        "flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-mxm-border py-3.5 text-sm last:border-b-0",
+        focused && "rounded-mxm ring-2 ring-mxm-brand ring-offset-2 ring-offset-mxm-bg-elevated",
+      )}
+    >
       <div className="flex min-w-[11rem] items-baseline gap-2">
         <span className={cn("font-medium", muted ? "text-mxm-content-secondary" : "text-mxm-content")}>
           {row.action_type ?? "—"}

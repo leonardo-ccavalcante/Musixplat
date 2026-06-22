@@ -31,3 +31,23 @@ test("a human Release records a Decision_Trace (shows the trace id)", async ({ p
   await release.click();
   await expect(page.getByText(/Released ✓ trace/).first()).toBeVisible({ timeout: 10_000 });
 });
+
+// 02:CP — "View cohort in Cockpit" focus (?focus=<cohort>). Alt 1 = guide the eye, never narrow the board.
+// Deterministic case: a cohort that isn't on the board ⇒ the honest "not generated yet" cue (never a blank),
+// and the normal board is still rendered (not filtered). The PRESENT-cohort highlight is unit-tested on the
+// board (CockpitBoard.test.tsx: data-focused) + the cue (CockpitFocusCue.test.tsx).
+test("?focus= shows an honest cue for an absent cohort and does NOT narrow the board", async ({ page }) => {
+  await page.goto("/cockpit?focus=__no_such_cohort__");
+  await expect(page.getByRole("region", { name: "Fleet autonomy posture" })).toBeVisible({ timeout: 20_000 });
+
+  // the page read the focus param and rendered the honest cue (§14: never a blank). The distinctive
+  // "No proposal for cohort <id>" text uniquely identifies the absent-cue (the cue also names the producer to
+  // run, but "Run NBA" also matches the hero's run button, so we assert the unambiguous cohort line instead).
+  await expect(page.getByText(/No proposal for cohort/i)).toBeVisible();
+  await expect(page.getByText("__no_such_cohort__")).toBeVisible();
+
+  // the cue is dismissible via "Show all" (clears the param). It renders regardless of board data, so this
+  // assertion is deterministic. ("Board not narrowed" is unit-tested on CockpitBoard — it asserts unfocused
+  // rows still render — without needing a seeded DB, so it isn't re-asserted here.)
+  await expect(page.getByRole("button", { name: "Show all" })).toBeVisible();
+});
