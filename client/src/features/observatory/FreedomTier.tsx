@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/Button";
 import { CapEditModal } from "./CapEditModal";
 import { EvalStatusBadge } from "./EvalStatusBadge";
 
-// NULL result columns render "not measured" (honest-pending §14), never 0/blank.
-const pending = (v: number | null): string => (v === null ? "not measured" : String(v));
-const boolPending = (v: boolean | null): string => (v === null ? "not measured" : v ? "yes" : "no");
+// §14 honest-pending + §3.10 provenance gate: NULL → "not measured"; a non-null result with no
+// provenance tag is not asserted ("no provenance"); otherwise the value.
+const cell = (v: number | boolean | null, prov?: string): string =>
+  v === null ? "not measured" : !prov ? "no provenance" : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
 
 // Freedom = how far the AI may go. The eval grid is READ-ONLY (the grade is producer-measured; a human
 // cannot type it — §14). Full traceability lives in each row's expand. The honest human lever is the CAP,
@@ -54,10 +55,19 @@ export function FreedomTier({ ready }: { ready: boolean }) {
                     </span>
                   </summary>
                   <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <Field k="Sample (n)" v={pending(e.nCohortXIntent)} />
-                    <Field k="Agreement (kappa)" v={pending(e.kappa)} />
-                    <Field k="Red-team independent" v={boolPending(e.redteamIndependenceFlag)} />
-                    <Field k="Red-team result" v={e.redteamJudgeVsHumanResult ?? "not measured"} />
+                    <Field k="Sample (n)" v={cell(e.nCohortXIntent, e.provenanceByField?.n_cohort_x_intent)} />
+                    <Field k="Agreement (kappa)" v={cell(e.kappa, e.provenanceByField?.kappa)} />
+                    <Field k="Red-team independent" v={cell(e.redteamIndependenceFlag, e.provenanceByField?.redteam_independence_flag)} />
+                    <Field
+                      k="Red-team result"
+                      v={
+                        e.redteamJudgeVsHumanResult === null
+                          ? "not measured"
+                          : e.provenanceByField?.redteam_judge_vs_human_result
+                            ? e.redteamJudgeVsHumanResult
+                            : "no provenance"
+                      }
+                    />
                     <Field k="Golden-set version" v={e.version} />
                   </dl>
                 </details>

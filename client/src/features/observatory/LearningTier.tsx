@@ -37,7 +37,7 @@ export function LearningTier({ ready }: { ready: boolean }) {
                     <span className="text-mxm-content">{c.pattern ?? c.areaType}</span>
                     <span className="flex items-center gap-2 text-xs">
                       <span className={measuredResolved ? "text-mxm-green" : "text-mxm-amber"}>
-                        {c.outcome ?? "—"}
+                        {c.outcome === null ? "pending" : c.provenanceByField?.outcome ? c.outcome : "no provenance"}
                       </span>
                       <span className="text-mxm-content-tertiary">
                         {c.reviewed ? "✓ vetted" : "awaiting your OK"}

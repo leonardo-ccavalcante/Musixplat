@@ -50,7 +50,7 @@ export function ActivityTier({ ready }: { ready: boolean }) {
               <details>
                 <summary className="flex cursor-pointer items-center justify-between gap-3">
                   <span className="text-mxm-content">
-                    {t.action} <span className="text-mxm-content-secondary">· {t.effectiveLevelApplied ?? "—"}</span>
+                    {t.action} <span className="text-mxm-content-secondary">· {t.effectiveLevelApplied ?? "not measured"}</span>
                   </span>
                   <span className="text-xs text-mxm-content-tertiary tabular-nums">{t.ts.slice(0, 10)}</span>
                 </summary>
