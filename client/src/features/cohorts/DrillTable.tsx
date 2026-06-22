@@ -34,7 +34,7 @@ export function DrillTable({ rows }: { rows: DrillRow[] }) {
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.restaurant_id} className="text-mxm-content">
+          <tr key={`${r.restaurant_id}-${r.week}-${r.subgroup_id ?? ""}`} className="text-mxm-content">
             <td>{r.restaurant_id}</td>
             <td className="tabnum text-right">{r.percentile_in_cohort == null ? "—" : fmtNum(r.percentile_in_cohort)}</td>
             <td className="tabnum text-right">{r.gap_to_top == null ? "—" : fmtNum(r.gap_to_top)}</td>

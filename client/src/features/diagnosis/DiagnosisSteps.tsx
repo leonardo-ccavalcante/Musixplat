@@ -53,7 +53,7 @@ export function DiagnosisSteps({
     { label: "Hunt silent (B.5)", summary: `${row.affected} affected · ${row.silent} silent`,
       detail: who.length === 0 ? <p>No population resolved (fail-closed).</p> : (
         <ul className="max-h-40 space-y-0.5 overflow-y-auto">{who.map((a, i) => (
-          <li key={str(a.restaurant_id, `r${i}`)} className="flex justify-between gap-3">
+          <li key={`${str(a.restaurant_id, "r")}-${i}`} className="flex justify-between gap-3">
             <span className="text-mxm-content">{str(a.restaurant_id)}</span>
             <span className={a.silent ? "text-mxm-brand" : "text-mxm-content-secondary"}>{a.silent ? "silent · never spoke" : "spoke up"}</span>
           </li>))}</ul>) },
