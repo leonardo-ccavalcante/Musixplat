@@ -20,3 +20,10 @@ exception when duplicate_object then null; end $$;
 -- kNN over the precedent embeddings (cosine) — mirrors the Knowledge_Chunk index (P06).
 create index if not exists knowledge_case_embedding_idx
   on tenant."Knowledge_Case" using hnsw (embedding vector_cosine_ops);
+
+-- precedent kNN similarity FLOOR (§3.8 by NAME): the nearest verified precedent is reused only if it is
+-- actually SIMILAR — a dissimilar nearest-neighbor must never be reused just because its action_code happens
+-- to currently breach. Operator-tunable; '[I]' = an engineering default, not a measured value.
+insert into catalog."Config_Knobs"(key, value, provenance, owner) values
+  ('precedent_similarity_min', '0.60', '[I]', 'leo')
+on conflict (key) do nothing;

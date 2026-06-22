@@ -10,7 +10,7 @@ import type { NbaVerdict } from "../agente/reasoning.js";
 import { type MotorReasoning, type MotorHypothesis, leverAdapter } from "./reasoning.js";
 import { validateHypothesis } from "./validateHypothesis.js";
 import { writeMotorCase, readGrounding } from "./learn.js";
-import { acceptPrecedent, embedCaseText } from "../diagnosis/precedent.js";
+import { acceptPrecedent, embedCaseText, type AcceptedPrecedent } from "../diagnosis/precedent.js";
 import { resolveEmbedder } from "../knowledge/embedder.js";
 
 export interface MotorAttemptInput { restaurantId: string; cohortId: string; week: string; tenantId: string; tierId: string; }
@@ -51,8 +51,16 @@ export async function runMotorAttempt(i: MotorAttemptInput, reasoning: MotorReas
   // SAME actOnLever path (out-of-range / auto_releasable seal / §7 money hard-no all re-checked). Fail-open:
   // no verified precedent ⇒ null ⇒ the LLM hypothesis loop runs exactly as before. Dormant until the Part D
   // re-measurement writes the first verified_fixed.
-  const embedder = await resolveEmbedder();
-  const precedent = await acceptPrecedent(i.tenantId, verdicts, precedentQueryText(verdicts), query, embedder);
+  let precedent: AcceptedPrecedent | null = null;
+  try {
+    const embedder = await resolveEmbedder();
+    const minSim = await knobNum("precedent_similarity_min"); // §3.8 by NAME — the kNN similarity floor
+    precedent = await acceptPrecedent(i.tenantId, verdicts, precedentQueryText(verdicts), query, embedder, minSim);
+  } catch {
+    // §7 fail-open: an embedding/kNN/db outage ⇒ treat as NO precedent ⇒ the LLM loop runs as before, never
+    // abort the whole attempt on a transient precedent-retrieval failure (Codex).
+    precedent = null;
+  }
   if (precedent) {
     const val = await withTx((c) => validateHypothesis(precedent.freshVerdict, i.tierId, i.tenantId, c));
     return actOnLever(i, precedent.freshVerdict, precedent.resolution ?? "precedent reuse", val.inRange, discarded, attemptId, 0);
@@ -122,7 +130,9 @@ async function actOnLever(
   if (gate?.ar === true && gate.fc !== "direct") {
     try {
       const pattern = `${lever.dimension}_${lever.verdict}`;
-      const embedding = await embedCaseText(pattern); // best-effort, OUTSIDE the tx (external call)
+      // 05D Part B (Codex): embed the case CONTEXT (signal + the sub-cause/fix narrative), not just the bare
+      // signal label — so kNN can distinguish different verified causes of one signal, never an arbitrary tie.
+      const embedding = await embedCaseText(`${pattern} ${rootCause}`); // best-effort, OUTSIDE the tx (external)
       await withTx(async (c) => {
         await autoDispatch(res.nbaId, i.tenantId, c);
         await writeMotorCase(

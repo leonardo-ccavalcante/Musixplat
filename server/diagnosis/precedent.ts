@@ -61,17 +61,21 @@ export async function acceptPrecedent(
   queryText: string,
   exec: Exec,
   embedder: Embedder,
+  minSim: number,
 ): Promise<AcceptedPrecedent | null> {
   const [vec] = await embedder.embed([queryText]);
   if (!vec) return null;
+  // The nearest verified precedent ABOVE the similarity floor (§3.8 `precedent_similarity_min`): a dissimilar
+  // nearest-neighbor is rejected here — never reused just because its action_code happens to currently breach.
   const rows = await exec<{ kb_case_id: string; resolution: string | null; lever: PrecedentLever | null }>(
     `select kb_case_id, resolution, lever
        from tenant."Knowledge_Case"
       where tenant_id = $1 and verification_status = 'verified_fixed'
         and embedding is not null and lever is not null
+        and (1 - (embedding <=> $2::vector)) >= $3
       order by embedding <=> $2::vector
       limit 1`,
-    [tenantId, toVector(vec)],
+    [tenantId, toVector(vec), minSim],
   );
   const cand = rows[0];
   if (!cand || !cand.lever) return null;
