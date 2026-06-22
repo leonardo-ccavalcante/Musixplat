@@ -1,6 +1,6 @@
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CockpitBoard, groupRows } from "./CockpitBoard";
+import { CockpitBoard, groupRows, focusGroupKeys } from "./CockpitBoard";
 import type { RowState } from "./CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
@@ -95,5 +95,53 @@ describe("02:F-1.1 CockpitBoard — grouped, foldable, honest", () => {
     });
     expect(screen.getByText(/Released ✓/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Release" })).not.toBeInTheDocument();
+  });
+});
+
+describe("02:CP focus — guide the eye to the handed-off cohort (Alt 1, no filter)", () => {
+  const renderFocus = (rows: NbaCockpitRow[], focusCohort?: string) => {
+    const groups = groupRows(rows, "why");
+    const openGroups = Object.fromEntries(groups.map((g) => [g.key, true]));
+    return render(
+      <CockpitBoard
+        groups={groups}
+        openGroups={openGroups}
+        onToggle={() => {}}
+        onAction={() => {}}
+        actionState={{}}
+        focusCohort={focusCohort}
+      />,
+    );
+  };
+
+  it("marks the focused cohort's rows with data-focused; the board is NOT narrowed (other rows still render)", () => {
+    const { container } = renderFocus(
+      [row({ nba_id: "a1", cohort_id: "cX", status: "auto" }), row({ nba_id: "a2", cohort_id: "cY", status: "auto" })],
+      "cX",
+    );
+    const focused = container.querySelectorAll('[data-focused="true"]');
+    expect(focused).toHaveLength(1);
+    expect(focused[0]).toHaveTextContent("cX");
+    expect(screen.getByText("cY")).toBeInTheDocument(); // unfocused row is still on the board (guide, don't filter)
+  });
+
+  it("no focusCohort ⇒ nothing marked (regression: unfocused board unchanged)", () => {
+    const { container } = renderFocus([row({ nba_id: "a1", cohort_id: "cX", status: "auto" })]);
+    expect(container.querySelectorAll('[data-focused="true"]')).toHaveLength(0);
+  });
+});
+
+describe("02:CP focusGroupKeys — open EVERY group holding the focused cohort (Codex P2)", () => {
+  it("returns ALL group keys containing the cohort when its proposals span groups", () => {
+    const rows = [
+      row({ nba_id: "m", cohort_id: "cX", status: "needs_human", reason: "money", financial_class: "direct", auto_releasable: false, effective_level: "MEDIUM" }),
+      row({ nba_id: "g", cohort_id: "cX", status: "needs_human", reason: "gates", auto_releasable: false, effective_level: null }),
+      row({ nba_id: "o", cohort_id: "cY", status: "auto" }),
+    ];
+    expect(focusGroupKeys(groupRows(rows, "why"), "cX").sort()).toEqual(["gates", "money"]);
+  });
+
+  it("no focus ⇒ [] (regression)", () => {
+    expect(focusGroupKeys(groupRows([row({ cohort_id: "cX" })], "why"), undefined)).toEqual([]);
   });
 });

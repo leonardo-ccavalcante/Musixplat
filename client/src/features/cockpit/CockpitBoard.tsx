@@ -59,6 +59,13 @@ export function groupRows(rows: NbaCockpitRow[], by: GroupBy): GroupView[] {
   });
 }
 
+// 02:CP focus — every group key holding a row of the focused cohort, so the page opens ALL of them. A cohort
+// can have proposals split across groups (e.g. money + gates); opening only the first would hide the rest.
+export function focusGroupKeys(groups: GroupView[], focusCohort: string | undefined): string[] {
+  if (!focusCohort) return [];
+  return groups.filter((g) => g.rows.some((r) => r.cohort_id === focusCohort)).map((g) => g.key);
+}
+
 const TONE_BAR: Record<GroupTone, string> = {
   money: "bg-mxm-red",
   level: "bg-mxm-amber",
@@ -78,6 +85,7 @@ export function CockpitBoard({
   onOpen,
   actionState,
   kbReviews,
+  focusCohort,
 }: {
   groups: GroupView[];
   openGroups: Record<string, boolean>;
@@ -86,6 +94,9 @@ export function CockpitBoard({
   onOpen?: (row: NbaCockpitRow) => void;
   actionState: Record<string, RowState | undefined>;
   kbReviews?: Record<string, KbReview | undefined>;
+  // 02:CP focus — the cohort the operator just handed off (?focus=). Its rows get a highlight ring so the eye
+  // lands on them; the board is NEVER narrowed (guide, don't filter). undefined = no focus (default board).
+  focusCohort?: string;
 }) {
   if (groups.length === 0) return <EmptyState>The AI has proposed no actions yet.</EmptyState>;
 
@@ -121,7 +132,16 @@ export function CockpitBoard({
             </summary>
             <div className="border-t border-mxm-border px-[clamp(0.75rem,1.5vw,1.25rem)]">
               {g.rows.map((r) => (
-                <CockpitRow key={r.nba_id} row={r} onAction={onAction} onOpen={onOpen} state={actionState[r.nba_id]} muted={r.status === "auto"} kbReview={kbReviews?.[r.nba_id]} />
+                <CockpitRow
+                  key={r.nba_id}
+                  row={r}
+                  onAction={onAction}
+                  onOpen={onOpen}
+                  state={actionState[r.nba_id]}
+                  muted={r.status === "auto"}
+                  kbReview={kbReviews?.[r.nba_id]}
+                  focused={focusCohort != null && r.cohort_id === focusCohort}
+                />
               ))}
             </div>
           </details>

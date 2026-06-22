@@ -1,15 +1,16 @@
-import { useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
-import { CockpitBoard, groupRows, type GroupBy } from "@/features/cockpit/CockpitBoard";
+import { CockpitBoard, groupRows, focusGroupKeys, type GroupBy } from "@/features/cockpit/CockpitBoard";
 import { CockpitHero, type RunResult, type MotorRunResult } from "@/features/cockpit/CockpitHero";
 import { CatalogDrawer } from "@/features/cockpit/CatalogDrawer";
 import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
 import { EscalatedList } from "@/features/cockpit/EscalatedList";
 import { AutonomyControls } from "@/features/cockpit/AutonomyControls";
 import { CockpitSetup } from "@/features/cockpit/CockpitSetup";
+import { CockpitFocusCue } from "@/features/cockpit/CockpitFocusCue";
 import { Button } from "@/components/ui/Button";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
@@ -126,6 +127,29 @@ export function CockpitPage() {
     [rows],
   );
 
+  // 02:CP — focus from the handoff link (?focus=<cohort>). Guide the eye: highlight that cohort's rows, force
+  // its group open, scroll to it, and show a cue. The board is NEVER narrowed (Alt 1). undefined = normal board.
+  const search = useSearch();
+  const focusCohort = new URLSearchParams(search).get("focus") || undefined;
+  const focusKeys = focusGroupKeys(groups, focusCohort);
+  const focusPresent = focusKeys.length > 0; // a cohort is "present" iff some group holds one of its rows
+  const effectiveOpenGroups = focusKeys.length
+    ? { ...openGroups, ...Object.fromEntries(focusKeys.map((k) => [k, true])) }
+    : openGroups;
+  // smooth-scroll to the highlighted cohort ONCE per focus (ref-guarded). rows refetch on every release/pause
+  // (list.invalidate), so depending on `rows` would yank the viewport back to center on each dispatch. jsdom
+  // no-ops the call (optional chaining); the real browser scrolls once when the cohort first lands.
+  const scrolledFor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!focusCohort) {
+      scrolledFor.current = undefined;
+      return;
+    }
+    if (!focusPresent || scrolledFor.current === focusCohort) return;
+    scrolledFor.current = focusCohort;
+    document.querySelector('[data-focused="true"]')?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [focusCohort, focusPresent]);
+
   const setAll = (open: boolean) => setOpenGroups(Object.fromEntries(groups.map((g) => [g.key, open])));
   const toggle = (key: string) =>
     setOpenGroups((s) => ({ ...s, [key]: !(s[key] ?? groups.find((g) => g.key === key)?.defaultOpen ?? false) }));
@@ -227,6 +251,10 @@ export function CockpitPage() {
             </div>
           )}
 
+          {focusCohort && (
+            <CockpitFocusCue cohortId={focusCohort} present={focusPresent} onClear={() => setLocation("/cockpit")} />
+          )}
+
           {counts.total === 0 ? (
             // 02:CP — empty cockpit (the producer chain hasn't run for this pool): the honest §14 state, with
             // the one in-app action that fills it. This is exactly the "nowhere to load the cockpit's data" gap.
@@ -268,7 +296,7 @@ export function CockpitPage() {
             </div>
           </div>
 
-          <CockpitBoard groups={groups} openGroups={openGroups} onToggle={toggle} onAction={onAction} onOpen={setOpenNba} actionState={actionState} kbReviews={kbReviews} />
+          <CockpitBoard groups={groups} openGroups={effectiveOpenGroups} onToggle={toggle} onAction={onAction} onOpen={setOpenNba} actionState={actionState} kbReviews={kbReviews} focusCohort={focusCohort} />
           </>
           )}
         </>
