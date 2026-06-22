@@ -2,7 +2,7 @@ import type pg from "pg";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc.js";
+import { router, tenantProcedure, managerProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
 import { type Level } from "../conversation/min.js";
 import {
@@ -15,6 +15,9 @@ import {
 import { renderArtifact, buildCopyInput } from "../cockpit/renderArtifact.js";
 import { restaurantCopy } from "../cockpit/copywriter.js";
 import { proposeAndAutoActForCohort, proposeForPool } from "../cockpit/runNbaForCohort.js";
+import { provisionCockpit } from "../cockpit/provision.js";
+import { uploadCockpitConfig, buildConfigTemplate } from "../cockpit/configUpload.js";
+import { cockpitConfigInput } from "../../shared/contracts_cockpit_config.js";
 
 const LEVEL_RANK: Record<Level, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 };
 
@@ -409,4 +412,16 @@ export const cockpitRouter = router({
 
   // 02:CP2 — the autonomous-actions registry: what the AI did ALONE (origin='auto'), pool-scoped (read, §14).
   autoActions: tenantProcedure.query(({ ctx }) => listAutoActions(ctx.tenantId, query)),
+
+  // 02:CP — "Preparar cockpit": one in-app action to take an empty pool to a working cockpit (P01 if cohorts
+  // are absent + governance floor + propose). It bootstraps the autonomy boundary (Policy_Tier), so it is a
+  // governance act ⇒ managerProcedure (senior-manager only), mirroring motor.controls.set. Idempotent, §14.
+  provision: managerProcedure.mutation(({ ctx }) => provisionCockpit(ctx.tenantId)),
+
+  // 02:CP — the downloadable config template (operator governance: Policy_Tier + named knobs), §14-safe. Read-only.
+  configTemplate: tenantProcedure.query(({ ctx }) => buildConfigTemplate(ctx.tenantId)),
+
+  // 02:CP — upload the cockpit config: edits the autonomy boundary (tier_cap) + named knobs ⇒ managerProcedure
+  // (same governance gate as motor.controls.set). Atomic, fail-closed; signer in-pool; never writes a RESULT (§14).
+  uploadConfig: managerProcedure.input(cockpitConfigInput).mutation(({ ctx, input }) => uploadCockpitConfig(input, ctx.tenantId)),
 });

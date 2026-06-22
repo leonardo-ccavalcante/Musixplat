@@ -9,6 +9,7 @@ import { CatalogDrawer } from "@/features/cockpit/CatalogDrawer";
 import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
 import { EscalatedList } from "@/features/cockpit/EscalatedList";
 import { AutonomyControls } from "@/features/cockpit/AutonomyControls";
+import { CockpitSetup } from "@/features/cockpit/CockpitSetup";
 import { Button } from "@/components/ui/Button";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
@@ -35,6 +36,7 @@ export function CockpitPage() {
   const [registryOpen, setRegistryOpen] = useState(false);
   const [escalationsOpen, setEscalationsOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [motorResult, setMotorResult] = useState<MotorRunResult | null>(null);
@@ -163,10 +165,16 @@ export function CockpitPage() {
             Where is my AI fleet acting on its own — and exactly where do I need to step in?
           </p>
         </div>
-        {/* 02C:6b — the human-editable boundary the motor acts within (range · knobs · learnings to approve). */}
-        <Button variant="ghost" onClick={() => setControlsOpen(true)} aria-haspopup="dialog">
-          Autonomy Controls
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 02:CP — make a fresh pool's cockpit work in-app (prepare data + upload owned governance). */}
+          <Button variant="ghost" onClick={() => setSetupOpen(true)} aria-haspopup="dialog">
+            Prepare cockpit
+          </Button>
+          {/* 02C:6b — the human-editable boundary the motor acts within (range · knobs · learnings to approve). */}
+          <Button variant="ghost" onClick={() => setControlsOpen(true)} aria-haspopup="dialog">
+            Autonomy Controls
+          </Button>
+        </div>
       </header>
 
       {!ready || list.isLoading ? (
@@ -219,6 +227,20 @@ export function CockpitPage() {
             </div>
           )}
 
+          {counts.total === 0 ? (
+            // 02:CP — empty cockpit (the producer chain hasn't run for this pool): the honest §14 state, with
+            // the one in-app action that fills it. This is exactly the "nowhere to load the cockpit's data" gap.
+            <div className="mt-[clamp(1.5rem,3vw,2.25rem)] rounded-mxm border border-mxm-border bg-mxm-bg-secondary p-6 text-center">
+              <h2 className="text-lg font-semibold text-mxm-content">Your cockpit is empty</h2>
+              <p className="mx-auto mt-1 max-w-[52ch] text-sm text-mxm-content-secondary">
+                The AI has no proposals yet because the producer chain hasn&apos;t run for your pool. Prepare it —
+                it builds cohorts, the governance floor, and the AI&apos;s proposals — then optionally upload your
+                own autonomy range.
+              </p>
+              <Button onClick={() => setSetupOpen(true)} className="mt-3" aria-haspopup="dialog">Prepare cockpit</Button>
+            </div>
+          ) : (
+          <>
           <div className="mb-3 mt-[clamp(1.5rem,3vw,2.25rem)] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <h2 id="queue-h" className="text-lg font-semibold text-mxm-content">The queue</h2>
@@ -247,6 +269,8 @@ export function CockpitPage() {
           </div>
 
           <CockpitBoard groups={groups} openGroups={openGroups} onToggle={toggle} onAction={onAction} onOpen={setOpenNba} actionState={actionState} kbReviews={kbReviews} />
+          </>
+          )}
         </>
       )}
 
@@ -261,6 +285,7 @@ export function CockpitPage() {
       <AutonomousRegistry open={registryOpen} onClose={() => setRegistryOpen(false)} />
       <EscalatedList open={escalationsOpen} onClose={() => setEscalationsOpen(false)} />
       <AutonomyControls open={controlsOpen} onClose={() => setControlsOpen(false)} />
+      <CockpitSetup open={setupOpen} onClose={() => setSetupOpen(false)} />
     </main>
   );
 }
