@@ -1,12 +1,20 @@
 // Honest eval status: color + icon + text (WCAG, never color-only). A green cell is a real PASS only
 // when the producer measured it (provenance [V]); today's floor is [I] ⇒ "inferred floor (not yet
-// measured)". null status ⇒ not yet evaluated. NEVER renders the word "measured" for an [I] floor
-// (§14 UI face — a typed/seeded grade must not read as a measured result).
+// measured)". null status ⇒ not yet evaluated. A non-null status with NO provenance is NOT asserted as a
+// verdict (§3.10). NEVER renders the word "measured" for an [I] floor (§14 UI face).
 export function EvalStatusBadge({ status, prov }: { status: "red" | "green" | null; prov?: string }) {
   if (status === null) {
     return (
       <span className="text-xs text-mxm-content-tertiary" title="No verdict produced yet">
         ○ not yet evaluated
+      </span>
+    );
+  }
+  if (!prov) {
+    // §3.10 — a result with no provenance is not rendered/asserted as a verdict.
+    return (
+      <span className="text-xs text-mxm-content-tertiary" title="No provenance — not shown as a verdict">
+        ○ no provenance
       </span>
     );
   }

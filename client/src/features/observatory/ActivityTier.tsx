@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/Button";
 import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
 import { EscalatedList } from "@/features/cockpit/EscalatedList";
 
-// Activity = what the AI did alone + its governance gates. NULL result fields (time-to-sign, gates,
-// rubber-stamp) render an explicit "not measured", never 0 or a fake value (§14). Decision_Trace is an
-// append-only audit — read-only here. Release/pause is operated per-NBA on the Cockpit (reuse, not a
-// rebuilt invariant-bearing flow) — linked, not duplicated.
+// Activity = what the AI did alone + its governance gates. RESULT/NULL fields (time-to-sign, gate result,
+// rubber-stamp) render "not measured" (honest-pending §14), never 0. Full traceability (proposer,
+// confirmer, escalation axis, gates) lives in each row's expand. Decision_Trace is append-only — read
+// only here. Release/pause is operated per-NBA on the Cockpit (reuse, not a rebuilt invariant-bearing
+// flow) — linked, not duplicated.
+const stamp = (v: boolean | null): string => (v === null ? "not measured" : v ? "yes" : "no");
+
 export function ActivityTier({ ready }: { ready: boolean }) {
   const traces = trpc.observatory.traces.useQuery(undefined, { enabled: ready });
   const [registryOpen, setRegistryOpen] = useState(false);
@@ -18,10 +21,17 @@ export function ActivityTier({ ready }: { ready: boolean }) {
     <section className="mt-8" aria-label="What the AI did alone">
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-mxm-content">Activity &amp; trace</h2>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={() => setRegistryOpen(true)}>Full registry…</Button>
-          <Button variant="ghost" onClick={() => setEscOpen(true)}>Escalations…</Button>
-          <Link href="/cockpit" className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" onClick={() => setRegistryOpen(true)}>
+            Full registry…
+          </Button>
+          <Button variant="ghost" onClick={() => setEscOpen(true)}>
+            Escalations…
+          </Button>
+          <Link
+            href="/cockpit"
+            className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content"
+          >
             Release / pause on Cockpit →
           </Link>
         </div>
@@ -34,38 +44,42 @@ export function ActivityTier({ ready }: { ready: boolean }) {
       ) : (traces.data?.length ?? 0) === 0 ? (
         <p className="text-sm text-mxm-content-secondary">No autonomous actions recorded yet.</p>
       ) : (
-        <div className="overflow-hidden rounded-mxm border border-mxm-border">
-          <table className="w-full text-sm">
-            <thead className="bg-mxm-bg-secondary text-left text-xs text-mxm-content-secondary">
-              <tr>
-                <th className="px-3 py-2 font-medium">When</th>
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 font-medium">Level</th>
-                <th className="px-3 py-2 font-medium">Independent?</th>
-                <th className="px-3 py-2 font-medium">Time to sign</th>
-              </tr>
-            </thead>
-            <tbody>
-              {traces.data!.map((t) => (
-                <tr key={t.traceId} className="border-t border-mxm-border">
-                  <td className="px-3 py-2 text-mxm-content-secondary">{t.ts.slice(0, 10)}</td>
-                  <td className="px-3 py-2 text-mxm-content">{t.action}</td>
-                  <td className="px-3 py-2 text-mxm-content">{t.effectiveLevelApplied ?? "—"}</td>
-                  <td className="px-3 py-2 text-mxm-content-secondary">
-                    {t.independenceGuaranteed === null ? "—" : t.independenceGuaranteed ? "yes" : "no"}
-                  </td>
-                  <td className="px-3 py-2 text-mxm-content-secondary">
-                    {t.timeToSignatureSec === null ? "not measured" : `${t.timeToSignatureSec}s`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="space-y-2">
+          {traces.data!.map((t) => (
+            <li key={t.traceId} className="rounded-mxm border border-mxm-border p-3">
+              <details>
+                <summary className="flex cursor-pointer items-center justify-between gap-3">
+                  <span className="text-mxm-content">
+                    {t.action} <span className="text-mxm-content-secondary">· {t.effectiveLevelApplied ?? "—"}</span>
+                  </span>
+                  <span className="text-xs text-mxm-content-tertiary tabular-nums">{t.ts.slice(0, 10)}</span>
+                </summary>
+                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <Field k="Proposer" v={t.proposerId} />
+                  <Field k="Confirmer" v={t.confirmerId ?? "auto (none)"} />
+                  <Field k="Independent" v={t.independenceGuaranteed === null ? "not measured" : t.independenceGuaranteed ? "yes" : "no"} />
+                  <Field k="Escalation axis" v={t.escalationAxis ?? "none"} />
+                  <Field k="Time to sign" v={t.timeToSignatureSec === null ? "not measured" : `${t.timeToSignatureSec}s`} />
+                  <Field k="Rubber-stamp flag" v={stamp(t.rubberStampFlag)} />
+                  <Field k="Gates" v={t.gateResult == null ? "not measured" : JSON.stringify(t.gateResult)} />
+                </dl>
+              </details>
+            </li>
+          ))}
+        </ul>
       )}
 
       <AutonomousRegistry open={registryOpen} onClose={() => setRegistryOpen(false)} />
       <EscalatedList open={escOpen} onClose={() => setEscOpen(false)} />
     </section>
+  );
+}
+
+function Field({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <dt className="text-mxm-content-tertiary">{k}</dt>
+      <dd className="break-all text-mxm-content-secondary">{v}</dd>
+    </div>
   );
 }

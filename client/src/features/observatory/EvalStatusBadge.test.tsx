@@ -17,4 +17,9 @@ describe("EvalStatusBadge — never fakes a measured pass", () => {
     render(<EvalStatusBadge status={null} prov={undefined} />);
     expect(screen.getByText(/not yet/i)).toBeInTheDocument();
   });
+  it("non-null status with NO provenance is not asserted as a verdict (§3.10)", () => {
+    render(<EvalStatusBadge status="green" prov={undefined} />);
+    expect(screen.getByText(/no provenance/i)).toBeInTheDocument();
+    expect(screen.queryByText(/measured pass/i)).toBeNull();
+  });
 });
