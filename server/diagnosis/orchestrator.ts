@@ -14,6 +14,7 @@ import { emitDossier, type DossierGateResult } from "./dossier.js";
 import {
   deterministicReasoning,
   brainAgreement,
+  conversationText,
   type DiagnosisReasoning,
   type GroundingCase,
   type RankedPath,
@@ -130,14 +131,19 @@ export async function runDiagnosis(
   let reactiveText: string | null = null; // episode text, kept for the B.6.5 KB-search fallback only
   try {
     if (prob.conversation_id) {
-      const text =
-        (
-          await query<{ intent: string | null }>(
-            `select intent from tenant."Conversation_Episode"
-              where conversation_id = $1 and tenant_id = $2 limit 1`,
-            [prob.conversation_id, tenantId],
-          )
-        )[0]?.intent ?? "";
+      // 05D Part A (Codex P1): the brains must read what the CUSTOMER ACTUALLY SAID — `turnos` (the real
+      // chat, PII-redacted at intake), not just the coarse `intent` label. Fall back to the label when an
+      // episode carries no turns (structured-ticket fixtures). The SAME real text feeds BOTH brains, so the
+      // hermetic default still agrees (deterministic == deterministic) while in prod the LLM's reading can
+      // diverge from the keyword floor on the actual message — which is exactly the disagreement worth a human.
+      const ep = (
+        await query<{ intent: string | null; turnos: unknown }>(
+          `select intent, turnos from tenant."Conversation_Episode"
+            where conversation_id = $1 and tenant_id = $2 limit 1`,
+          [prob.conversation_id, tenantId],
+        )
+      )[0];
+      const text = conversationText(ep?.turnos) || (ep?.intent ?? "");
       reactiveText = text;
       guardInjection(text); // untrusted DATA (EC-B10); audit-only, never executes embedded instructions.
       const classifyExamples = await fetchGrounding(tenantId);

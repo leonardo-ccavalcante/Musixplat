@@ -119,6 +119,20 @@ export function brainAgreement(
   return { areaType: lead.areaType, confidence: lead.confidence, disagreement: floor.areaType !== lead.areaType };
 }
 
+/** 05D Part A — the customer's ACTUAL words for the brains to read. `turnos` is the real chat (jsonb array
+ *  of `{role,text}`, PII-redacted at intake); the `intent` column is only a coarse label. Returns the
+ *  concatenated turn texts so Brain 2 (LLM) reads what the customer said, not the label (Codex P1) — the
+ *  caller falls back to the intent label when "" (structured-ticket episodes carry no turns). Defensive:
+ *  a non-array / malformed `turnos` yields "" rather than throwing (untrusted shape). */
+export function conversationText(turnos: unknown): string {
+  if (!Array.isArray(turnos)) return "";
+  return turnos
+    .map((t) => (t && typeof t === "object" && typeof (t as { text?: unknown }).text === "string" ? (t as { text: string }).text : ""))
+    .filter((s) => s.length > 0)
+    .join(" ")
+    .trim();
+}
+
 const ALLOWED_AREAS = new Set(["finance", "product", "performance", "operations", "unclassified"]);
 
 /** Real models often wrap JSON in a ```json fence despite the "no prose" instruction. Strip it before

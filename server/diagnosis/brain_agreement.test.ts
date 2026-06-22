@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { brainAgreement } from "./reasoning";
+import { brainAgreement, conversationText } from "./reasoning";
 import type { AreaClassification } from "./reasoning";
 
 // 05D Part A (F3) — the 2-brain agreement gate, unit-isolated (pure, no DB/network). Brain 1 = the
@@ -28,5 +28,26 @@ describe("brainAgreement (Part A 2-brain gate — AREA mismatch only)", () => {
     const g = brainAgreement(cls("operations", 0.7), cls("operations", 0.05));
     expect(g.disagreement).toBe(false);
     expect(g.areaType).toBe("operations");
+  });
+});
+
+describe("conversationText (Part A — the brains read what the customer SAID, not the label · Codex P1)", () => {
+  it("concatenates the real turn texts (the customer's words)", () => {
+    const turnos = [
+      { role: "restaurant", text: "the card machine keeps dropping the connection" },
+      { role: "agent", text: "noted" },
+    ];
+    expect(conversationText(turnos)).toBe("the card machine keeps dropping the connection noted");
+  });
+
+  it('"" for an empty/absent transcript ⇒ caller falls back to the intent label', () => {
+    expect(conversationText([])).toBe(""); // turnos default '[]' (structured-ticket episode)
+    expect(conversationText(null)).toBe("");
+    expect(conversationText(undefined)).toBe("");
+  });
+
+  it("tolerates a malformed turnos shape without throwing (untrusted)", () => {
+    expect(conversationText("not-an-array")).toBe("");
+    expect(conversationText([{ role: "x" }, { text: 42 }, { text: "ok" }])).toBe("ok");
   });
 });
