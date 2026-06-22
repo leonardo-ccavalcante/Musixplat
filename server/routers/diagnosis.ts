@@ -6,16 +6,20 @@ import { readDossier, emitDossier } from "../diagnosis/dossier.js";
 import { computeImpactLedger } from "../diagnosis/impact.js";
 import { runDiagnosis } from "../diagnosis/orchestrator.js";
 import { diagnosisReasoning } from "../diagnosis/provider.js";
+import { recordHumanDecision, listRecentlyVerified } from "../diagnosis/decision.js";
 import {
   reportProblemInput,
   getDossierInput,
   getKnowledgeCaseInput,
   runDiagnosisInput,
+  decideDiagnosisInput,
   type ReportProblemResult,
   type DiagnosisListRow,
   type DiagnosisOrigin,
   type KnowledgeCaseView,
   type RunDiagnosisResult,
+  type DecideDiagnosisResult,
+  type RecentlyVerifiedRow,
 } from "../../shared/contracts_05b.js";
 
 // 05B:US-B1.1.1 (gate tenant_id + restaurant_id) + 05B:B.1.3 (dedup create-or-increment).
@@ -212,6 +216,16 @@ export const diagnosisRouter = router({
 
   // F-B1.3 — the diagnosis board: every problem in the pool with produced counts + autonomy verdict.
   list: tenantProcedure.query(({ ctx }): Promise<DiagnosisListRow[]> => listDiagnosisRows(ctx.tenantId, query)),
+
+  // 05D Part C — human decision console. The operator confirms/overrides the area + writes the WHY on a
+  // needs_human case ⇒ a reviewed Knowledge_Case (grounds future runs) + the problem leaves the queue.
+  // tenant + ownership server-side (§7); no number written (§14, rationale is [C]).
+  decide: tenantProcedure
+    .input(decideDiagnosisInput)
+    .mutation(({ ctx, input }): Promise<DecideDiagnosisResult> => recordHumanDecision(ctx.tenantId, ctx.userId, input, query)),
+
+  // 05D Part C — decision #2 audit: what the Part D re-measurement auto-approved (read-only, tenant-scoped).
+  recentlyVerified: tenantProcedure.query(({ ctx }): Promise<RecentlyVerifiedRow[]> => listRecentlyVerified(ctx.tenantId, query)),
 
   // Run-flow entry — one REAL restaurant from the pool (no demo fixture). tenant resolved server-side (§7).
   sampleRestaurant: tenantProcedure.query(
