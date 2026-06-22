@@ -105,6 +105,36 @@ export const deterministicReasoning: DiagnosisReasoning = {
   rankPaths: ({ hypotheses }) => Promise.resolve(rankDeterministic(hypotheses)),
 };
 
+/** 05D Part A (F3) — the 2-brain agreement gate. `floor` = Brain 1 (the deterministic keyword FLOOR);
+ *  `lead` = Brain 2 (the injected provider — real LLM+RAG in prod, which reads the customer's text).
+ *  Leo 2026-06-22: an AREA mismatch ONLY counts as a disagreement — a same-area difference (sub-hypothesis
+ *  or confidence) is NOT, because Part B re-validation + Part D measurement still gate the action. The case
+ *  proceeds on the LEAD's classification (it read the real text); a categorical area conflict ⇒ the caller
+ *  degrades the case to the human console (an ADDITIVE fail-closed gate, never weakens the existing net §7).
+ *  Pure (no I/O) so the rule is unit-pinned independently of the DB-bound orchestrator. */
+export function brainAgreement(
+  floor: AreaClassification,
+  lead: AreaClassification,
+): { areaType: string; confidence: number; disagreement: boolean } {
+  return { areaType: lead.areaType, confidence: lead.confidence, disagreement: floor.areaType !== lead.areaType };
+}
+
+/** 05D Part A — the customer's ACTUAL words for the brains to read. `turnos` is the real chat (jsonb array
+ *  of `{role,text}`); the `intent` column is only a coarse label. Returns the RESTAURANT-authored turn texts
+ *  (the customer; `agent` replies are excluded so an agent mentioning another area can't skew the
+ *  classification — Codex P2), concatenated and FULL (un-truncated): the caller REDACTS then bounds before any
+ *  external send, so a PII token is never split by truncation past the detector (Codex P2). "" ⇒ the caller
+ *  falls back to the intent label. Defensive: a non-array / malformed `turnos` yields "". */
+export function conversationText(turnos: unknown): string {
+  if (!Array.isArray(turnos)) return "";
+  return turnos
+    .filter((t) => t && typeof t === "object" && (t as { role?: unknown }).role === "restaurant")
+    .map((t) => (t as { text?: unknown }).text)
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
+    .join(" ")
+    .trim();
+}
+
 const ALLOWED_AREAS = new Set(["finance", "product", "performance", "operations", "unclassified"]);
 
 /** Real models often wrap JSON in a ```json fence despite the "no prose" instruction. Strip it before
@@ -167,11 +197,15 @@ export function llmReasoning(
       if (!isPermutation) {
         throw new Error("llmReasoning.rankPaths: output is not a permutation of the seed hypotheses");
       }
-      return arr.map((p, i) => ({
-        path_id: i + 1,
-        hypothesis: String(p.hypothesis),
-        probability: Math.max(0, Math.min(1, Number(p.probability))),
-      }));
+      return arr.map((p, i) => {
+        // Fail-closed (§3.7): a missing / string / null probability must NOT silently coerce to NaN and
+        // persist as a bogus confidence — reject it so the orchestrator degrades to needs_human (Codex).
+        const prob = Number(p.probability);
+        if (!Number.isFinite(prob)) {
+          throw new Error("llmReasoning.rankPaths: non-numeric probability (fail-closed)");
+        }
+        return { path_id: i + 1, hypothesis: String(p.hypothesis), probability: Math.max(0, Math.min(1, prob)) };
+      });
     },
   };
 }

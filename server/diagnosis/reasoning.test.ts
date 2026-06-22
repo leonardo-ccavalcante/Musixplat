@@ -215,4 +215,11 @@ describe("llmReasoning (real-OpenAI path, faked client)", () => {
     await r.classifyArea({ text: "pago" });
     expect(seen).toEqual([{ op: "classify", usage: { inputTokens: 30, outputTokens: 5 } }]);
   });
+
+  it("rankPaths THROWS on a non-numeric probability (fail-closed; never coerce to NaN · Codex)", async () => {
+    // set-equality holds (h1, h2) but a probability is non-numeric ⇒ must throw ⇒ the orchestrator degrades
+    // the case to needs_human rather than persisting a bogus/NaN confidence.
+    const client = fakeClient('[{"hypothesis":"h1","probability":"abc"},{"hypothesis":"h2","probability":0.5}]');
+    await expect(llmReasoning(client).rankPaths({ areaType: "finance", hypotheses: ["h1", "h2"] })).rejects.toThrow();
+  });
 });

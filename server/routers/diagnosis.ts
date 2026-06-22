@@ -5,6 +5,7 @@ import { query } from "../db/pool.js";
 import { readDossier, emitDossier } from "../diagnosis/dossier.js";
 import { computeImpactLedger } from "../diagnosis/impact.js";
 import { runDiagnosis } from "../diagnosis/orchestrator.js";
+import { diagnosisReasoning } from "../diagnosis/provider.js";
 import {
   reportProblemInput,
   getDossierInput,
@@ -176,7 +177,9 @@ export const diagnosisRouter = router({
         );
         throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool diagnosis blocked" });
       }
-      const r = await runDiagnosis(input.problemId, ctx.tenantId);
+      // 05D Part A — Brain 2 built INSIDE runDiagnosis's fail-closed boundary (factory): a prod no-key throw
+      // degrades the problem to needs_human, never a raw error on an untouched problem (Codex).
+      const r = await runDiagnosis(input.problemId, ctx.tenantId, () => diagnosisReasoning(ctx.tenantId, input.problemId));
       // EPIC-B5 — quantify f5 (churn/cost/value) from the produced counts, then re-gate the dossier so the
       // returned verdict reflects the completed impact. Fail-closed: no affected population ⇒ f5 stays NULL
       // ⇒ dossier remains PARTIAL (the SQL producer no-ops). Numbers PRODUCED, never seeded (§14).
