@@ -61,16 +61,21 @@ export async function provisionCockpit(tenantId: string): Promise<ProvisionResul
     ranCohorts = true;
   }
 
-  await bootstrapPolicies(); // (2) global tiers (Policy_Tier is tier-keyed) — idempotent on policy_id
+  // (2) governance floor. NOTE: Policy_Tier is tier-keyed (no tenant_id) ⇒ this is a PLATFORM-WIDE write
+  // (single-operator-demo scope; tenant-key the policy/knob writes before any real multi-pool deploy). Idempotent.
+  await bootstrapPolicies();
   await seedEvalFloor(tenantId, version); // (3) conservative [I] LOW floor for this pool's cohorts
 
   // (4) propose ONLY if this pool has no current-version proposals yet — proposeNba is ADDITIVE (no dedup
   // constraint), so re-running would clutter the queue with duplicates. Skip ⇒ "Prepare cockpit" is idempotent
   // (it sets up an EMPTY cockpit; "Run NBA" is the separate, intentionally-additive re-run). Clearing the base
   // on the Cohorts screen resets proposals, after which a fresh prepare proposes again.
+  // (Steps 1-4 commit separately — each is idempotent, like the sibling runP02; a mid-run failure leaves a
+  // partial cockpit recoverable by Cohorts → Clear database → Prepare again. Full one-tx atomicity would mean
+  // refactoring the invariant-bearing proposeForPool/autoDispatch, deferred per §3.11.)
   const prepared = await query(
     `select 1 from gov."NBA_Proposal" p
-       join cohort."Cohort_Membership_Snapshot" cms on cms.cohort_id = p.cohort_id
+       join cohort."Cohort_Membership_Snapshot" cms on cms.cohort_id = p.cohort_id and cms.cohort_rule_version = $1
        join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
       where p.cohort_rule_version = $1 limit 1`,
     [version, tenantId],

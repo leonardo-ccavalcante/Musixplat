@@ -9,15 +9,18 @@ import type {
 // The ONLY knobs an operator may set, with a value validator each. A broad "any existing knob, any string"
 // surface would let a pool operator corrupt safety/anchor knobs (k_anon_threshold='-1' weakens §3.2
 // suppression; cohort_rule_version_current='x' breaks §3.5 anti-mezcla). Allowlist + range-check = fail-closed.
-const isPosInt = (v: string): boolean => /^[0-9]+$/.test(v) && Number(v) >= 1;
+// Validators reject whitespace/empty (Number('  ')===0 would silently store a 0 confidence floor) and leading
+// zeros (canonical values into §3.2/§3.8 knobs). motor_max_loops is bounded ≤3 to MATCH the sibling write path
+// (motorControlsSetInput + the runtime 'exhausted_3_loops') — one knob, one bound, no divergence.
+const isPosInt = (v: string): boolean => /^[1-9][0-9]*$/.test(v); // ≥1, no leading zero, no whitespace/empty
 const isUnit = (v: string): boolean => {
   const n = Number(v);
-  return Number.isFinite(n) && n >= 0 && n <= 1;
+  return /\S/.test(v) && Number.isFinite(n) && n >= 0 && n <= 1;
 };
 const OPERATOR_KNOBS: Record<string, { ok: (v: string) => boolean; hint: string }> = {
   k_anon_threshold: { ok: isPosInt, hint: "a positive integer" },
   n_min_threshold: { ok: isPosInt, hint: "a positive integer" },
-  motor_max_loops: { ok: (v) => isPosInt(v) && Number(v) <= 10, hint: "an integer 1–10" },
+  motor_max_loops: { ok: (v) => isPosInt(v) && Number(v) <= 3, hint: "an integer 1–3" },
   motor_min_confidence: { ok: isUnit, hint: "a number between 0 and 1" },
 };
 
@@ -32,13 +35,17 @@ export async function uploadCockpitConfig(input: CockpitConfigInput, tenantId: s
     for (const k of input.knobs) {
       const spec = OPERATOR_KNOBS[k.key];
       if (!spec) throw new TRPCError({ code: "BAD_REQUEST", message: `knob '${k.key}' is not operator-settable` });
-      if (!spec.ok(k.value)) {
+      const value = k.value.trim();
+      if (!spec.ok(value)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `knob '${k.key}' must be ${spec.hint} (got '${k.value}')` });
       }
-      // Operator-set ⇒ provenance [V], owner 'operator' (mirrors cost.upsertKnob). Allowlisted ⇒ key exists.
+      // Operator-set ⇒ [V]/operator. insert-on-conflict (TRULY mirrors cost.upsertKnob): a hosted env where the
+      // knob's migration drifted (KB-prod-500 class) self-heals instead of a silent 0-row UPDATE. NOTE: Config_Knobs
+      // has no tenant_id (04 §3 = single platform-wide source) ⇒ this write is PLATFORM-WIDE, not pool-local.
       await c.query(
-        `update catalog."Config_Knobs" set value=$2, provenance='[V]', owner='operator' where key=$1`,
-        [k.key, k.value],
+        `insert into catalog."Config_Knobs"(key, value, provenance, owner) values ($1,$2,'[V]','operator')
+         on conflict (key) do update set value = excluded.value, provenance = '[V]', owner = 'operator'`,
+        [k.key, value],
       );
     }
     for (const p of input.policy_tiers) {
@@ -49,6 +56,15 @@ export async function uploadCockpitConfig(input: CockpitConfigInput, tenantId: s
       );
       if (!signer.rowCount) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `signer '${p.human_signature}' must be a senior manager in this pool` });
+      }
+      // policy_version is FK-referenced by Decision_Trace/Release_Batch with NO on-update-cascade — changing it on
+      // an existing policy raises a raw 23503 once a trace exists. Treat policy_version as immutable per policy_id.
+      const existing = await c.query<{ policy_version: string }>(`select policy_version from gov."Policy_Tier" where policy_id=$1`, [p.policy_id]);
+      if (existing.rowCount && existing.rows[0]!.policy_version !== p.policy_version) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `policy '${p.policy_id}' exists with version '${existing.rows[0]!.policy_version}' — policy_version is immutable; use a new policy_id for a new version`,
+        });
       }
       // policy_version is globally UNIQUE: a new policy_id reusing another policy's version would hit a raw
       // 23505 — pre-check it so the operator gets a clear error, not a 500 (pra não quebrar).
@@ -90,7 +106,7 @@ export async function buildConfigTemplate(tenantId: string): Promise<CockpitConf
         [tenantId],
       )
     )[0]?.user_id ?? "U-OP-001";
-  const knobKeys = ["k_anon_threshold", "n_min_threshold", "motor_min_confidence"];
+  const knobKeys = Object.keys(OPERATOR_KNOBS); // derive from the allowlist so template & validation can't drift
   const vals = await query<{ key: string; value: string }>(
     `select key, value from catalog."Config_Knobs" where key = any($1)`,
     [knobKeys],

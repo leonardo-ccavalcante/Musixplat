@@ -133,6 +133,15 @@ describe("02:CP — cockpit config upload (operator governance, §14-safe)", () 
     expect(after).toBe(before); // nothing corrupted
   });
 
+  it("rejects whitespace-only and out-of-bound knob values (fail-closed)", async () => {
+    await expect(
+      uploadCockpitConfig({ knobs: [{ key: "motor_min_confidence", value: "  " }], policy_tiers: [] }, TENANT),
+    ).rejects.toThrow(); // Number('  ')===0 would silently store a 0 confidence floor
+    await expect(
+      uploadCockpitConfig({ knobs: [{ key: "motor_max_loops", value: "7" }], policy_tiers: [] }, TENANT),
+    ).rejects.toThrow(); // ≤3 to match the sibling motorControlsSetInput bound (no divergence)
+  });
+
   it("rejects a signer who exists in-pool but is NOT a senior manager (authority, §3.4)", async () => {
     await expect(
       uploadCockpitConfig(
