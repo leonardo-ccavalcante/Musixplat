@@ -23,13 +23,13 @@ const leverA1 = (version: string, dimension = "m_connection"): PrecedentLever =>
   ({ action_code: "A1", dimension, verdict: "below", cohort_rule_version: version });
 
 // Seed one acted+unverified motor case (what writeMotorCase produces) with its re-measure target in path_used.
-async function seedActedCase(lever: PrecedentLever, tenant = tenantId, restaurant = rid): Promise<string> {
+async function seedActedCase(lever: PrecedentLever, actedWeek = W1, tenant = tenantId, restaurant = rid): Promise<string> {
   const r = await pool.query<{ kb_case_id: string }>(
     `insert into tenant."Knowledge_Case"
        (tenant_id, area_type, pattern, outcome, resolution, path_used, reviewed, verification_status, provenance_by_field, lever)
      values ($1,$2,'m_connection_below','resolved','reset the device',$3::jsonb,false,'unverified','{"outcome":"[C]"}'::jsonb,$4::jsonb)
      returning kb_case_id`,
-    [tenant, lever.dimension, JSON.stringify({ restaurant_id: restaurant, acted_week: W1 }), JSON.stringify(lever)],
+    [tenant, lever.dimension, JSON.stringify({ restaurant_id: restaurant, acted_week: actedWeek }), JSON.stringify(lever)],
   );
   return r.rows[0]!.kb_case_id;
 }
@@ -116,6 +116,16 @@ describe("05D Part D — verifyResolutions (prove-it-resolved, 3-valued)", () =>
     expect(tally.skipped_non_attributable).toBe(1);
     expect(tally.verified_fixed).toBe(0);
     expect((await statusOf(id)).verification_status).toBe("unverified");
+  });
+
+  it("§59 confounded — another action on the SAME restaurant within the window blocks auto-verify (no false [V])", async () => {
+    const idA = await seedActedCase(leverA1(ver)); // acted_week W1, verify_week 2026-06-01
+    await seedVerifySnapshot(0.95); // its signal WOULD read 'ok' = fixed, but...
+    await seedActedCase(leverA1(ver, "zone_demand_trend"), "2026-05-28"); // ...a 2nd action mid-window ⇒ confounded
+    const tally = await verifyResolutions(tenantId, exec);
+    expect(tally.skipped_confounded).toBe(1);
+    expect(tally.verified_fixed).toBe(0);
+    expect((await statusOf(idA)).verification_status).toBe("unverified"); // never attributed to this case
   });
 
   it("§3.5 anti-mezcla — a case acted under an OLD baseline is never re-measured against the current one", async () => {

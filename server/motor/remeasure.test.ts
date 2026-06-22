@@ -43,10 +43,9 @@ describe("classifyResolution (Part D — 3-valued, never binary, never auto-reso
 });
 
 describe("isAutoVerifiable (Part D — §59 attribution carve-out)", () => {
-  it("attributable signals CAN auto-verify (the restaurant's OWN absolute metric moved)", () => {
+  it("a short-window own-metric signal CAN auto-verify (the restaurant's OWN absolute metric moved)", () => {
     expect(isAutoVerifiable("m_connection")).toBe(true);
     expect(isAutoVerifiable("m_quality")).toBe(true);
-    expect(isAutoVerifiable("cancel_by_restaurant")).toBe(true);
   });
 
   it("zone-shared signal is NEVER auto-verified (the whole zone moved — non-attributable → human)", () => {
@@ -55,6 +54,11 @@ describe("isAutoVerifiable (Part D — §59 attribution carve-out)", () => {
 
   it("cohort-RELATIVE rank is NEVER auto-verified (rank moved ≠ the restaurant's own metric moved → human)", () => {
     expect(isAutoVerifiable("price_pctile_in_cohort")).toBe(false);
+  });
+
+  it("a rolling-window signal is NOT auto-verified yet (1-week verify ≠ its window — per-signal windows deferred)", () => {
+    expect(isAutoVerifiable("cancel_by_restaurant")).toBe(false);
+    expect(isAutoVerifiable("cancel_by_customer")).toBe(false);
   });
 
   it("an unknown/null dimension fails closed (not auto-verifiable)", () => {
