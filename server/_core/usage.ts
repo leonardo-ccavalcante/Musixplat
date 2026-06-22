@@ -56,3 +56,25 @@ export async function recordUsageSafe(entry: UsageEntry, exec: Exec = query): Pr
     console.warn(`recordUsage failed (${entry.processType}/${entry.kind}):`, e);
   }
 }
+
+/** Idempotent "per decision" variant: at most ONE row per (tenant, process_type, ref_id). "Custo da
+ *  atención" is cost-per-DECISION, not per-render — and a read-path (e.g. the cockpit copy of an nba_id,
+ *  generated in a tRPC query TanStack re-runs on mount/refocus) would otherwise log a row each render and
+ *  over-count the same decision (B1). No ref_id ⇒ nothing to dedup on ⇒ a normal append. Best-effort
+ *  (§3.7): a benign race could write 2 rows for one decision — acceptable for telemetry, never a user error. */
+export async function recordUsageOnce(entry: UsageEntry, exec: Exec = query): Promise<void> {
+  if (!entry.refId) return recordUsageSafe(entry, exec);
+  try {
+    // DB-enforced idempotency: the partial unique index llm_usage_cockpit_once makes the 2nd+ render of the
+    // same decision a no-op — race-safe (a check-then-insert is not). Only 'cockpit' has the index; other
+    // producers append via recordUsage. (Migration 20260622000000_cockpit_usage_once.sql.)
+    await exec(
+      `insert into gov."Llm_Usage_Log"(tenant_id, process_type, kind, model, ref_id, in_tok, out_tok)
+       values ($1,$2,$3,$4,$5,$6,$7)
+       on conflict (tenant_id, process_type, ref_id) where process_type = 'cockpit' do nothing`,
+      [entry.tenantId, entry.processType, entry.kind, entry.model, entry.refId, entry.usage.inputTokens, entry.usage.outputTokens],
+    );
+  } catch (e) {
+    console.warn(`recordUsageOnce failed (${entry.processType}/${entry.refId}):`, e);
+  }
+}

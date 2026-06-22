@@ -6,7 +6,7 @@
 // restaurantCopy degrades to deterministic on ANY error / missing key / under vitest — it NEVER throws.
 import { chatText, openaiChatClient, CHAT_MODEL, type ChatClient, type TokenUsage } from "../_core/llm.js";
 import { getActiveChatModel } from "../_core/model.js";
-import { recordUsageSafe } from "../_core/usage.js";
+import { recordUsageOnce } from "../_core/usage.js";
 
 export interface CopyInput {
   actionLabel: string; // internal action name (e.g. "Investigate fraud/risk") — context for the model, not shown verbatim
@@ -82,14 +82,16 @@ export async function restaurantCopy(
     return deterministicCopy(i); // degrade to deterministic, never throw to the caller (§3.7)
   } finally {
     // Log the spent tokens whether the copy SUCCEEDED or the figure-guard REJECTED it (Codex P1): the LLM
-    // call happened, so the cost is real — "custo da atención" counts wasted attention too (§3.6). Best-effort.
-    if (usageCtx && spent) {
-      await recordUsageSafe({
+    // call happened, so the cost is real — "custo da atención" counts wasted attention too (§3.6). Logged
+    // ONCE per decision (recordUsageOnce dedups on nba_id) — dispatchDetail is a re-run read, not per-render
+    // (B1). refId is the nba_id (a decision key); no fallback to cohortId (a different namespace, B5).
+    if (usageCtx?.refId && spent) {
+      await recordUsageOnce({
         tenantId: usageCtx.tenantId,
         processType: "cockpit",
         kind: "chat",
         model,
-        refId: usageCtx.refId ?? i.cohortId,
+        refId: usageCtx.refId,
         usage: spent,
       });
     }
