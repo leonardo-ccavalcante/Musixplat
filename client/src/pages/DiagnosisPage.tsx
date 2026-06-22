@@ -77,9 +77,15 @@ export function DiagnosisPage() {
   async function runFlow(): Promise<void> {
     setRunMsg({ status: "running" });
     try {
+      // Operate on a REAL restaurant from the pool — never the demo fixture R-PAY-001 (absent in prod ⇒ 400).
+      // Empty pool ⇒ honest message pointing to the Situation Room (the real intake), no crash.
+      const sample = await utils.diagnosis.sampleRestaurant.fetch();
+      if (!sample) {
+        setRunMsg({ status: "error", text: "No restaurant in this pool yet — upload data in the Situation Room first." });
+        return;
+      }
       const rep = await report.mutateAsync({
-        restaurantId: "R-PAY-001",
-        conversationId: "R-PAY-001:conv1",
+        restaurantId: sample.restaurantId,
         criticality: "critical",
       });
       const out = await run.mutateAsync({ problemId: rep.problem_id });
