@@ -7,8 +7,9 @@ import { ActivityTier } from "@/features/observatory/ActivityTier";
 
 // Observatory — read-only awareness of what the AI does on its own. Awareness screen: the signal
 // (Posture) is the hero; actions are quiet/guarded and reuse the existing cockpit/motor surfaces. Every
-// number is read from a producer (§14); nothing is computed here. dev-login mints the POOL-PAY operator;
-// tenant is resolved server-side.
+// number is read from a producer (§14); nothing is computed here. dev-login mints the POOL-001 operator
+// (the SAME pool as Cohorts/Cockpit, so the cohort/eval/motor data produced there shows here); tenant is
+// resolved server-side.
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-mxm border border-mxm-border p-4">
@@ -29,7 +30,7 @@ export function ObservatoryPage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ user_id: "U-PAY-001" }),
+          body: JSON.stringify({ user_id: "U-OP-001" }),
         });
         if (!r.ok) throw new Error(String(r.status));
         if (!cancelled) setReady(true);
