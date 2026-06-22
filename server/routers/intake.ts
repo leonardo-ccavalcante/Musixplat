@@ -33,8 +33,9 @@ async function runSpine(
     [tenantId, reportOn, conversationId, crit],
   );
   const problemId = ins[0]!.problem_id;
-  // 05D Part A — wire the real LLM (Brain 2); falls open to the deterministic floor without a key.
-  const r = await runDiagnosis(problemId, tenantId, await diagnosisReasoning(tenantId, problemId));
+  // 05D Part A — Brain 2 built INSIDE runDiagnosis's fail-closed boundary (factory): a provider/key failure
+  // degrades the freshly-inserted problem to needs_human instead of leaving it 'open' (Codex).
+  const r = await runDiagnosis(problemId, tenantId, () => diagnosisReasoning(tenantId, problemId));
   await computeImpactLedger(problemId);
   const gate = await emitDossier(problemId);
   if (gate.emitted) {

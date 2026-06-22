@@ -226,6 +226,44 @@ describe("05D Part A — 2-brain agreement gate (02D + F3): area mismatch ⇒ ne
     );
     expect(st[0]?.status).not.toBe("needs_human");
   });
+
+  it("redacts PII from the transcript before it reaches Brain 2 (Codex P1, §3.7)", async () => {
+    // conversation.recv persists RAW turnos ⇒ the transcript can carry PII. It must be redacted before the
+    // external LLM send (and the KB embedding). Capture what the brain actually receives and assert no leak.
+    await pool.query(`
+      insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date)
+        values ('R-PII-1','POOL-DIAG','long_tail','long_tail', date '2026-01-01');
+      insert into tenant."Conversation_Episode"(episode_id, conversation_id, tenant_id, restaurant_id, intent, turnos)
+        values ('R-PII-1:C1','R-PII-1:conv1','POOL-DIAG','R-PII-1','billing',
+                '[{"role":"restaurant","text":"my payment failed, email me at john.doe@example.com"}]'::jsonb);`);
+    const r = await pool.query<{ problem_id: string }>(`
+      insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, conversation_id, criticality, status)
+        values ('POOL-DIAG','R-PII-1','R-PII-1:conv1','critical','open') returning problem_id;`);
+    const problemId = r.rows[0]!.problem_id;
+
+    let sawText = "";
+    const capture: DiagnosisReasoning = {
+      classifyArea: async (i) => { sawText = i.text; return { areaType: "finance", confidence: 0.9 }; },
+      rankPaths: rankStub,
+    };
+    await runDiagnosis(problemId, "POOL-DIAG", capture);
+    expect(sawText).not.toContain("john.doe@example.com"); // the email never reaches Brain 2
+    expect(sawText).toContain("[REDACTED:email]"); // ...but the (redacted) message DID — the brain still reads it
+  });
+
+  it("provider CONSTRUCTION failure degrades to needs_human (fail-closed boundary, Codex P1)", async () => {
+    const problemId = await seedReactive();
+    // A factory that rejects (e.g. a missing prod key throwing in diagnosisReasoning) must be caught INSIDE
+    // runDiagnosis ⇒ the problem degrades to needs_human, never left 'open' as if untouched.
+    const failingFactory = (): Promise<DiagnosisReasoning> => Promise.reject(new Error("provider init failed (no key)"));
+    await expect(runDiagnosis(problemId, "POOL-DIAG", failingFactory)).rejects.toThrow();
+    const st = await rows<{ status: string }>(
+      pool,
+      `select status from tenant."Diagnosed_Problem" where problem_id=$1`,
+      [problemId],
+    );
+    expect(st[0]?.status).toBe("needs_human");
+  });
 });
 
 describe("05D descriptor-refactor — proactive path is descriptor-authoritative (area + hypotheses)", () => {

@@ -23,6 +23,7 @@ import { searchKnowledge } from "../knowledge/store.js";
 import type { Embedder } from "../knowledge/embedder.js";
 import type { Criticality } from "../../shared/contracts_05b.js";
 import { getDescriptor } from "../../shared/problem_types.js";
+import { redactPII } from "../pieces/pii.js";
 
 // Deterministic candidate hypotheses per area (seed set; the provider only RANKS these, §8).
 const HYPOTHESES: Record<string, string[]> = {
@@ -90,7 +91,7 @@ export interface DiagnosisResult {
 export async function runDiagnosis(
   problemId: string,
   tenantId: string,
-  reasoning: DiagnosisReasoning = deterministicReasoning,
+  reasoning: DiagnosisReasoning | (() => Promise<DiagnosisReasoning>) = deterministicReasoning,
   embedder?: Embedder, // DI: tests inject deterministicEmbedder (hermetic/free); prod passes none ⇒ OpenAI.
 ): Promise<DiagnosisResult> {
   const prob = (
@@ -130,12 +131,16 @@ export async function runDiagnosis(
   let rankSeed: string[];
   let reactiveText: string | null = null; // episode text, kept for the B.6.5 KB-search fallback only
   try {
+    // Resolve the provider INSIDE the fail-closed boundary (Codex P1): a construction failure — e.g. a
+    // missing prod key throwing in diagnosisReasoning — is caught below ⇒ the case degrades to needs_human,
+    // never left 'open'. Callers pass a factory (() => diagnosisReasoning(...)); tests inject a value directly.
+    const provider = typeof reasoning === "function" ? await reasoning() : reasoning;
     if (prob.conversation_id) {
-      // 05D Part A (Codex P1): the brains must read what the CUSTOMER ACTUALLY SAID — `turnos` (the real
-      // chat, PII-redacted at intake), not just the coarse `intent` label. Fall back to the label when an
-      // episode carries no turns (structured-ticket fixtures). The SAME real text feeds BOTH brains, so the
-      // hermetic default still agrees (deterministic == deterministic) while in prod the LLM's reading can
-      // diverge from the keyword floor on the actual message — which is exactly the disagreement worth a human.
+      // 05D Part A — the brains must read what the CUSTOMER ACTUALLY SAID (`turnos`, the real chat), not the
+      // coarse `intent` label (Codex P1). turnos can be UNREDACTED (conversation.recv persists raw input), so
+      // REDACT before any external send — Brain 2 (LLM classify) and the B.6.5 KB embedding both leave the
+      // system. Fail-closed (§3.7): if the independent residual net STILL finds PII after redaction, drop the
+      // transcript and fall back to the coarse intent label (an enum — no free customer text) rather than leak.
       const ep = (
         await query<{ intent: string | null; turnos: unknown }>(
           `select intent, turnos from tenant."Conversation_Episode"
@@ -143,7 +148,9 @@ export async function runDiagnosis(
           [prob.conversation_id, tenantId],
         )
       )[0];
-      const text = conversationText(ep?.turnos) || (ep?.intent ?? "");
+      const raw = conversationText(ep?.turnos);
+      const red = raw ? redactPII(raw) : null;
+      const text = red && !red.residualPII ? red.texto : (ep?.intent ?? "");
       reactiveText = text;
       guardInjection(text); // untrusted DATA (EC-B10); audit-only, never executes embedded instructions.
       const classifyExamples = await fetchGrounding(tenantId);
@@ -153,9 +160,9 @@ export async function runDiagnosis(
       // hermetic default) the two brains ARE the same call ⇒ we skip the redundant classify and they always
       // agree (no network, no flake). brainAgreement keys on AREA only (Leo 2026-06-22): a categorical area
       // conflict ⇒ degrade-to-human; otherwise the case proceeds on the lead's read.
-      const lead = await reasoning.classifyArea({ text, hint: prob.criticality, examples: classifyExamples });
+      const lead = await provider.classifyArea({ text, hint: prob.criticality, examples: classifyExamples });
       const floorBrain =
-        reasoning === deterministicReasoning ? lead : await deterministicReasoning.classifyArea({ text });
+        provider === deterministicReasoning ? lead : await deterministicReasoning.classifyArea({ text });
       const gate = brainAgreement(floorBrain, lead);
       const floor = await knob("threshold_classification"); // seeded classify floor (§3.8, fail-closed)
       const kb = await query<{ n: number }>(
@@ -193,7 +200,7 @@ export async function runDiagnosis(
     // B.3 issue-tree: the provider only ORDERS the seed (set-equality §8). Grounded on reviewed cases
     // for the area: falsified branches get pushed lower.
     const rankExamples = await fetchGrounding(tenantId, cls.areaType);
-    ranked = await reasoning.rankPaths({ areaType: cls.areaType, hypotheses: rankSeed, examples: rankExamples });
+    ranked = await provider.rankPaths({ areaType: cls.areaType, hypotheses: rankSeed, examples: rankExamples });
     if (ranked.length === 0) throw new Error("runDiagnosis: rankPaths returned no paths (fail-closed)");
   } catch (e) {
     // fail-closed (§3.7 / BR-B3): a reasoning-provider failure degrades the case to needs_human — never
