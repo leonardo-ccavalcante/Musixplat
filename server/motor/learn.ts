@@ -1,9 +1,13 @@
 import type pg from "pg";
+import type { PrecedentLever } from "../diagnosis/precedent.js";
 
 // 02C MOTOR-LLM learning store (04 §3, BR-B16). Each terminal decision in the loop writes ONE
 // Knowledge_Case row with reviewed=false — it does NOT ground future runs until a human approves it
 // (the RL-guard). Grounding reads ONLY reviewed=true cases, so the AI never learns from un-vetted text.
-// NO number is ever written here (§14): `outcome` is a measured RESULT, the narrative is [C].
+// NO number is ever written here (§14): `outcome` is a [C] classification, the narrative is [C].
+
+// 05D Part B — a vector string `[a,b,...]` for the pgvector column (NULL ⇒ not retrievable as a precedent yet).
+const toVector = (v: number[] | null | undefined): string | null => (v && v.length ? `[${v.join(",")}]` : null);
 
 export interface MotorCase {
   tenantId: string;
@@ -15,15 +19,19 @@ export interface MotorCase {
   discarded: { action_code: string; reason: string }[];
   attemptId: string; // motor_attempt_id — ties cost (Llm_Usage_Log.ref_id)
   nbaId: string | null; // the dispatched NBA when acted
+  lever?: PrecedentLever | null; // 05D Part B — the structured predicate, so Part B can re-validate it later
+  embedding?: number[] | null; // 05D Part B — semantic key for precedent kNN (NULL ⇒ not retrievable yet)
 }
 
 export async function writeMotorCase(k: MotorCase, client: pg.PoolClient): Promise<string> {
-  const prov = JSON.stringify({ outcome: "[V]", resolution: "[C]", not_resolved_reason: "[C]" });
+  // outcome is a [C] classification ('acted alone' / 'escalated'), NOT a measured [V] (05D §82): the ONLY
+  // [V] is verification_status, written solely by the Part D re-measurement job once it proves a gap-close.
+  const prov = JSON.stringify({ outcome: "[C]", resolution: "[C]", not_resolved_reason: "[C]" });
   const path = JSON.stringify({ attempt_id: k.attemptId, nba_id: k.nbaId, resolution: k.resolution ?? null });
   const r = await client.query<{ kb_case_id: string }>(
     `insert into tenant."Knowledge_Case"
-       (tenant_id, area_type, pattern, outcome, resolution, path_used, not_resolved_reason, discarded_branches, reviewed, provenance_by_field)
-     values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,false,$9::jsonb)
+       (tenant_id, area_type, pattern, outcome, resolution, path_used, not_resolved_reason, discarded_branches, reviewed, provenance_by_field, lever, embedding)
+     values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,false,$9::jsonb,$10::jsonb,$11::vector)
      returning kb_case_id`,
     [
       k.tenantId,
@@ -35,6 +43,8 @@ export async function writeMotorCase(k: MotorCase, client: pg.PoolClient): Promi
       k.notResolvedReason ?? null,
       JSON.stringify(k.discarded),
       prov,
+      k.lever ? JSON.stringify(k.lever) : null,
+      toVector(k.embedding),
     ],
   );
   return r.rows[0]!.kb_case_id;

@@ -10,6 +10,8 @@ import type { NbaVerdict } from "../agente/reasoning.js";
 import { type MotorReasoning, type MotorHypothesis, leverAdapter } from "./reasoning.js";
 import { validateHypothesis } from "./validateHypothesis.js";
 import { writeMotorCase, readGrounding } from "./learn.js";
+import { acceptPrecedent, embedCaseText } from "../diagnosis/precedent.js";
+import { resolveEmbedder } from "../knowledge/embedder.js";
 
 export interface MotorAttemptInput { restaurantId: string; cohortId: string; week: string; tenantId: string; tierId: string; }
 export interface MotorAttemptResult {
@@ -21,6 +23,11 @@ export interface MotorAttemptResult {
 }
 
 const discardItem = (lever: NbaVerdict, reason: string) => ({ action_code: lever.action_code, reason });
+
+// 05D Part B — the semantic query for precedent kNN: the situation, built from the CONFIRMING verdicts'
+// patterns (matches the `${dimension}_${verdict}` text embed-on-write stores). Empty ⇒ no signal ⇒ no precedent.
+const precedentQueryText = (verdicts: NbaVerdict[]): string =>
+  verdicts.filter((v) => v.verdict === "below" || v.verdict === "above").map((v) => `${v.dimension}_${v.verdict}`).join(" ");
 
 // 02C — one restaurant, the ≤3 hypothesis loop: AI proposes (LLM/stub, TEXT only) → SQL falsifies/confirms →
 // ACT (in-range, non-money, auto_releasable) or ESCALATE (out-of-range / no-confident / exhausted). The
@@ -38,6 +45,18 @@ export async function runMotorAttempt(i: MotorAttemptInput, reasoning: MotorReas
   const areas = [...new Set(verdicts.map((v) => v.dimension).filter((d): d is string => !!d))];
   const grounding = await withTx((c) => readGrounding(i.tenantId, areas, c));
   const discarded: { action_code: string; reason: string }[] = [];
+
+  // 05D Part B — PRECEDENT-FIRST: reuse a VERIFIED past fix whose lever still re-confirms on the fresh
+  // verdicts, skipping the LLM loop (cheaper + grounded in a proven outcome, not a guess). Acts through the
+  // SAME actOnLever path (out-of-range / auto_releasable seal / §7 money hard-no all re-checked). Fail-open:
+  // no verified precedent ⇒ null ⇒ the LLM hypothesis loop runs exactly as before. Dormant until the Part D
+  // re-measurement writes the first verified_fixed.
+  const embedder = await resolveEmbedder();
+  const precedent = await acceptPrecedent(i.tenantId, verdicts, precedentQueryText(verdicts), query, embedder);
+  if (precedent) {
+    const val = await withTx((c) => validateHypothesis(precedent.freshVerdict, i.tierId, i.tenantId, c));
+    return actOnLever(i, precedent.freshVerdict, precedent.resolution ?? "precedent reuse", val.inRange, discarded, attemptId, 0);
+  }
 
   for (let k = 0; k < maxLoops; k++) {
     // P1-7 fail-closed (§7): a provider/parse failure degrades THIS attempt to human, never aborts the run.
@@ -59,39 +78,9 @@ export async function runMotorAttempt(i: MotorAttemptInput, reasoning: MotorReas
       discarded.push(discardItem(lever, "sql_no_gap")); // falsified ⇒ the next iteration grounds on it
       continue;
     }
-    if (!val.inRange) {
-      discarded.push(discardItem(lever, "out_of_range"));
-      return escalate(i, attemptId, "out_of_range", lever, discarded, k + 1);
-    }
-    // ATTEMPT ACT — proposeNba seals the AUTHORITATIVE auto_releasable; autoDispatch re-checks §7.
-    const res = await withTx((c) => proposeNba({ restaurantId: i.restaurantId, cohortId: i.cohortId, week: i.week }, leverAdapter(lever, hyp.rootCause), c));
-    const gate = (
-      await query<{ ar: boolean | null; fc: string | null }>(
-        `select m.auto_releasable as ar, p.financial_class::text as fc from gov."NBA_Proposal" p
-           left join lateral (select auto_releasable from gov."min_calculation" where nba_id=p.nba_id::text order by computed_at desc limit 1) m on true
-          where p.nba_id=$1::uuid`,
-        [res.nbaId],
-      )
-    )[0];
-    if (gate?.ar === true && gate.fc !== "direct") {
-      try {
-        // P1-6 audit atomicity: dispatch + its learning record commit TOGETHER (one tx). A case-write failure
-        // rolls back the dispatch too ⇒ nothing sent ⇒ 'dispatch_failed' is accurate (never sent-without-case).
-        await withTx(async (c) => {
-          await autoDispatch(res.nbaId, i.tenantId, c);
-          await writeMotorCase({ tenantId: i.tenantId, areaType: lever.dimension ?? "nba", pattern: `${lever.dimension}_${lever.verdict}`, outcome: "resolved", resolution: hyp.rootCause, discarded, attemptId, nbaId: res.nbaId }, c);
-        });
-        return { outcome: "acted", reason: lever.action_code, nbaId: res.nbaId, loops: k + 1, attemptId };
-      } catch (e) {
-        // round2 P2-2: a cohort/action dedup CONFLICT means another restaurant already dispatched this action —
-        // an idempotent SKIP, not a failure (don't flood the human queue with a bogus 'dispatch_failed').
-        if (e instanceof TRPCError && e.code === "CONFLICT") {
-          return { outcome: "skipped", reason: "already_dispatched", nbaId: null, loops: k + 1, attemptId };
-        }
-        return escalate(i, attemptId, "dispatch_failed", lever, discarded, k + 1);
-      }
-    }
-    return escalate(i, attemptId, "gate_failed_at_seal", lever, discarded, k + 1);
+    // confirmed ⇒ ACT. out-of-range / auto_releasable seal / §7 money hard-no / dispatch all live in
+    // actOnLever (extracted so 05D Part B's precedent-first reuses the EXACT authority, no bespoke shortcut).
+    return actOnLever(i, lever, hyp.rootCause, val.inRange, discarded, attemptId, k + 1);
   }
   return escalate(i, attemptId, "exhausted_3_loops", null, discarded, maxLoops);
 }
@@ -101,4 +90,66 @@ async function escalate(i: MotorAttemptInput, attemptId: string, reason: string,
     writeMotorCase({ tenantId: i.tenantId, areaType: lever?.dimension ?? "nba", pattern: reason, outcome: "escalated", notResolvedReason: reason, discarded, attemptId, nbaId: null }, c),
   );
   return { outcome: "escalated", reason, nbaId: null, loops, attemptId };
+}
+
+// 05D Part B — the ACT path, extracted from the loop so precedent-first reuses the EXACT §7 authority (no
+// bespoke shortcut, §3.11). Given a CONFIRMED lever + its inRange flag: out-of-range ⇒ escalate; else
+// proposeNba seals the authoritative auto_releasable, the gate re-checks money (financial_class != 'direct'),
+// autoDispatch re-checks §7, and the learning case (now carrying the structured lever + its embedding, so it
+// can become a future precedent) commits in the SAME tx as the dispatch (P1-6 atomicity).
+async function actOnLever(
+  i: MotorAttemptInput,
+  lever: NbaVerdict,
+  rootCause: string,
+  inRange: boolean,
+  discarded: { action_code: string; reason: string }[],
+  attemptId: string,
+  loops: number,
+): Promise<MotorAttemptResult> {
+  if (!inRange) {
+    discarded.push(discardItem(lever, "out_of_range"));
+    return escalate(i, attemptId, "out_of_range", lever, discarded, loops);
+  }
+  const res = await withTx((c) => proposeNba({ restaurantId: i.restaurantId, cohortId: i.cohortId, week: i.week }, leverAdapter(lever, rootCause), c));
+  const gate = (
+    await query<{ ar: boolean | null; fc: string | null }>(
+      `select m.auto_releasable as ar, p.financial_class::text as fc from gov."NBA_Proposal" p
+         left join lateral (select auto_releasable from gov."min_calculation" where nba_id=p.nba_id::text order by computed_at desc limit 1) m on true
+        where p.nba_id=$1::uuid`,
+      [res.nbaId],
+    )
+  )[0];
+  if (gate?.ar === true && gate.fc !== "direct") {
+    try {
+      const pattern = `${lever.dimension}_${lever.verdict}`;
+      const embedding = await embedCaseText(pattern); // best-effort, OUTSIDE the tx (external call)
+      await withTx(async (c) => {
+        await autoDispatch(res.nbaId, i.tenantId, c);
+        await writeMotorCase(
+          {
+            tenantId: i.tenantId,
+            areaType: lever.dimension ?? "nba",
+            pattern,
+            outcome: "resolved",
+            resolution: rootCause,
+            discarded,
+            attemptId,
+            nbaId: res.nbaId,
+            lever: { action_code: lever.action_code, dimension: lever.dimension, verdict: lever.verdict },
+            embedding,
+          },
+          c,
+        );
+      });
+      return { outcome: "acted", reason: lever.action_code, nbaId: res.nbaId, loops, attemptId };
+    } catch (e) {
+      // a cohort/action dedup CONFLICT means another restaurant already dispatched this action — an
+      // idempotent SKIP, not a failure (don't flood the human queue with a bogus 'dispatch_failed').
+      if (e instanceof TRPCError && e.code === "CONFLICT") {
+        return { outcome: "skipped", reason: "already_dispatched", nbaId: null, loops, attemptId };
+      }
+      return escalate(i, attemptId, "dispatch_failed", lever, discarded, loops);
+    }
+  }
+  return escalate(i, attemptId, "gate_failed_at_seal", lever, discarded, loops);
 }
