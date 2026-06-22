@@ -67,4 +67,16 @@ describe("02:CP — provisionCockpit (the 'Preparar cockpit' button)", () => {
     expect(tiersAfter).toBe(tiersBefore); // bootstrapPolicies on-conflict ⇒ no duplicate tiers
     expect(propsAfter).toBe(propsBefore); // additive proposeNba NOT re-run ⇒ queue does not grow (real idempotency)
   }, 180_000);
+
+  it("needsBase (fail-closed §14) when the pool has no orders — never invents a base", async () => {
+    // The empty-prod condition the branch exists to fix, taken to its floor: no business data at all.
+    await pool.query(
+      `truncate tenant."Order", cohort."Cohort_Membership_Snapshot", cohort."Cohort",
+                gov."NBA_Proposal", gov."min_calculation" restart identity cascade`,
+    );
+    const r = await provisionCockpit("POOL-001");
+    expect(r.needsBase).toBe(true); // honest: tell the operator to load a base first
+    expect(r.proposed).toBe(0);
+    expect(r.auto_acted).toBe(0);
+  }, 120_000);
 });

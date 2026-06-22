@@ -95,9 +95,9 @@ export function CockpitSetup({ open, onClose }: { open: boolean; onClose: () => 
       <section aria-labelledby="cs-cfg" className="mt-6 border-t border-mxm-border pt-5">
         <h3 id="cs-cfg" className="text-[0.7rem] uppercase tracking-wide text-mxm-content-tertiary">2 · Your governance (optional)</h3>
         <p className="mt-1 max-w-[60ch] text-xs text-mxm-content-secondary">
-          The autonomy range you approve (per-tier ceiling + allowed actions) and named thresholds. Download the
-          template, edit it, upload it — validated before it lands, so a bad file is rejected whole, never
-          half-applied.
+          The autonomy range you approve (per-tier ceiling + allowed actions) and named thresholds (thresholds
+          apply platform-wide). Download the template, edit it, upload it — validated before it lands, so a bad
+          file is rejected whole, never half-applied.
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           <Button variant="ghost" onClick={onDownload} disabled={!tpl.data}>Download template</Button>
