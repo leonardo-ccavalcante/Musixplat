@@ -15,6 +15,10 @@ import { env } from "../_core/env.js";
 let warnedNoKey = false;
 
 export async function diagnosisReasoning(tenantId: string, problemId: string): Promise<DiagnosisReasoning> {
+  // Tests NEVER touch the live LLM (no paid/nondeterministic calls) even if a key is present in the env
+  // (CI secret, dev .env) — hermeticity must not depend on the key being absent (Codex). Tests that want to
+  // exercise the 2-brain inject their own provider into runDiagnosis directly.
+  if (env.NODE_ENV === "test") return deterministicReasoning;
   if (!process.env.OPENAI_API_KEY) {
     // §7 fail-closed (Codex P1): PRODUCTION requires Brain 2 (the LLM). A missing key there is a
     // misconfiguration, NOT the CI hermetic mode — collapsing to a single brain would let cases auto-proceed

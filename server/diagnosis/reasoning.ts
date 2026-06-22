@@ -197,11 +197,15 @@ export function llmReasoning(
       if (!isPermutation) {
         throw new Error("llmReasoning.rankPaths: output is not a permutation of the seed hypotheses");
       }
-      return arr.map((p, i) => ({
-        path_id: i + 1,
-        hypothesis: String(p.hypothesis),
-        probability: Math.max(0, Math.min(1, Number(p.probability))),
-      }));
+      return arr.map((p, i) => {
+        // Fail-closed (§3.7): a missing / string / null probability must NOT silently coerce to NaN and
+        // persist as a bogus confidence — reject it so the orchestrator degrades to needs_human (Codex).
+        const prob = Number(p.probability);
+        if (!Number.isFinite(prob)) {
+          throw new Error("llmReasoning.rankPaths: non-numeric probability (fail-closed)");
+        }
+        return { path_id: i + 1, hypothesis: String(p.hypothesis), probability: Math.max(0, Math.min(1, prob)) };
+      });
     },
   };
 }
