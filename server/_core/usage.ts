@@ -10,7 +10,8 @@ export type ProcessType =
   | "kb_ask"
   | "kb_search"
   | "nba_kb_check"
-  | "motor"; // 02C — autonomous NBA hypothesis loop (token cost per decision)
+  | "motor" // 02C — autonomous NBA hypothesis loop (token cost per decision)
+  | "cockpit"; // 02:1a — restaurant-facing copy for an NBA proposal (the owner-message agent)
 
 // Which price family the model is billed under — picks the Config_Knobs price knob (chat has in+out,
 // embedding has input only). NEVER infer cost here: this layer only records the raw provider COUNTS.
