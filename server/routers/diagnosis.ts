@@ -5,6 +5,7 @@ import { query } from "../db/pool.js";
 import { readDossier, emitDossier } from "../diagnosis/dossier.js";
 import { computeImpactLedger } from "../diagnosis/impact.js";
 import { runDiagnosis } from "../diagnosis/orchestrator.js";
+import { diagnosisReasoning } from "../diagnosis/provider.js";
 import {
   reportProblemInput,
   getDossierInput,
@@ -176,7 +177,8 @@ export const diagnosisRouter = router({
         );
         throw new TRPCError({ code: "FORBIDDEN", message: "cross-pool diagnosis blocked" });
       }
-      const r = await runDiagnosis(input.problemId, ctx.tenantId);
+      // 05D Part A — wire the real LLM (Brain 2); falls open to the deterministic floor without a key.
+      const r = await runDiagnosis(input.problemId, ctx.tenantId, await diagnosisReasoning(ctx.tenantId, input.problemId));
       // EPIC-B5 — quantify f5 (churn/cost/value) from the produced counts, then re-gate the dossier so the
       // returned verdict reflects the completed impact. Fail-closed: no affected population ⇒ f5 stays NULL
       // ⇒ dossier remains PARTIAL (the SQL producer no-ops). Numbers PRODUCED, never seeded (§14).

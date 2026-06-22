@@ -181,6 +181,53 @@ describe("05B EPIC-B1 — runDiagnosis (E2E sequencing, §14 anti-fake, fail-clo
   });
 });
 
+describe("05D Part A — 2-brain agreement gate (02D + F3): area mismatch ⇒ needs_human", () => {
+  // Brain 1 = the deterministic keyword FLOOR (run internally); Brain 2 = the injected lead (the real
+  // LLM+RAG in prod). seedReactive's episode intent is 'billing' ⇒ Brain 1 classifies 'finance'. The gate
+  // (Leo 2026-06-22) keys on AREA only: a different lead area ⇒ degrade-to-human; a same-area difference
+  // (confidence/sub-hypothesis) does NOT. Hermetic: the lead is injected, no key/network.
+  const rankStub: DiagnosisReasoning["rankPaths"] = async (i) =>
+    i.hypotheses.map((hypothesis, idx) => ({
+      path_id: idx + 1,
+      hypothesis,
+      probability: (i.hypotheses.length - idx) / i.hypotheses.length,
+    }));
+
+  it("area DISAGREEMENT (Brain 2 ≠ Brain 1) degrades the case to needs_human", async () => {
+    const problemId = await seedReactive();
+    const disagreeingLead: DiagnosisReasoning = {
+      classifyArea: async () => ({ areaType: "product", confidence: 0.95 }), // ≠ finance ⇒ disagreement
+      rankPaths: rankStub,
+    };
+    const out = await runDiagnosis(problemId, "POOL-DIAG", disagreeingLead);
+    expect(out.degraded).toBe(true); // the 2-brain gate tripped
+    expect(out.areaType).toBe("product"); // proceeds on the lead's read (surfaced for the Fase-4 console)
+    const st = await rows<{ status: string }>(
+      pool,
+      `select status from tenant."Diagnosed_Problem" where problem_id=$1`,
+      [problemId],
+    );
+    expect(st[0]?.status).toBe("needs_human"); // routed to the human console (§7), never an optimistic default
+  });
+
+  it("area AGREEMENT proceeds — same area with a different confidence is NOT a disagreement", async () => {
+    const problemId = await seedReactive();
+    const agreeingLead: DiagnosisReasoning = {
+      classifyArea: async () => ({ areaType: "finance", confidence: 0.99 }), // same area as the floor (finance)
+      rankPaths: rankStub,
+    };
+    const out = await runDiagnosis(problemId, "POOL-DIAG", agreeingLead);
+    expect(out.degraded).toBe(false); // agree ⇒ the gate does NOT force a degrade
+    expect(out.areaType).toBe("finance");
+    const st = await rows<{ status: string }>(
+      pool,
+      `select status from tenant."Diagnosed_Problem" where problem_id=$1`,
+      [problemId],
+    );
+    expect(st[0]?.status).not.toBe("needs_human");
+  });
+});
+
 describe("05D descriptor-refactor — proactive path is descriptor-authoritative (area + hypotheses)", () => {
   // A proactive/typed problem (no Conversation) has nothing to blind-read, so the REGISTERED type's
   // descriptor drives the pipeline directly — no synthetic-string round-trip through the classifier.

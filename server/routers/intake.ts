@@ -1,6 +1,7 @@
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 import { runDiagnosis } from "../diagnosis/orchestrator.js";
+import { diagnosisReasoning } from "../diagnosis/provider.js";
 import { computeImpactLedger } from "../diagnosis/impact.js";
 import { emitDossier } from "../diagnosis/dossier.js";
 import { generateFromDossier } from "../artifact/generateFromDossier.js";
@@ -32,7 +33,8 @@ async function runSpine(
     [tenantId, reportOn, conversationId, crit],
   );
   const problemId = ins[0]!.problem_id;
-  const r = await runDiagnosis(problemId, tenantId);
+  // 05D Part A — wire the real LLM (Brain 2); falls open to the deterministic floor without a key.
+  const r = await runDiagnosis(problemId, tenantId, await diagnosisReasoning(tenantId, problemId));
   await computeImpactLedger(problemId);
   const gate = await emitDossier(problemId);
   if (gate.emitted) {

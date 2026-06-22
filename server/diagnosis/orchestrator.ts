@@ -13,6 +13,7 @@ import { upsertCaseRepo } from "./case_repo.js";
 import { emitDossier, type DossierGateResult } from "./dossier.js";
 import {
   deterministicReasoning,
+  brainAgreement,
   type DiagnosisReasoning,
   type GroundingCase,
   type RankedPath,
@@ -140,15 +141,27 @@ export async function runDiagnosis(
       reactiveText = text;
       guardInjection(text); // untrusted DATA (EC-B10); audit-only, never executes embedded instructions.
       const classifyExamples = await fetchGrounding(tenantId);
-      const classified = await reasoning.classifyArea({ text, hint: prob.criticality, examples: classifyExamples });
+      // 05D Part A (02D + F3) — TWO independent brains on the SAME ticket text. Brain 2 = the injected
+      // provider (real LLM+RAG in prod; reads what the customer actually said). Brain 1 = the deterministic
+      // keyword FLOOR (always available, free). When the caller injects the deterministic provider (the CI /
+      // hermetic default) the two brains ARE the same call ⇒ we skip the redundant classify and they always
+      // agree (no network, no flake). brainAgreement keys on AREA only (Leo 2026-06-22): a categorical area
+      // conflict ⇒ degrade-to-human; otherwise the case proceeds on the lead's read.
+      const lead = await reasoning.classifyArea({ text, hint: prob.criticality, examples: classifyExamples });
+      const floorBrain =
+        reasoning === deterministicReasoning ? lead : await deterministicReasoning.classifyArea({ text });
+      const gate = brainAgreement(floorBrain, lead);
       const floor = await knob("threshold_classification"); // seeded classify floor (§3.8, fail-closed)
       const kb = await query<{ n: number }>(
         `select count(*)::int n from tenant."Knowledge_Case" where tenant_id = $1 and area_type = $2`,
-        [tenantId, classified.areaType],
+        [tenantId, gate.areaType],
       );
-      degraded = classified.confidence < floor && (kb[0]?.n ?? 0) === 0; // BR-B3 grounding floor
-      rankSeed = HYPOTHESES[classified.areaType] ?? ["unclassified hypothesis"];
-      cls = classified;
+      // needs_human on EITHER a 2-brain area disagreement (Part A gate) OR the existing BR-B3 grounding
+      // floor (low confidence + no KB precedent). Both route to the human console; never an optimistic
+      // default (§7 fail-closed). The disagreement gate is ADDITIVE — it only ever ADDS a degrade.
+      degraded = gate.disagreement || (gate.confidence < floor && (kb[0]?.n ?? 0) === 0);
+      rankSeed = HYPOTHESES[gate.areaType] ?? ["unclassified hypothesis"];
+      cls = { areaType: gate.areaType, confidence: gate.confidence };
     } else {
       // proactive/typed: descriptor authoritative. No classifyArea ran ⇒ confidence is NULL — we never
       // claim a classifier inference that did not occur (§3.6/§14 honesty, Codex P1); the area is the
