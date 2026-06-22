@@ -31,23 +31,30 @@ describe("brainAgreement (Part A 2-brain gate — AREA mismatch only)", () => {
   });
 });
 
-describe("conversationText (Part A — the brains read what the customer SAID, not the label · Codex P1)", () => {
-  it("concatenates the real turn texts (the customer's words)", () => {
+describe("conversationText (Part A — the brains read what the customer SAID, not the label · Codex P1/P2)", () => {
+  it("returns ONLY the restaurant-authored turns (the customer); agent replies are excluded", () => {
     const turnos = [
       { role: "restaurant", text: "the card machine keeps dropping the connection" },
-      { role: "agent", text: "noted" },
+      { role: "agent", text: "let me check your billing" }, // an agent reply must NOT skew the classification
+      { role: "restaurant", text: "it happens every lunch rush" },
     ];
-    expect(conversationText(turnos)).toBe("the card machine keeps dropping the connection noted");
+    expect(conversationText(turnos)).toBe("the card machine keeps dropping the connection it happens every lunch rush");
   });
 
-  it('"" for an empty/absent transcript ⇒ caller falls back to the intent label', () => {
+  it('"" for an empty/absent transcript (or agent-only) ⇒ caller falls back to the intent label', () => {
     expect(conversationText([])).toBe(""); // turnos default '[]' (structured-ticket episode)
     expect(conversationText(null)).toBe("");
     expect(conversationText(undefined)).toBe("");
+    expect(conversationText([{ role: "agent", text: "hello" }])).toBe(""); // no customer turn
   });
 
   it("tolerates a malformed turnos shape without throwing (untrusted)", () => {
     expect(conversationText("not-an-array")).toBe("");
-    expect(conversationText([{ role: "x" }, { text: 42 }, { text: "ok" }])).toBe("ok");
+    expect(conversationText([{ role: "restaurant", text: "ok" }, { text: "norole" }, { role: "restaurant", text: 42 }])).toBe("ok");
+  });
+
+  it("bounds the transcript so a huge valid upload can't blow the model context (Codex P2)", () => {
+    const huge = [{ role: "restaurant", text: "x".repeat(20_000) }];
+    expect(conversationText(huge).length).toBe(6000);
   });
 });

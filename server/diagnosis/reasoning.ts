@@ -119,18 +119,27 @@ export function brainAgreement(
   return { areaType: lead.areaType, confidence: lead.confidence, disagreement: floor.areaType !== lead.areaType };
 }
 
+// Bound the transcript handed to the model (Codex P2): the intake contract allows many turns of up to
+// 8000 chars each; an unbounded join could exceed the chat-model context and fail an otherwise-diagnosable
+// case into needs_human. A deterministic char cap keeps classification cheap and in-bounds — area
+// classification needs the gist, not the full transcript.
+const MAX_TRANSCRIPT_CHARS = 6000;
+
 /** 05D Part A — the customer's ACTUAL words for the brains to read. `turnos` is the real chat (jsonb array
  *  of `{role,text}`, PII-redacted at intake); the `intent` column is only a coarse label. Returns the
- *  concatenated turn texts so Brain 2 (LLM) reads what the customer said, not the label (Codex P1) — the
- *  caller falls back to the intent label when "" (structured-ticket episodes carry no turns). Defensive:
- *  a non-array / malformed `turnos` yields "" rather than throwing (untrusted shape). */
+ *  RESTAURANT-authored turn texts (the customer; `agent` replies are excluded so an agent mentioning another
+ *  area can't skew the classification — Codex P2), concatenated and char-bounded, so Brain 2 (LLM) reads what
+ *  the customer said, not the label (Codex P1). "" ⇒ the caller falls back to the intent label (a
+ *  structured-ticket episode carries no turns). Defensive: a non-array / malformed `turnos` yields "". */
 export function conversationText(turnos: unknown): string {
   if (!Array.isArray(turnos)) return "";
-  return turnos
-    .map((t) => (t && typeof t === "object" && typeof (t as { text?: unknown }).text === "string" ? (t as { text: string }).text : ""))
-    .filter((s) => s.length > 0)
+  const text = turnos
+    .filter((t) => t && typeof t === "object" && (t as { role?: unknown }).role === "restaurant")
+    .map((t) => (t as { text?: unknown }).text)
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
     .join(" ")
     .trim();
+  return text.length > MAX_TRANSCRIPT_CHARS ? text.slice(0, MAX_TRANSCRIPT_CHARS) : text;
 }
 
 const ALLOWED_AREAS = new Set(["finance", "product", "performance", "operations", "unclassified"]);

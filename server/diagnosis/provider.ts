@@ -2,6 +2,7 @@ import { llmReasoning, deterministicReasoning, type DiagnosisReasoning } from ".
 import { openaiChatClient } from "../_core/llm.js";
 import { getActiveChatModel } from "../_core/model.js";
 import { recordUsageSafe } from "../_core/usage.js";
+import { env } from "../_core/env.js";
 
 // 05D Part A (02D) — the PRODUCT reasoning provider for the diagnosis spine (Brain 2). It is the missing
 // wiring: today the two product call-sites (diagnosis.run, intake.runSpine) default to the deterministic
@@ -15,14 +16,20 @@ let warnedNoKey = false;
 
 export async function diagnosisReasoning(tenantId: string, problemId: string): Promise<DiagnosisReasoning> {
   if (!process.env.OPENAI_API_KEY) {
-    // No key ⇒ fall back to the deterministic FLOOR (the spec's "stable floor"): a conservative degrade,
-    // NOT an optimistic default (§7) — BR-B3 still routes low-confidence/ungrounded cases to human. But make
-    // it NON-SILENT (Codex P2): in production this means Brain 2 (the LLM cross-check) is unavailable, so the
-    // 2-brain disagreement gate cannot fire. Warn ONCE per process (hermetic in CI; visible to prod ops).
+    // §7 fail-closed (Codex P1): PRODUCTION requires Brain 2 (the LLM). A missing key there is a
+    // misconfiguration, NOT the CI hermetic mode — collapsing to a single brain would let cases auto-proceed
+    // (deterministic conf 0.70 > the 0.60 floor) WITHOUT the 2-brain cross-check. Throw (mirrors env.ts's
+    // prod guards + motor's openai client) so no case is ever diagnosed on one brain in production. In dev/CI
+    // the LLM is intentionally absent ⇒ the deterministic floor is the hermetic mode; warn once (never silent).
+    if (env.NODE_ENV === "production") {
+      throw new Error(
+        "diagnosisReasoning: OPENAI_API_KEY required in production — Brain 2 unavailable (fail-closed, §7)",
+      );
+    }
     if (!warnedNoKey) {
       warnedNoKey = true;
       console.warn(
-        "diagnosisReasoning: OPENAI_API_KEY absent — Brain 2 (LLM) unavailable; running on the deterministic floor only (the 2-brain agreement gate is inert until the key is set).",
+        "diagnosisReasoning: no OPENAI_API_KEY — deterministic floor only (dev/CI hermetic; the 2-brain agreement gate is inert until a key is set).",
       );
     }
     return deterministicReasoning;
