@@ -8,23 +8,33 @@ import type { NbaVerdict } from "../agente/reasoning.js";
 // sub-hypothesis signal re-confirms (deterministic SQL — the verdicts the motor already produced, §8/§14).
 
 // The structured predicate persisted on a Knowledge_Case (§4 lever): enough to re-validate the precedent.
+// cohort_rule_version makes it a VERSIONED predicate — a precedent verified under one baseline is never
+// reused under another (§3.5 anti-mezcla).
 export interface PrecedentLever {
   action_code: string;
   dimension: string | null;
   verdict: string | null;
+  cohort_rule_version: string | null;
 }
 
 // Injectable row executor so the accept-gate is unit-testable with a fake (no DB). Mirrors the pool's query.
 export type Exec = <T extends QueryResultRow>(sql: string, params: readonly unknown[]) => Promise<T[]>;
 
-/** Does the precedent's lever STILL hold on the current fresh verdicts? Find the fresh verdict for the
- *  precedent's `action_code`; it re-confirms iff that signal is still out of standard (below/above) with a
- *  real gap. Returns the FRESH verdict to act on — so the reused action runs on CURRENT data, never the
- *  stale persisted number (§14). null ⇒ the action is no longer attributable here ⇒ don't reuse. Pure. */
+/** Does the precedent's lever STILL hold on the current fresh verdicts? Match the FULL predicate (Codex):
+ *  same action_code AND dimension AND the SAME breach direction the precedent fixed (not the opposite), with
+ *  a real gap. Returns the FRESH verdict to act on — so the reused action runs on CURRENT data, never the
+ *  stale persisted number (§14). null ⇒ the lever no longer holds here ⇒ don't reuse. Pure. */
 export function reconfirmsLever(verdicts: NbaVerdict[], lever: PrecedentLever): NbaVerdict | null {
-  const v = verdicts.find((x) => x.action_code === lever.action_code);
+  const v = verdicts.find((x) => x.action_code === lever.action_code && x.dimension === lever.dimension);
   if (!v) return null;
-  return (v.verdict === "below" || v.verdict === "above") && v.gap != null ? v : null;
+  return v.verdict === lever.verdict && (v.verdict === "below" || v.verdict === "above") && v.gap != null ? v : null;
+}
+
+/** §3.5 — the CURRENT cohort-rule baseline (a Config_Knobs string, not a number). A precedent is reusable
+ *  only under the baseline it was verified on; absent ⇒ fail-closed (no reuse). */
+export async function currentRuleVersion(exec: Exec): Promise<string | null> {
+  const r = await exec<{ value: string }>(`select value from catalog."Config_Knobs" where key='cohort_rule_version_current'`, []);
+  return r[0]?.value ?? null;
 }
 
 const toVector = (v: number[]): string => `[${v.join(",")}]`;
@@ -63,19 +73,24 @@ export async function acceptPrecedent(
   embedder: Embedder,
   minSim: number,
 ): Promise<AcceptedPrecedent | null> {
+  // §3.5 anti-mezcla: only a precedent verified under the CURRENT baseline may be reused. Absent ⇒ fail-closed.
+  const ruleVersion = await currentRuleVersion(exec);
+  if (!ruleVersion) return null;
   const [vec] = await embedder.embed([queryText]);
   if (!vec) return null;
-  // The nearest verified precedent ABOVE the similarity floor (§3.8 `precedent_similarity_min`): a dissimilar
-  // nearest-neighbor is rejected here — never reused just because its action_code happens to currently breach.
+  // The nearest verified precedent OF THE CURRENT BASELINE, ABOVE the similarity floor (§3.8
+  // `precedent_similarity_min`): a dissimilar nearest-neighbor or a stale-baseline one is rejected here —
+  // never reused just because its action_code happens to currently breach.
   const rows = await exec<{ kb_case_id: string; resolution: string | null; lever: PrecedentLever | null }>(
     `select kb_case_id, resolution, lever
        from tenant."Knowledge_Case"
       where tenant_id = $1 and verification_status = 'verified_fixed'
         and embedding is not null and lever is not null
+        and lever->>'cohort_rule_version' = $4
         and (1 - (embedding <=> $2::vector)) >= $3
       order by embedding <=> $2::vector
       limit 1`,
-    [tenantId, toVector(vec), minSim],
+    [tenantId, toVector(vec), minSim, ruleVersion],
   );
   const cand = rows[0];
   if (!cand || !cand.lever) return null;

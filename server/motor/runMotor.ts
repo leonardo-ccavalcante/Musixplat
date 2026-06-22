@@ -10,7 +10,7 @@ import type { NbaVerdict } from "../agente/reasoning.js";
 import { type MotorReasoning, type MotorHypothesis, leverAdapter } from "./reasoning.js";
 import { validateHypothesis } from "./validateHypothesis.js";
 import { writeMotorCase, readGrounding } from "./learn.js";
-import { acceptPrecedent, embedCaseText, type AcceptedPrecedent } from "../diagnosis/precedent.js";
+import { acceptPrecedent, embedCaseText, currentRuleVersion, type AcceptedPrecedent } from "../diagnosis/precedent.js";
 import { resolveEmbedder } from "../knowledge/embedder.js";
 
 export interface MotorAttemptInput { restaurantId: string; cohortId: string; week: string; tenantId: string; tierId: string; }
@@ -130,9 +130,11 @@ async function actOnLever(
   if (gate?.ar === true && gate.fc !== "direct") {
     try {
       const pattern = `${lever.dimension}_${lever.verdict}`;
-      // 05D Part B (Codex): embed the case CONTEXT (signal + the sub-cause/fix narrative), not just the bare
-      // signal label — so kNN can distinguish different verified causes of one signal, never an arbitrary tie.
-      const embedding = await embedCaseText(`${pattern} ${rootCause}`); // best-effort, OUTSIDE the tx (external)
+      // canonical embed = the signal pattern (write == the query text) so a deterministic-embedder env can
+      // still retrieve it (Codex P2); the precise discrimination is the VERSIONED structured lever below, not
+      // the embedding. rootCause is persisted in `resolution`, not folded into the (canonical) embedding text.
+      const embedding = await embedCaseText(pattern); // best-effort, OUTSIDE the tx (external call)
+      const ruleVersion = await currentRuleVersion(query); // §3.5 — stamp the baseline this fix was verified under
       await withTx(async (c) => {
         await autoDispatch(res.nbaId, i.tenantId, c);
         await writeMotorCase(
@@ -145,7 +147,7 @@ async function actOnLever(
             discarded,
             attemptId,
             nbaId: res.nbaId,
-            lever: { action_code: lever.action_code, dimension: lever.dimension, verdict: lever.verdict },
+            lever: { action_code: lever.action_code, dimension: lever.dimension, verdict: lever.verdict, cohort_rule_version: ruleVersion },
             embedding,
           },
           c,

@@ -18,18 +18,25 @@ const verdict = (action_code: string, v: string, gap: number | null): NbaVerdict
   within_range: true, n_min_ok: true, k_anon_ok: true,
 });
 
-async function seedCase(status: string, actionCode: string, embedText = "m_connection_below"): Promise<void> {
+async function seedCase(status: string, actionCode: string, embedText = "m_connection_below", ruleVersion = "v1"): Promise<void> {
   const [vec] = await deterministicEmbedder.embed([embedText]); // same text the query embeds ⇒ kNN match (sim 1)
   await pool.query(
     `insert into tenant."Knowledge_Case"
        (tenant_id, area_type, pattern, outcome, resolution, reviewed, verification_status, lever, embedding)
      values ($1,'m_connection','m_connection_below','resolved','reset the device',true,$2,$3::jsonb,$4::vector)`,
-    [TENANT, status, JSON.stringify({ action_code: actionCode, dimension: "m_connection", verdict: "below" }), `[${vec!.join(",")}]`],
+    [TENANT, status, JSON.stringify({ action_code: actionCode, dimension: "m_connection", verdict: "below", cohort_rule_version: ruleVersion }), `[${vec!.join(",")}]`],
   );
 }
 
 beforeAll(async () => { pool = makePool(); }, 60_000);
-beforeEach(async () => { await resetDb(pool); });
+beforeEach(async () => {
+  await resetDb(pool);
+  // §3.5 — the current baseline the accept-gate matches against (acceptPrecedent reads this knob).
+  await pool.query(
+    `insert into catalog."Config_Knobs"(key,value,provenance,owner) values ('cohort_rule_version_current','v1','[I]','leo')
+     on conflict (key) do update set value=excluded.value`,
+  );
+});
 afterAll(async () => { await pool.end(); });
 
 describe("05D Part B — acceptPrecedent (precedent-first accept-gate)", () => {
@@ -62,6 +69,11 @@ describe("05D Part B — acceptPrecedent (precedent-first accept-gate)", () => {
   it("tenant-scoped: a verified precedent in another pool is never retrieved (§3.4)", async () => {
     await seedCase("verified_fixed", "act_reset");
     expect(await acceptPrecedent("POOL-OTHER", confirming, "m_connection_below", exec, deterministicEmbedder, 0.5)).toBeNull();
+  });
+
+  it("REJECTS a verified precedent from a DIFFERENT baseline (§3.5 anti-mezcla · Codex)", async () => {
+    await seedCase("verified_fixed", "act_reset", "m_connection_below", "v0"); // verified under an OLD baseline
+    expect(await acceptPrecedent(TENANT, confirming, "m_connection_below", exec, deterministicEmbedder, 0.5)).toBeNull();
   });
 
   it("REJECTS a verified precedent that is SEMANTICALLY DISSIMILAR (below the similarity floor · Codex)", async () => {
