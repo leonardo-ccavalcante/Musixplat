@@ -31,10 +31,12 @@ export function DiagnosisBoard({
   rows,
   onOpen,
   onSteps,
+  onDecide,
 }: {
   rows: DiagnosisListRow[];
   onOpen: (row: DiagnosisListRow) => void;
   onSteps?: (row: DiagnosisListRow) => void;
+  onDecide?: (row: DiagnosisListRow) => void;
 }) {
   if (rows.length === 0) return <EmptyState>Nothing to report. All processes green.</EmptyState>;
 
@@ -49,7 +51,7 @@ export function DiagnosisBoard({
       {needsHuman.length > 0 && (
         <Section title="Needs your decision" count={needsHuman.length} accent>
           {needsHuman.map((r) => (
-            <DiagnosisRow key={r.problem_id} row={r} onOpen={onOpen} onSteps={onSteps} />
+            <DiagnosisRow key={r.problem_id} row={r} onOpen={onOpen} onSteps={onSteps} onDecide={onDecide} />
           ))}
         </Section>
       )}

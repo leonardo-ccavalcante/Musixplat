@@ -8,6 +8,7 @@ import { SpineTimeline, type SpineNode } from "@/features/diagnosis/SpineTimelin
 import { ArtifactQueue, type ArtifactAction } from "@/features/diagnosis/ArtifactQueue";
 import { ArtifactModal } from "@/features/diagnosis/ArtifactModal";
 import { DiagnosisStepsModal } from "@/features/diagnosis/DiagnosisStepsModal";
+import { DecisionModal } from "@/features/diagnosis/DecisionModal";
 import { SituationRoom } from "@/features/diagnosis/SituationRoom";
 import type { DiagnosisListRow } from "@shared/contracts_05b";
 import type { ArtifactRow } from "@shared/contracts_05c";
@@ -20,6 +21,7 @@ export function DiagnosisPage() {
   const [ready, setReady] = useState(false);
   const [openRow, setOpenRow] = useState<DiagnosisListRow | null>(null);
   const [stepsRow, setStepsRow] = useState<DiagnosisListRow | null>(null);
+  const [decideRow, setDecideRow] = useState<DiagnosisListRow | null>(null);
   const [openArtifact, setOpenArtifact] = useState<ArtifactRow | null>(null);
   const [busyArtifact, setBusyArtifact] = useState<string | null>(null);
 
@@ -53,12 +55,16 @@ export function DiagnosisPage() {
   const artifactsQ = trpc.artifact.list.useQuery(undefined, { enabled: ready });
   const artifacts = useMemo(() => (artifactsQ.data ?? []) as ArtifactRow[], [artifactsQ.data]);
   const health = trpc.roi.summary.useQuery(undefined, { enabled: ready });
+  // 05D Part C — decision #2 audit: what Part D auto-approved by measurement (verified_fixed).
+  const verifiedQ = trpc.diagnosis.recentlyVerified.useQuery(undefined, { enabled: ready });
+  const verified = verifiedQ.data ?? [];
 
   const utils = trpc.useUtils();
   const report = trpc.diagnosis.reportProblem.useMutation();
   const run = trpc.diagnosis.run.useMutation();
   const generate = trpc.artifact.generate.useMutation();
   const decide = trpc.artifact.decide.useMutation();
+  const decideDiagnosis = trpc.diagnosis.decide.useMutation();
   const [runMsg, setRunMsg] = useState<{ status: "idle" | "running" | "done" | "error"; text?: string }>({
     status: "idle",
   });
@@ -68,6 +74,7 @@ export function DiagnosisPage() {
     await Promise.all([
       utils.diagnosis.list.invalidate(),
       utils.diagnosis.silentSummary.invalidate(),
+      utils.diagnosis.recentlyVerified.invalidate(),
       utils.artifact.list.invalidate(),
       utils.roi.summary.invalidate(),
     ]);
@@ -177,11 +184,47 @@ export function DiagnosisPage() {
         <ErrorState />
       ) : (
         <>
-          <DiagnosisBoard rows={rows} onOpen={setOpenRow} onSteps={setStepsRow} />
+          <DiagnosisBoard rows={rows} onOpen={setOpenRow} onSteps={setStepsRow} onDecide={setDecideRow} />
+          {verified.length > 0 && (
+            <section
+              aria-label="Auto-verified by measurement"
+              className="mt-4 rounded-mxm border border-mxm-border bg-mxm-bg-elevated px-[clamp(0.75rem,1.5vw,1.25rem)] py-3"
+            >
+              <h2 className="text-sm font-semibold text-mxm-content">
+                Auto-verified by measurement{" "}
+                <span className="text-xs font-normal text-mxm-content-secondary">
+                  · the re-measurement proved these closed (you have visibility, no action needed)
+                </span>
+              </h2>
+              <ul className="mt-2 grid gap-1.5">
+                {verified.map((v) => (
+                  <li key={v.kb_case_id} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                    <span className="rounded-full border border-mxm-brand px-2 py-0.5 font-medium text-mxm-brand">✓ verified</span>
+                    <span className="text-mxm-content-secondary">{v.area_type}</span>
+                    <span className="text-mxm-content">{v.pattern ?? "n/a"}</span>
+                    {v.resolution && <span className="text-mxm-content-secondary">— {v.resolution}</span>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <ArtifactQueue artifacts={artifacts} onDecide={onDecide} onOpen={setOpenArtifact} busyId={busyArtifact} />
         </>
       )}
 
+      <DecisionModal
+        row={decideRow}
+        onClose={() => setDecideRow(null)}
+        pending={decideDiagnosis.isPending}
+        errorMsg={decideDiagnosis.error?.message ?? null}
+        onSubmit={(areaType, rationale) =>
+          decideRow &&
+          decideDiagnosis.mutate(
+            { problemId: decideRow.problem_id, areaType, rationale },
+            { onSuccess: () => { setDecideRow(null); void refetchAll(); } },
+          )
+        }
+      />
       <DossierModal row={openRow} onClose={() => setOpenRow(null)} />
       <DiagnosisStepsModal
         row={stepsRow}
