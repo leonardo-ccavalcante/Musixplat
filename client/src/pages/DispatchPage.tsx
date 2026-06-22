@@ -39,8 +39,8 @@ export function DispatchView({
           Reaches <b className="tabnum">{detail.reach_count}</b> restaurant{detail.reach_count === 1 ? "" : "s"} in this cohort
         </p>
         <ul className="mt-2 flex flex-wrap gap-2 text-xs text-mxm-content-tertiary">
-          {detail.reach_preview.map((r) => (
-            <li key={r.restaurant_id} className="rounded-full border border-mxm-border px-2 py-0.5">
+          {detail.reach_preview.map((r, i) => (
+            <li key={`${r.restaurant_id}-${i}`} className="rounded-full border border-mxm-border px-2 py-0.5">
               {r.restaurant_id} · {r.tier_base}
             </li>
           ))}

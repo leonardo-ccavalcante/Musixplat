@@ -92,6 +92,17 @@ export async function listDiagnosisRows(tenantId: string, exec: Exec): Promise<D
   }));
 }
 
+/** Run-flow entry: ONE real restaurant from the caller's pool (reuses the sandbox.ts pattern). Tenant
+ *  resolved server-side (§7, anti-spoofing) — never the client body. null ⇒ empty pool ⇒ the UI tells the
+ *  operator to use the Situation Room (the real intake); the demo fixture R-PAY-001 is never assumed. */
+export async function firstPoolRestaurant(tenantId: string, exec: Exec): Promise<{ restaurantId: string } | null> {
+  const r = await exec<{ restaurant_id: string }>(
+    `select restaurant_id from tenant."Restaurant" where tenant_id = $1 order by restaurant_id limit 1`,
+    [tenantId],
+  );
+  return r[0] ? { restaurantId: r[0].restaurant_id } : null;
+}
+
 export const diagnosisRouter = router({
   reportProblem: tenantProcedure
     .input(reportProblemInput)
@@ -198,6 +209,11 @@ export const diagnosisRouter = router({
 
   // F-B1.3 — the diagnosis board: every problem in the pool with produced counts + autonomy verdict.
   list: tenantProcedure.query(({ ctx }): Promise<DiagnosisListRow[]> => listDiagnosisRows(ctx.tenantId, query)),
+
+  // Run-flow entry — one REAL restaurant from the pool (no demo fixture). tenant resolved server-side (§7).
+  sampleRestaurant: tenantProcedure.query(
+    ({ ctx }): Promise<{ restaurantId: string } | null> => firstPoolRestaurant(ctx.tenantId, query),
+  ),
 
   // US-B6.3.1 — the 11-field dossier gate for one problem (read-only; honest partial gaps). Ownership
   // verified server-side first ⇒ no cross-pool dossier leak (BR-B6).

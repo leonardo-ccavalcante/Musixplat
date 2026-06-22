@@ -67,7 +67,7 @@ export function ArtifactModal({
                 className="mt-1.5 max-h-44 space-y-0.5 overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand"
               >
                 {who.map((a, i) => (
-                  <li key={str(a.restaurant_id, `r${i}`)} className="flex justify-between gap-3 text-xs">
+                  <li key={`${str(a.restaurant_id, "r")}-${i}`} className="flex justify-between gap-3 text-xs">
                     <span className="text-mxm-content">{str(a.restaurant_id)}</span>
                     <span className={a.silent ? "text-mxm-brand" : "text-mxm-content-secondary"}>
                       {a.silent ? "silent · never spoke" : "spoke up"}
