@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
 import { EscalatedList } from "@/features/cockpit/EscalatedList";
+import { TierHeader } from "./TierHeader";
+import { type ExpandCmd, useExpandGroup } from "./useExpandGroup";
 
 // Activity = what the AI did alone + its governance gates. RESULT/NULL fields (time-to-sign, gate result,
 // rubber-stamp) render "not measured" (honest-pending §14), never 0. Full traceability (proposer,
@@ -12,49 +15,52 @@ import { EscalatedList } from "@/features/cockpit/EscalatedList";
 // flow) — linked, not duplicated.
 const stamp = (v: boolean | null): string => (v === null ? "not measured" : v ? "yes" : "no");
 
-export function ActivityTier({ ready }: { ready: boolean }) {
+export function ActivityTier({ ready, cmd }: { ready: boolean; cmd: ExpandCmd | null }) {
   const traces = trpc.observatory.traces.useQuery(undefined, { enabled: ready });
   const [registryOpen, setRegistryOpen] = useState(false);
   const [escOpen, setEscOpen] = useState(false);
+  const rows = traces.data ?? [];
+  const keys = useMemo(() => (traces.data ?? []).map((t) => t.traceId), [traces.data]);
+  const { isOpen, setOpen } = useExpandGroup(cmd, keys);
 
   return (
     <section className="mt-8" aria-label="What the AI did alone">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-mxm-content">Activity &amp; trace</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" onClick={() => setRegistryOpen(true)}>
-            Full registry…
-          </Button>
-          <Button variant="ghost" onClick={() => setEscOpen(true)}>
-            Escalations…
-          </Button>
-          <Link
-            href="/cockpit"
-            className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content"
-          >
-            Release / pause on Cockpit →
-          </Link>
-        </div>
-      </div>
+      <TierHeader title="Activity & trace" count={traces.isSuccess ? rows.length : undefined}>
+        <Button variant="ghost" onClick={() => setRegistryOpen(true)}>
+          Full registry…
+        </Button>
+        <Button variant="ghost" onClick={() => setEscOpen(true)}>
+          Escalations…
+        </Button>
+        <Link
+          href="/cockpit"
+          className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content"
+        >
+          Release / pause on Cockpit →
+        </Link>
+      </TierHeader>
 
       {!ready || traces.isLoading ? (
         <div className="h-24 animate-pulse rounded-mxm border border-mxm-border" />
       ) : traces.isError ? (
         <p className="text-sm text-mxm-red">Couldn&apos;t read traces — try again.</p>
-      ) : (traces.data?.length ?? 0) === 0 ? (
+      ) : rows.length === 0 ? (
         <p className="text-sm text-mxm-content-secondary">No autonomous actions recorded yet.</p>
       ) : (
         <ul className="space-y-2">
-          {traces.data!.map((t) => (
-            <li key={t.traceId} className="rounded-mxm border border-mxm-border p-3">
-              <details>
-                <summary className="flex cursor-pointer items-center justify-between gap-3">
-                  <span className="text-mxm-content">
+          {rows.map((t) => (
+            <li key={t.traceId}>
+              <Disclosure
+                open={isOpen(t.traceId)}
+                onOpenChange={(o) => setOpen(t.traceId, o)}
+                title={
+                  <span className="font-normal">
                     {t.action} <span className="text-mxm-content-secondary">· {t.effectiveLevelApplied ?? "not measured"}</span>
                   </span>
-                  <span className="text-xs text-mxm-content-tertiary tabular-nums">{t.ts.slice(0, 10)}</span>
-                </summary>
-                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                }
+                trailing={<span className="text-xs font-normal text-mxm-content-tertiary tabular-nums">{t.ts.slice(0, 10)}</span>}
+              >
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                   <Field k="Proposer" v={t.proposerId} />
                   <Field k="Confirmer" v={t.confirmerId ?? "auto (none)"} />
                   <Field k="Independent" v={t.independenceGuaranteed === null ? "not measured" : t.independenceGuaranteed ? "yes" : "no"} />
@@ -63,7 +69,7 @@ export function ActivityTier({ ready }: { ready: boolean }) {
                   <Field k="Rubber-stamp flag" v={stamp(t.rubberStampFlag)} />
                   <Field k="Gates" v={t.gateResult == null ? "not measured" : JSON.stringify(t.gateResult)} />
                 </dl>
-              </details>
+              </Disclosure>
             </li>
           ))}
         </ul>

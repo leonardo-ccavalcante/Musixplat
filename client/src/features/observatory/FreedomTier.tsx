@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { CapEditModal } from "./CapEditModal";
 import { EvalStatusBadge } from "./EvalStatusBadge";
+import { TierHeader } from "./TierHeader";
+import { type ExpandCmd, useExpandGroup } from "./useExpandGroup";
 
 // §14 honest-pending + §3.10 provenance gate: NULL → "not measured"; a non-null result with no
 // provenance tag is not asserted ("no provenance"); otherwise the value.
@@ -12,18 +15,20 @@ const cell = (v: number | boolean | null, prov?: string): string =>
 // Freedom = how far the AI may go. The eval grid is READ-ONLY (the grade is producer-measured; a human
 // cannot type it — §14). Full traceability lives in each row's expand. The honest human lever is the CAP,
 // edited via the EXISTING cockpit config template/upload (CapEditModal → managerProcedure, [V]).
-export function FreedomTier({ ready }: { ready: boolean }) {
+export function FreedomTier({ ready, cmd }: { ready: boolean; cmd: ExpandCmd | null }) {
   const evals = trpc.observatory.evalList.useQuery(undefined, { enabled: ready });
   const [capOpen, setCapOpen] = useState(false);
+  const rows = evals.data ?? [];
+  const keys = useMemo(() => (evals.data ?? []).map((e) => `${e.cohortId}-${e.intent}-${e.version}`), [evals.data]);
+  const { isOpen, setOpen } = useExpandGroup(cmd, keys);
 
   return (
     <section className="mt-8" aria-label="How far the AI may go">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-mxm-content">Freedom — how far the AI may go</h2>
+      <TierHeader title="Freedom — how far the AI may go" count={evals.isSuccess ? rows.length : undefined}>
         <Button variant="ghost" onClick={() => setCapOpen(true)}>
           Edit limits…
         </Button>
-      </div>
+      </TierHeader>
       <p className="mb-3 max-w-[68ch] text-xs text-mxm-content-secondary">
         The AI&apos;s autonomy grade per cohort &amp; intent. Today these are a conservative floor the system
         has not yet measured — green counts as a real pass only once measured. Expand a row for the full
@@ -34,27 +39,33 @@ export function FreedomTier({ ready }: { ready: boolean }) {
         <div className="h-24 animate-pulse rounded-mxm border border-mxm-border" />
       ) : evals.isError ? (
         <p className="text-sm text-mxm-red">Couldn&apos;t read evals — try again.</p>
-      ) : (evals.data?.length ?? 0) === 0 ? (
+      ) : rows.length === 0 ? (
         <p className="text-sm text-mxm-content-secondary">No eval cells yet for this pool.</p>
       ) : (
         <ul className="space-y-2">
-          {evals.data!.map((e) => {
+          {rows.map((e, i) => {
+            const k = keys[i]!; // keys and rows derive from the same query data — same order and length
             const lvlProv = e.provenanceByField?.released_evals;
             return (
-              <li key={`${e.cohortId}-${e.intent}-${e.version}`} className="rounded-mxm border border-mxm-border p-3">
-                <details>
-                  <summary className="flex cursor-pointer items-center justify-between gap-3">
-                    <span className="text-mxm-content">
+              <li key={k}>
+                <Disclosure
+                  open={isOpen(k)}
+                  onOpenChange={(o) => setOpen(k, o)}
+                  title={
+                    <span className="font-normal">
                       {e.cohortId} <span className="text-mxm-content-secondary">· {e.intent}</span>
                     </span>
-                    <span className="flex items-center gap-3 text-xs">
+                  }
+                  trailing={
+                    <span className="flex items-center gap-3 text-xs font-normal">
                       <span className="text-mxm-content" title={lvlProv ? `provenance ${lvlProv}` : "no provenance"}>
                         {e.releasedEvals === null ? "not yet measured" : lvlProv ? e.releasedEvals : "—"}
                       </span>
                       <EvalStatusBadge status={e.status} prov={e.provenanceByField?.status} />
                     </span>
-                  </summary>
-                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  }
+                >
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <Field k="Sample (n)" v={cell(e.nCohortXIntent, e.provenanceByField?.n_cohort_x_intent)} />
                     <Field k="Agreement (kappa)" v={cell(e.kappa, e.provenanceByField?.kappa)} />
                     <Field k="Red-team independent" v={cell(e.redteamIndependenceFlag, e.provenanceByField?.redteam_independence_flag)} />
@@ -70,7 +81,7 @@ export function FreedomTier({ ready }: { ready: boolean }) {
                     />
                     <Field k="Golden-set version" v={e.version} />
                   </dl>
-                </details>
+                </Disclosure>
               </li>
             );
           })}

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { FreedomTier } from "@/features/observatory/FreedomTier";
 import { LearningTier } from "@/features/observatory/LearningTier";
 import { ActivityTier } from "@/features/observatory/ActivityTier";
+import type { ExpandCmd } from "@/features/observatory/useExpandGroup";
 
 // Observatory — read-only awareness of what the AI does on its own. Awareness screen: the signal
 // (Posture) is the hero; actions are quiet/guarded and reuse the existing cockpit/motor surfaces. Every
@@ -48,6 +49,12 @@ export function ObservatoryPage() {
   const week = trpc.cockpit.weekSummary.useQuery(undefined, { enabled: ready });
   const cost = trpc.cost.summary.useQuery(undefined, { enabled: ready });
 
+  // Expand all / Collapse all broadcasts to every detail tier. The nonce makes repeated clicks of the same
+  // action re-fire (re-open rows a human had collapsed). null = no broadcast yet (rows start collapsed).
+  const [expandCmd, setExpandCmd] = useState<ExpandCmd | null>(null);
+  const nonce = useRef(0);
+  const broadcast = (open: boolean) => setExpandCmd({ open, n: (nonce.current += 1) });
+
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">
       <header className="mb-6">
@@ -75,9 +82,31 @@ export function ObservatoryPage() {
             />
           </section>
 
-          <FreedomTier ready={ready} />
-          <LearningTier ready={ready} />
-          <ActivityTier ready={ready} />
+          <div className="mt-8 mb-3 flex items-center justify-end gap-1" role="group" aria-label="Expand or collapse all detail">
+            <button
+              type="button"
+              onClick={() => broadcast(true)}
+              className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mxm-brand"
+            >
+              Expand all
+            </button>
+            <span className="text-mxm-content-tertiary" aria-hidden="true">
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={() => broadcast(false)}
+              className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mxm-brand"
+            >
+              Collapse all
+            </button>
+          </div>
+
+          <div className="[&>section:first-child]:mt-0">
+            <FreedomTier ready={ready} cmd={expandCmd} />
+            <LearningTier ready={ready} cmd={expandCmd} />
+            <ActivityTier ready={ready} cmd={expandCmd} />
+          </div>
         </>
       )}
     </main>
