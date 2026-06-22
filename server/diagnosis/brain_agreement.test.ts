@@ -53,8 +53,8 @@ describe("conversationText (Part A — the brains read what the customer SAID, n
     expect(conversationText([{ role: "restaurant", text: "ok" }, { text: "norole" }, { role: "restaurant", text: 42 }])).toBe("ok");
   });
 
-  it("bounds the transcript so a huge valid upload can't blow the model context (Codex P2)", () => {
+  it("returns the FULL transcript (redact-THEN-bound is the caller's job, so a PII token isn't split · Codex P2)", () => {
     const huge = [{ role: "restaurant", text: "x".repeat(20_000) }];
-    expect(conversationText(huge).length).toBe(6000);
+    expect(conversationText(huge).length).toBe(20_000); // no truncation here — the orchestrator redacts then caps
   });
 });

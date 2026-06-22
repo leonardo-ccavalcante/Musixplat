@@ -38,6 +38,11 @@ const HYPOTHESES: Record<string, string[]> = {
 // stays injection-proof even though the dim comes from our own vetted registry (§8 defense-in-depth).
 const CONCENTRATION_DIMS: Record<string, string> = { zone: "zone", cuisine: "cuisine" };
 
+// 05D Part A — cap the (already-redacted) transcript handed to the model: the intake contract allows many
+// turns of up to 8000 chars; an unbounded prompt could blow the chat-model context and fail an otherwise-
+// diagnosable case into needs_human. Bound AFTER redaction so a PII token is never split by truncation (Codex P2).
+const MAX_CLASSIFY_CHARS = 6000;
+
 /** Threshold BY NAME (§3.8), FAIL-CLOSED: knob_required_num RAISES if the knob is absent — never a
  *  silent literal default (mirrors silent.ts). Both knobs are seeded in seed.sql + the migration. */
 async function knob(name: string): Promise<number> {
@@ -136,11 +141,13 @@ export async function runDiagnosis(
     // never left 'open'. Callers pass a factory (() => diagnosisReasoning(...)); tests inject a value directly.
     const provider = typeof reasoning === "function" ? await reasoning() : reasoning;
     if (prob.conversation_id) {
-      // 05D Part A — the brains must read what the CUSTOMER ACTUALLY SAID (`turnos`, the real chat), not the
-      // coarse `intent` label (Codex P1). turnos can be UNREDACTED (conversation.recv persists raw input), so
-      // REDACT before any external send — Brain 2 (LLM classify) and the B.6.5 KB embedding both leave the
-      // system. Fail-closed (§3.7): if the independent residual net STILL finds PII after redaction, drop the
-      // transcript and fall back to the coarse intent label (an enum — no free customer text) rather than leak.
+      // 05D Part A — the brains read what the CUSTOMER SAID (`turnos`, the real chat) or fall back to the
+      // `intent` label. turnos is FREE TEXT persisted RAW by conversation.recv ⇒ REDACT before any external
+      // send (Brain 2 LLM + the KB embedding leave the system · Codex P1). `intent` is FK-constrained to
+      // catalog.Intent_Catalog (a controlled value, never PII — verified the FK), so redacting the unified
+      // text is exact for turnos + a harmless no-op for the fallback. Redact the FULL input BEFORE truncating,
+      // so a PII token is never split past the detector (Codex P2), then bound. Fail-closed (§3.7): if the
+      // residual net still finds PII, send NOTHING external ("" ⇒ unclassified ⇒ degrade-to-human), never leak.
       const ep = (
         await query<{ intent: string | null; turnos: unknown }>(
           `select intent, turnos from tenant."Conversation_Episode"
@@ -148,9 +155,10 @@ export async function runDiagnosis(
           [prob.conversation_id, tenantId],
         )
       )[0];
-      const raw = conversationText(ep?.turnos);
-      const red = raw ? redactPII(raw) : null;
-      const text = red && !red.residualPII ? red.texto : (ep?.intent ?? "");
+      const raw = conversationText(ep?.turnos) || (ep?.intent ?? "");
+      const red = raw ? redactPII(raw) : { texto: "", residualPII: false };
+      const safe = red.residualPII ? "" : red.texto;
+      const text = safe.length > MAX_CLASSIFY_CHARS ? safe.slice(0, MAX_CLASSIFY_CHARS) : safe;
       reactiveText = text;
       guardInjection(text); // untrusted DATA (EC-B10); audit-only, never executes embedded instructions.
       const classifyExamples = await fetchGrounding(tenantId);
