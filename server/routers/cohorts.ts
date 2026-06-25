@@ -91,8 +91,9 @@ export const cohortsRouter = router({
 
   // Demo operability — generate a deterministic, gate-passing example base (reuses the seed generator,
   // DRY). Clears business data first so it's a clean load. restaurants bounded [50, 5000]; default 5000.
-  // det_int ⇒ reproducible; all RESULTS stay NULL until Run Flow (§14). The generated rows are anchored
-  // to a fixed ref date, but the run window derives from the data anyway (so cohortization aligns).
+  // det_int ⇒ reproducible; all RESULTS stay NULL until Run Flow (§14). Base AND usage anchor to ONE clock
+  // (fn_demo_ref = current_date for this live click) so the freshly-generated board tracks TODAY and never
+  // ages out — fixes the prior skew (base frozen at 2026-06-17 vs usage at current_date).
   generateExample: tenantProcedure
     .input(z.object({ restaurants: z.number().int().min(50).max(5000).default(5000) }))
     .mutation(async ({ input }): Promise<{ restaurants: number }> => {
@@ -100,10 +101,10 @@ export const cohortsRouter = router({
         cohort."Prioritized_NBA_Event", cohort."Cohort_Membership_Snapshot", cohort."Subgroup", cohort."Cohort",
         tenant."Weekly_Connection", tenant."Conversation_Episode", tenant."Order", tenant."Restaurant"
         restart identity cascade;`);
-      await query(`select public.fn_generate_business_base($1, date '2026-06-17')`, [input.restaurants]);
+      await query(`select public.fn_generate_business_base($1, public.fn_demo_ref())`, [input.restaurants]);
       // 05D adoption: also seed the Usage_Event recency signal so the adoption diagnosis works on the
-      // freshly-generated base too (this "generate example" path mirrors seed.sql, DRY).
-      await query(`select public.fn_seed_usage_events(current_date)`);
+      // freshly-generated base too — SAME clock as the base (fn_demo_ref), never drifting apart.
+      await query(`select public.fn_seed_usage_events(public.fn_demo_ref())`);
       return { restaurants: input.restaurants };
     }),
 
