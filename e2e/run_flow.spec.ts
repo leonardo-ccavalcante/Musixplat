@@ -23,8 +23,10 @@ test("@a11y full spine in-product: Run flow → diagnose → artifact → approv
   await page.getByRole("button", { name: /^Approve$/ }).first().click();
   await expect(page.getByText(/approved · trace/i)).toBeVisible({ timeout: 15_000 });
 
-  // 1:10 leverage now carries a derived signal (units / 1 human touch ⇒ "47 : 1").
-  await expect(page.getByText("47 : 1").first()).toBeVisible({ timeout: 15_000 });
+  // 1:10 leverage now carries a derived signal. The node reads the produced `ratio_1_10` (gov.fn_roi_1_10),
+  // which is the team-equivalent capacity capped at `baseline_team_size` (10) — one operator ≈ a team of ten,
+  // the literal "1:10". (units-per-touch, 47, is now a separate field, not this node.) ⇒ "10 : 1".
+  await expect(page.getByText("10 : 1").first()).toBeVisible({ timeout: 15_000 });
 
   await page.screenshot({ path: "test-results/run-flow.png", fullPage: true });
 

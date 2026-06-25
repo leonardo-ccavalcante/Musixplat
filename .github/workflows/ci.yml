@@ -108,18 +108,13 @@ jobs:
           psql "$DATABASE_URL" -c "create extension if not exists pgtap;"
           pg_prove -d "$DATABASE_URL" supabase/tests/*.sql
 
-  # E2E + a11y (Playwright). Fresh pgvector service → migrate → seed → P01/P02 (cohorts + cockpit) →
+  # E2E + a11y (Playwright), BLOCKING. Fresh pgvector service → migrate → seed → P01/P02 (cohorts + cockpit) →
   # 05B (the POOL-PAY diagnosis scenario, deterministic without an LLM key) → run the specs. Playwright's
-  # webServer boots `pnpm dev`; the dev-login path is open here (NODE_ENV is not production).
+  # webServer boots `pnpm dev`; the dev-login path is open here (NODE_ENV is not production). knowledge.spec
+  # self-skips when OPENAI_API_KEY is absent (the KB classify LLM step) — CI has no secret, so it skips here;
+  # add an OPENAI_API_KEY to this job's `env` to also exercise that path. All other specs gate.
   e2e:
     runs-on: ubuntu-latest
-    # NON-BLOCKING for now: wiring e2e into CI (its first-ever automated run) surfaced that several specs
-    # are stale vs the evolved UI — cockpit.spec expects the "auto" group expanded (it now defaults to
-    # collapsed, CockpitBoard.tsx:41), cohorts.spec looks for region "Cohort matrix (heatmap)" (renamed to
-    # "Cohort health heatmap" in the heatmap redesign), and knowledge.spec needs OPENAI_API_KEY (the
-    # classify LLM) which CI has no secret for. None implicate the producers/seed. The job RUNS every PR so
-    # UI drift is visible; flip to blocking once the specs are refreshed + an OPENAI_API_KEY secret is added.
-    continue-on-error: true
     services:
       postgres:
         image: pgvector/pgvector:pg15

@@ -66,8 +66,11 @@ function Cell({ c, opp, onOpen, showCtx }: { c: CohortCell; opp?: Opp; onOpen?: 
         <span aria-hidden="true">{m.icon}</span> {m.label}
       </span>
       <span className="tabnum block text-xs text-mxm-content-tertiary">n = {n}</span>
+      {/* a11y: a FILLED coral chip (dark text) — coral text on the tinted cell bg was only 4.4:1 (below
+          WCAG AA 4.5:1). Filled coral + inverted text passes regardless of the cell's status tint, and
+          reads as a stronger "prioritized" cue. */}
       {opp && (
-        <span title="gap to top" className="tabnum mt-0.5 self-start rounded border border-mxm-brand px-1 text-[0.7rem] font-bold text-mxm-brand">
+        <span title="gap to top" className="tabnum mt-0.5 self-start rounded bg-mxm-brand px-1 text-[0.7rem] font-bold text-mxm-content-inverted">
           gap {opp.gap == null ? "—" : fmtNum(opp.gap)}
         </span>
       )}

@@ -19,6 +19,12 @@ const POLICY = fileURLToPath(new URL("./fixtures/policy.md", import.meta.url));
 test.setTimeout(180_000);
 
 test("@a11y upload policy.md → confirm type → run a case → dossier cites the source", async ({ page }) => {
+  // The KB classify step (server/knowledge/classify.ts) calls the real OpenAI classifier; with no key the
+  // server degrades and the "this looks like a <type>" proposal never appears. CI has no OPENAI_API_KEY
+  // secret, so skip there (the producers/seed are exercised by the other specs). Add the secret to the e2e
+  // job env to run it in CI; locally it runs whenever the key is on the test-runner's env.
+  test.skip(!process.env.OPENAI_API_KEY, "KB classify needs OPENAI_API_KEY (set it in the e2e job env / shell)");
+
   // ── 1. Upload + confirm on the Knowledge Base screen ──────────────────────────────────────────
   await page.goto("/knowledge");
   await expect(page.getByRole("heading", { name: "Knowledge Base" })).toBeVisible();
@@ -29,8 +35,9 @@ test("@a11y upload policy.md → confirm type → run a case → dossier cites t
 
   await dialog.getByLabel(/File \(PDF, Markdown or text\)/i).setInputFiles(POLICY);
 
-  // AI proposes a type; the confirm step appears. Confirm it as "Policy" (human [V]).
-  await expect(dialog.getByText(/AI proposed/i)).toBeVisible({ timeout: 60_000 });
+  // AI proposes a type; the confirm step appears ("This looks like a <type> [I] · <confidence>"). Confirm
+  // it as "Policy" (human [V]).
+  await expect(dialog.getByText(/This looks like/i)).toBeVisible({ timeout: 60_000 });
   await dialog.getByLabel(/Document type/i).selectOption("Policy");
   await dialog.getByRole("button", { name: /^Confirm$/i }).click();
   await expect(dialog).toBeHidden({ timeout: 15_000 });
