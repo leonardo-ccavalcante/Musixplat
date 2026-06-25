@@ -34,7 +34,12 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('weight_upside_connection',     '0.40', '[C]', 'leo'),
   ('weight_upside_quality',    '0.25', '[C]', 'leo'),
   ('weight_upside_cancel',       '0.20', '[C]', 'leo'),
-  ('weight_upside_price',        '0.15', '[C]', 'leo');
+  ('weight_upside_price',        '0.15', '[C]', 'leo')
+-- idempotent: resolution_verify_window (05D Part D) is ALSO inserted by the 20260624000000 migration, so
+-- on the migrate-THEN-seed path (apply-hosted hosted deploy + `supabase db reset`/test:sql) the duplicate
+-- would abort the WHOLE block. Skip already-present rows (same pattern as the 05D block below). On a fresh
+-- resetDb (seed-only, table truncated first) the table is empty ⇒ on-conflict never fires ⇒ every knob inserts.
+on conflict (key) do nothing;
 
 -- ── 05B Diagnosis knobs ([C] placeholders, read BY NAME). ──
 insert into catalog."Config_Knobs"(key, value, provenance, owner) values
@@ -157,28 +162,36 @@ insert into catalog."Named_Query"(def_version, formula, periodicity, group_by, s
 insert into tenant."KPI"(kpi_id, tenant_id, restaurant_id, level, class, kpi_def_version, target, provenance) values
   ('kpi_recurrence', 'POOL-001', null, 'company', 'performance', 'nq_kpi_recurrence_v1', 0.70, '[C]');
 
--- ── gov.User (two pools → exercises the RLS guard + cross-pool block). ──
+-- ── gov.User (three pools → exercises the RLS guard + cross-pool block). ──
+-- U-PAY-001 / POOL-PAY is the dedicated Support·Diagnosis operator. Its 47/35 reverse-cascade DATA is
+-- produced later by db:05b / the in-UI Run-flow (never seeded — §14), but the IDENTITY is seeded HERE so
+-- dev-login always resolves it (local fresh, hosted, CI) — otherwise the Diagnosis/Cost/Knowledge/Health
+-- screens 401 on a deploy that never ran scenario_pay. scenario_pay re-asserts these with on-conflict-do-
+-- nothing, so staging stays idempotent and never reassigns the pool.
 insert into gov."User"(user_id, tenant_id, org_level, role) values
   ('U-OP-001', 'POOL-001', 'team', 'agent_manager_senior'),
-  ('U-OP-002', 'POOL-002', 'team', 'agent_manager_senior');
+  ('U-OP-002', 'POOL-002', 'team', 'agent_manager_senior'),
+  ('U-PAY-001', 'POOL-PAY', 'team', 'agent_manager_senior');
 
 -- AI agent actors (one per pool): the NBA proposer. Distinct from the human operator so the
 -- Release_Batch 4-eyes CHECK (proposer_id <> operator_id) + Decision_Trace independence hold when a
 -- human releases an AI-proposed NBA (02:1C / BR-9 / BR-11). Config rows, not a §14 result.
 insert into gov."User"(user_id, tenant_id, org_level, role) values
   ('U-AI-001', 'POOL-001', 'team', 'ai_agent'),
-  ('U-AI-002', 'POOL-002', 'team', 'ai_agent');
+  ('U-AI-002', 'POOL-002', 'team', 'ai_agent'),
+  ('U-PAY-001-AI', 'POOL-PAY', 'team', 'ai_agent');
 
 -- ── Business base (Restaurant + Order + Weekly_Connection + Conversation_Episode): 5000 restaurants,
 --    deterministic via fn_generate_business_base (DRY — the demo "generate example" button reuses it). ──
--- Demo-freshness vs test-determinism (REMAINING_WORK §5): the anchor reads the `app.demo_ref` session GUC
--- when set, else falls back to the FIXED 2026-06-17. resetDb (tests) never sets it ⇒ 2026-06-17 ⇒ the §14
--- numbers stay deterministic. The hosted seed (apply-hosted) sets app.demo_ref=current_date on its connection
--- BEFORE this runs ⇒ the prod/demo base is anchored to TODAY (never goes stale).
-select public.fn_generate_business_base(5000, coalesce(nullif(current_setting('app.demo_ref', true), '')::date, date '2026-06-17'));
+-- Demo-freshness vs test-determinism: BOTH the order base and the usage-event recency now read ONE clock,
+-- public.fn_demo_ref() (= the `app.demo_ref` GUC when set, else current_date) — so they can never drift
+-- apart again (the old bug: base frozen at 2026-06-17 while usage = current_date ⇒ board ages out). resetDb
+-- (tests) sets the GUC to 2026-06-17 ⇒ deterministic; apply-hosted + `supabase db reset` leave it unset ⇒
+-- current_date ⇒ the prod/demo base tracks TODAY and never goes stale.
+select public.fn_generate_business_base(5000, public.fn_demo_ref());
 -- 05D adoption: the platform feature-usage recency signal (Usage_Event) for the base restaurants, so the
--- adoption diagnosis sees a REAL non-adopting population (~30%) — not every restaurant looking non-adopting.
-select public.fn_seed_usage_events(current_date);
+-- adoption diagnosis sees a REAL non-adopting population (~30%) — same clock as the base (fn_demo_ref).
+select public.fn_seed_usage_events(public.fn_demo_ref());
 
 -- ── P06 Knowledge Base / RAG: knobs BY NAME (CLAUDE.md §3.8, [C] config). ──
 insert into catalog."Config_Knobs"(key, value, provenance, owner) values
