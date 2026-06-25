@@ -149,6 +149,8 @@ async function actOnLever(
             nbaId: res.nbaId,
             lever: { action_code: lever.action_code, dimension: lever.dimension, verdict: lever.verdict, cohort_rule_version: ruleVersion },
             embedding,
+            restaurantId: i.restaurantId, // 05D Part D — re-measure the SAME restaurant a window later
+            actedWeek: i.week,
           },
           c,
         );

@@ -25,11 +25,13 @@ export function DiagnosisRow({
   row,
   onOpen,
   onSteps,
+  onDecide,
   muted,
 }: {
   row: DiagnosisListRow;
   onOpen: (row: DiagnosisListRow) => void;
   onSteps?: (row: DiagnosisListRow) => void;
+  onDecide?: (row: DiagnosisListRow) => void;
   muted?: boolean;
 }) {
   return (
@@ -67,6 +69,11 @@ export function DiagnosisRow({
         </span>
       )}
       <div className="ml-auto flex gap-2">
+        {onDecide && row.needs_human && (
+          <Button onClick={() => onDecide(row)} className="text-mxm-content-inverted">
+            Record decision
+          </Button>
+        )}
         {onSteps && (
           <Button variant="ghost" onClick={() => onSteps(row)}>
             How it was diagnosed

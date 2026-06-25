@@ -135,3 +135,30 @@ export interface KnowledgeCaseView {
   discarded_branches: unknown;
   created_at: string;
 }
+
+// 05D Part C — human decision console. The operator confirms/overrides the area and writes the WHY for a
+// needs_human case. Areas = the classifier's closed set (reasoning.ts ALLOWED_AREAS); a free area is rejected
+// (fail-closed). rationale is required short [C] text. tenant + ownership resolved server-side (§7).
+export const decisionArea = z.enum(["finance", "product", "performance", "operations", "unclassified"]);
+export type DecisionArea = z.infer<typeof decisionArea>;
+export const DECISION_AREAS = decisionArea.options;
+export const decideDiagnosisInput = z.object({
+  problemId: z.string().min(1),
+  areaType: decisionArea,
+  rationale: z.string().trim().min(3).max(500),
+});
+export type DecideDiagnosisInput = z.infer<typeof decideDiagnosisInput>;
+export interface DecideDiagnosisResult {
+  ok: boolean;
+  kbCaseId: string;
+}
+
+// 05D Part C — decision #2 audit: what the Part D re-measurement auto-approved (verification_status=
+// 'verified_fixed'), so the human has visibility of the autonomous verifications. Read-only, tenant-scoped.
+export interface RecentlyVerifiedRow {
+  kb_case_id: string;
+  area_type: string;
+  pattern: string | null;
+  resolution: string | null;
+  created_at: string;
+}
