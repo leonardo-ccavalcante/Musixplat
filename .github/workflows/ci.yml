@@ -53,8 +53,102 @@ jobs:
       # + handoff RLS/idempotency/cross-pool + sandbox no-commit).
       - run: pnpm db:migrate
       - run: pnpm test:antifake
+      # Integration includes the §3.10 autonomy guard (compute_effective_level least()/tier-cap/null-arm),
+      # previously testable only in pgTAP (which the `pgtap` job below now also runs).
       - run: pnpm test:integration
 
-      # NOTE: pgTAP (`pnpm test:sql`) runs locally against the Supabase stack (which ships pgtap).
-      # Its assertions (determinism, k-anon/n_min boundaries, anti-mezcla) are mirrored in the
-      # integration suite above, so the CI gate keeps full coverage without the heavy stack.
+  # pgTAP (`supabase test db`) faithfully, without the heavy Supabase CLI: a fresh pgvector service →
+  # apply migrations → seed (raw only) → `create extension pgtap` (installed INTO the service container)
+  # → pg_prove (on the runner). Needs a CLEAN seeded DB (the gate job's integration suite leaves
+  # producer rows that would trip pgTAP's anti-fake assertions), hence a separate job. Verified locally:
+  # 20 files / 130 assertions PASS.
+  pgtap:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # pgTAP's extension files must live in the Postgres SERVICE container (not the runner).
+      - name: Install pgTAP into the postgres service
+        run: docker exec ${{ job.services.postgres.id }} bash -lc "apt-get update -qq && apt-get install -y postgresql-15-pgtap"
+      # pg_prove (the TAP harness) + psql run on the RUNNER, over localhost to the service.
+      - name: Install pg_prove + psql client on the runner
+        run: sudo apt-get update -qq && sudo apt-get install -y libtap-parser-sourcehandler-pgtap-perl postgresql-client
+      - run: pnpm db:migrate
+      - name: Seed (raw only — fail-closed on any error)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/seed.sql
+      - name: Enable pgTAP + run the SQL suite
+        run: |
+          psql "$DATABASE_URL" -c "create extension if not exists pgtap;"
+          pg_prove -d "$DATABASE_URL" supabase/tests/*.sql
+
+  # E2E + a11y (Playwright). Fresh pgvector service → migrate → seed → P01/P02 (cohorts + cockpit) →
+  # 05B (the POOL-PAY diagnosis scenario, deterministic without an LLM key) → run the specs. Playwright's
+  # webServer boots `pnpm dev`; the dev-login path is open here (NODE_ENV is not production).
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      JWT_SECRET: ci-only-test-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm db:migrate
+      - name: Seed + producers (cohorts/cockpit + the 05B diagnosis scenario)
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/seed.sql
+          pnpm db:p01
+          pnpm db:p02
+          pnpm db:05b
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
