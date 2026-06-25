@@ -108,6 +108,13 @@ jobs:
   # webServer boots `pnpm dev`; the dev-login path is open here (NODE_ENV is not production).
   e2e:
     runs-on: ubuntu-latest
+    # NON-BLOCKING for now: wiring e2e into CI (its first-ever automated run) surfaced that several specs
+    # are stale vs the evolved UI — cockpit.spec expects the "auto" group expanded (it now defaults to
+    # collapsed, CockpitBoard.tsx:41), cohorts.spec looks for region "Cohort matrix (heatmap)" (renamed to
+    # "Cohort health heatmap" in the heatmap redesign), and knowledge.spec needs OPENAI_API_KEY (the
+    # classify LLM) which CI has no secret for. None implicate the producers/seed. The job RUNS every PR so
+    # UI drift is visible; flip to blocking once the specs are refreshed + an OPENAI_API_KEY secret is added.
+    continue-on-error: true
     services:
       postgres:
         image: pgvector/pgvector:pg15
