@@ -42,12 +42,13 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
       restart identity cascade;
     `);
     // Pin the demo clock so seed.sql's fn_demo_ref()-anchored base + usage are deterministic across run
-    // dates (= the legacy 2026-06-17 anchor the fixtures expect). Reset to '' after so the pooled
-    // connection doesn't leak the GUC to later queries (diagnosis windows use current_date).
+    // dates (= the legacy 2026-06-17 anchor the fixtures expect).
     await c.query("select set_config('app.demo_ref', '2026-06-17', false)");
     await c.query(readFileSync(SEED_SQL, "utf8"));
-    await c.query("select set_config('app.demo_ref', '', false)");
   } finally {
+    // ALWAYS clear the GUC (even if seed.sql threw) so the pooled connection can't leak 2026-06-17 to a
+    // later query that expects current_date ('' ⇒ nullif ⇒ null ⇒ fn_demo_ref falls back to current_date).
+    await c.query("select set_config('app.demo_ref', '', false)");
     await c.query("select pg_advisory_unlock($1)", [RESET_LOCK]);
     c.release();
   }
