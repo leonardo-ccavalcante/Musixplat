@@ -22,7 +22,8 @@ import {
 import { searchKnowledge } from "../knowledge/store.js";
 import type { Embedder } from "../knowledge/embedder.js";
 import type { Criticality } from "../../shared/contracts_05b.js";
-import { getDescriptor } from "../../shared/problem_types.js";
+import { isMeasurable } from "../../shared/problem_types.js";
+import { resolveDescriptor } from "./resolveDescriptor.js";
 import { redactPII } from "../pieces/pii.js";
 
 // Deterministic candidate hypotheses per area (seed set; the provider only RANKS these, §8).
@@ -83,10 +84,10 @@ export interface DiagnosisResult {
   areaType: string;
   confidence: number | null; // a classifier inference [C]; NULL on the proactive/typed path (none ran)
   degraded: boolean;
-  affected: number;
-  silent: number;
+  affected: number | null; // NULL when unmeasurable (a live type with no bound producer) — never a fake 0 (§14)
+  silent: number | null;
   silentStatus: "evaluable" | "not_evaluable";
-  revenueLost: number;
+  revenueLost: number | null;
   route: string;
   nowQueue: "now" | "queue";
   priorityScore: number;
@@ -112,9 +113,10 @@ export async function runDiagnosis(
     )
   )[0];
   if (!prob) throw new Error("runDiagnosis: unknown problem (fail-closed)");
-  // 05D F0 — the descriptor the engine dispatches on (concentration axis, etc.). Fail-closed:
-  // getDescriptor RAISES on an unregistered type (never a silent wrong pipeline, §8).
-  const descriptor = getDescriptor(prob.problem_type);
+  // 05D F0/L3 — the descriptor the engine dispatches on. resolveDescriptor reads a builtin from CODE or a
+  // LIVE (operator-taught) type from the registry. Fail-closed: an unknown type RAISES (never a silent
+  // wrong pipeline, §8).
+  const descriptor = await resolveDescriptor(prob.problem_type);
 
   // B.2 classify + B.3 rank — TWO honest modes (05D descriptor-refactor):
   //  • REACTIVE (a Conversation exists): the AGENTE blind-classifies the episode text (§8) — it infers
@@ -186,13 +188,13 @@ export async function runDiagnosis(
     } else {
       // proactive/typed: descriptor authoritative. No classifyArea ran ⇒ confidence is NULL — we never
       // claim a classifier inference that did not occur (§3.6/§14 honesty, Codex P1); the area is the
-      // registered type's, marked [C] config-derived. NOT degraded here: the type is KNOWN (not an
-      // optimistic guess on unread input — the unknown-type case already RAISED at getDescriptor).
-      // TODO(05D-F5/L3): a LIVE-taught type with NO backing data / no KB precedent must honestly
-      // degrade-to-human ("can't measure yet", build-doc §C). Re-open that gate when defineType lands;
-      // today only the 5 vetted builtins reach this branch, all with real producers.
+      // registered type's, marked [C] config-derived.
+      // 05D L3 (resolves the old TODO): a LIVE type with NO bound producer (measured_by null/unknown) is
+      // unmeasurable ⇒ degrade-to-human ("can't measure yet"). Builtins + bound live types are measurable
+      // ⇒ NOT degraded (an unknown type already RAISED at resolveDescriptor). The short-circuit below stops
+      // the unmeasurable case before any producer runs, with honest NULL numbers (§14).
       cls = { areaType: descriptor.area_type, confidence: null };
-      degraded = false;
+      degraded = !isMeasurable(descriptor);
       rankSeed = descriptor.hypotheses;
     }
     await query(
@@ -232,7 +234,7 @@ export async function runDiagnosis(
     })),
   };
   const top: IssuePath = lazyFetchPath(tree, ranked[0]!.path_id);
-  if (!prob.conversation_id) {
+  if (!prob.conversation_id && descriptor.affected) {
     // proactive/typed: the consulted source is the descriptor's OWN evidence table (§3 provenance
     // honesty, Codex P2) — NOT a regex guess on the hypothesis text, which mis-resolves descriptor
     // phrasings (e.g. menu_quality's "menu items missing photos" → Conversation_Episode, a source
@@ -248,6 +250,36 @@ export async function runDiagnosis(
       where problem_id = $1 and tenant_id = $3`,
     [problemId, JSON.stringify(tree), tenantId],
   );
+
+  // 05D L3 — an UNMEASURABLE type (a live type with no bound producer) stops HERE with honest NULLs. There
+  // is no deterministic producer to run ⇒ affected/silent/revenue stay NULL ("can't measure yet" ≠ a
+  // measured 0, §14) and the case routes to a human (§7). Covers BOTH paths: a reactive unbound type would
+  // otherwise RAISE at the dispatcher (huntSilent is outside the rank try/catch). The ranked operator
+  // hypotheses ARE persisted above for the human console. (Resolves the old TODO(05D-F5/L3).)
+  if (!isMeasurable(descriptor)) {
+    await query(
+      `update tenant."Diagnosed_Problem"
+          set status = 'needs_human', silent_status = 'not_evaluable',
+              provenance_by_field = provenance_by_field || jsonb_build_object('status', '[C]')
+        where problem_id = $1 and tenant_id = $2`,
+      [problemId, tenantId],
+    );
+    const dossier = await emitDossier(problemId);
+    return {
+      problemId,
+      areaType: cls.areaType,
+      confidence: cls.confidence,
+      degraded: true,
+      affected: null,
+      silent: null,
+      silentStatus: "not_evaluable",
+      revenueLost: null,
+      route: routeStub(cls.areaType),
+      nowQueue: "queue",
+      priorityScore: 0,
+      dossier,
+    };
+  }
 
   // B.5 silent-hunt (SQL anti-join) — the affected/silent counts are PRODUCED here, never seeded (BR-B4, §14).
   // 05D F0: the dispatcher routes on problem_type; segment (null ⇒ whole pool) is the optional slice.

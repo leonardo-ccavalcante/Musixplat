@@ -106,7 +106,12 @@ export function DiagnosisPage() {
       await refetchAll();
       setRunMsg({
         status: "done",
-        text: `Diagnosed · ${out.affected} affected · ${out.silent} silent · €${out.revenue_lost} · route ${out.route}${tail}`,
+        // §14 honesty: an unmeasurable type (a live type with no bound producer) reports NULL counts — show
+        // "can't measure yet", never a fabricated 0.
+        text:
+          out.affected === null
+            ? `Diagnosed · can't measure yet (no detector bound) — routed to a human${tail}`
+            : `Diagnosed · ${out.affected} affected · ${out.silent} silent · €${out.revenue_lost} · route ${out.route}${tail}`,
       });
     } catch (e) {
       setRunMsg({ status: "error", text: e instanceof Error ? e.message : "run failed (fail-closed)" });

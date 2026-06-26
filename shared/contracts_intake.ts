@@ -45,9 +45,9 @@ export type UploadConversationsInput = z.infer<typeof uploadConversationsInput>;
 export interface IntakeResult {
   staged: number;
   problems: number;
-  affected: number;
-  silent: number;
-  revenue_lost: number;
+  affected: number | null; // NULL if the diagnosed type was unmeasurable (no bound producer) — never a fake 0 (§14)
+  silent: number | null;
+  revenue_lost: number | null;
   dossiers_complete: number;
   artifacts: number;
   note: string;

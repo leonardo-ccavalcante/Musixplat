@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PROBLEM_TYPES } from "./problem_types.js";
 
 // 05B Diagnosis — shared tRPC io + domain types (Zod v3, CLAUDE.md §1). Domain vocab native.
 // Piece-specific types live inside each server/diagnosis/* module; this file holds only the
@@ -112,13 +113,37 @@ export interface RunDiagnosisResult {
   area_type: string;
   confidence: number | null; // classifier inference [C]; NULL on the proactive/typed path (none ran)
   degraded: boolean;
-  affected: number;
-  silent: number;
+  affected: number | null; // NULL when unmeasurable (a live type with no bound producer) — never a fake 0 (§14)
+  silent: number | null;
   silent_status: string;
-  revenue_lost: number;
+  revenue_lost: number | null;
   route: string;
   dossier_emitted: boolean;
   dossier_gaps: string[];
+}
+
+// 05D L3 — teach a NEW (live) problem type at runtime. The operator owns the FRAME (area / concentration /
+// hypotheses / label / routing); measured_by binds the MEASUREMENT to an existing vetted producer, or null
+// ⇒ unmeasurable (the engine degrades-to-human). slug is a lowercase dispatch key (no spaces/SQL). All
+// fields are INPUT/config — never a produced number (§14).
+export const defineTypeInput = z.object({
+  problem_type: z.string().regex(/^[a-z][a-z0-9_]{1,48}$/, "lowercase slug: a-z, 0-9, _ (2-49 chars)"),
+  label: z.string().trim().min(1).max(100),
+  area_type: z.enum(["finance", "performance", "product", "operations"]),
+  concentration_dim: z.enum(["zone", "cuisine"]),
+  // single source for the builtin allowlist = PROBLEM_TYPES (never a re-hardcoded list). null = unmeasurable.
+  measured_by: z
+    .string()
+    .nullable()
+    .refine((v) => v === null || Object.prototype.hasOwnProperty.call(PROBLEM_TYPES, v), {
+      message: "measured_by must be a known builtin producer or null",
+    }),
+  hypotheses: z.array(z.string().trim().min(1).max(200)).min(1).max(10),
+});
+export type DefineTypeInput = z.infer<typeof defineTypeInput>;
+export interface DefineTypeResult {
+  problem_type: string;
+  measurable: boolean; // false ⇒ no bound producer ⇒ the engine will degrade-to-human (§14)
 }
 
 // getKnowledgeCase — the dossier's "similar cases" links open these KB precedents (BR-B3 grounding).
