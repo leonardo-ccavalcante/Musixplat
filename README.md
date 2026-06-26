@@ -64,15 +64,31 @@ Vite 7 · React 19 · wouter · tRPC v11 · Express · Zod v3 · TanStack Query 
 
 UI is dark-only, token-based (`--mxm-*`), and checked for WCAG 2.1 AA.
 
+## Prerequisites
+
+- **Node 22** (`nvm use` — the repo pins `engines.node >= 22`)
+- **pnpm 11** via `corepack enable` (matches CI's pnpm major)
+- **Docker** running — `pnpm db:start` boots the local Supabase stack in Docker
+
 ## Run Locally
 
 ```bash
 pnpm install
 pnpm db:start
-pnpm db:reset
-pnpm db:p01
+pnpm db:reset      # schema + seed (config, catalog, users, 5000-restaurant base)
+pnpm db:p01        # Cohorts
+pnpm db:p02        # Cockpit + Observatory
+pnpm db:05b        # Diagnosis / Cost / Knowledge (POOL-PAY 47/35 scenario)
 pnpm dev
 ```
+
+Each screen reads a different producer — run the one(s) you need:
+
+| Screen | Pool | Producer |
+|---|---|---|
+| Cohorts | POOL-001 | `db:p01` |
+| Cockpit · Observatory | POOL-001 | `db:p02` |
+| Diagnosis · Cost · Knowledge · Health | POOL-PAY | `db:05b` (or drive live via the in-app "Run flow") |
 
 Local ports are intentionally non-default:
 
@@ -116,19 +132,10 @@ Notes:
 
 ## Deploy
 
-GitHub:
-
-```bash
-git remote add origin <url>
-git push -u origin main
-```
-
-Supabase hosted:
-
-```bash
-pnpm exec supabase link --project-ref <ref>
-pnpm db:push
-```
+Prod is **Railway**. Push to the connected branch — the `preDeployCommand` (`apply-hosted`) applies
+migrations and, on a fresh DB, seeds + runs the producers, so the app comes up populated and logged-in.
+Set the required Variables on Railway first (`JWT_SECRET`, `DATABASE_URL`, `OPENAI_API_KEY`, and
+`DEMO_LOGIN=1` for the public demo). Full steps: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 Put only env var names in committed files. Real values stay outside the repo; use `.env.example` as the checklist.
 

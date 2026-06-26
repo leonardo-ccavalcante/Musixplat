@@ -18,6 +18,6 @@
       "@server/*": ["server/*"]
     }
   },
-  "include": ["server", "shared", "scripts/apply-migrations.ts", "scripts/migrate-plan.ts"],
+  "include": ["server", "shared", "scripts/apply-migrations.ts", "scripts/migrate-plan.ts", "scripts/apply-hosted.ts"],
   "exclude": ["node_modules", "dist", "client", "tests", "e2e"]
 }
