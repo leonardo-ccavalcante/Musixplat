@@ -11,7 +11,7 @@ AI-first Customer-Ops platform (Uber Eats domain). This file is the **single sou
 
 ## §1 — Stack & repo map · resolves every `[STACK-TUNE]`
 
-Stack is all-TypeScript, proven on Manus deploy (ref `leonardo-ccavalcante/bocatas_digital`). **Manus = deploy/OAuth layer only; it does not dictate the stack.** Pin these versions — do not invent newer APIs (Block H, package hallucination).
+Stack is all-TypeScript (scaffold ref `leonardo-ccavalcante/bocatas_digital`). Pin these versions — do not invent newer APIs (Block H, package hallucination).
 
 | Layer | Tech | Notes |
 |---|---|---|
@@ -25,7 +25,7 @@ Stack is all-TypeScript, proven on Manus deploy (ref `leonardo-ccavalcante/bocat
 | State machine | XState v5 | complex flows only (e.g. sandbox) |
 | DB | Supabase Postgres + RLS + Realtime | EU region |
 | **Deterministic jobs** | **TS + SQL, ZERO Python** | math lives in Postgres functions / `Named_Query`; orchestration/scheduling in TS (Edge/Deno or Node worker + `pg_cron` / n8n schedule) |
-| Deploy | Manus | OAuth `oauth.manus.im`, Forge API |
+| Deploy | Railway (Nixpacks) | `preDeployCommand` (`apply-hosted`) = tracked migrations + seed-if-fresh; auth = demo `dev-login` gated by `DEMO_LOGIN` (no OAuth implemented) |
 
 **Repo map** (mirror Bocatas): `client/src/{pages,features,components,components/ui,lib,hooks}` · `server/{routers,_core,db}` · `shared/` (types imported by both sides) · `supabase/{migrations,functions}` · `e2e/` · `tests/`.
 

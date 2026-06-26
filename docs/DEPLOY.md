@@ -1,45 +1,53 @@
-# Deploy & database migrations
+# Deploy & database
 
-Prod runs on **Railway** (Nixpacks: `pnpm install` → `pnpm build` → `pnpm start`).
-`railway.json` adds a `deploy.preDeployCommand` that applies pending DB migrations **before each
-release goes live**. A failing migration aborts the deploy (fail-closed — no half-applied schema,
-no broken release).
+Prod runs on **Railway** (Nixpacks: `pnpm install` → `pnpm build` → `pnpm start`). `railway.json` sets a
+`deploy.preDeployCommand` that runs **before each release goes live** and is **idempotent + fail-closed**
+(any error aborts the deploy — no half-applied release):
 
-## How migrations are tracked
+```
+preDeployCommand: node dist/server/scripts/apply-hosted.js
+```
 
-`scripts/apply-migrations.ts` records every applied file in `public._schema_migrations`. On each run
-it applies **only files not yet recorded** (idempotent — safe to re-run every deploy). Each migration
-runs in its own transaction. Apply order = lexical filename order (every file is timestamp-prefixed).
+`apply-hosted` does two things on every deploy:
+1. **Applies pending migrations** via the tracked `public._schema_migrations` ledger (same mechanism as
+   `pnpm db:migrate`) — only files not yet recorded run, each in its own transaction.
+2. **Seeds ONLY a fresh DB.** If `gov.User` is empty (a brand-new project), it runs `supabase/seed.sql`
+   (config knobs + catalog + users incl. `U-OP-001` + the 5000-restaurant base, anchored to **today** via
+   `fn_demo_ref()` so the board never ages) and the P01/P02 producers — so a fresh deploy comes up
+   **populated AND logged-in** (Cohorts / Cockpit / Observatory). An already-bootstrapped DB **skips** the
+   seed entirely, so re-deploys never re-seed or wipe operator data.
 
-- `pnpm db:migrate` — apply pending migrations (this is the preDeployCommand, compiled to
-  `dist/server/scripts/apply-migrations.js` for prod; CI runs it via `tsx`).
-- `pnpm db:migrate -- --baseline` — record ALL current files as applied **without running them**
-  (one-time adoption on a DB whose schema predates the tracking table).
+## First deploy on a fresh project (do once)
 
-## One-time adoption on an existing prod DB (do this ONCE, in this exact order)
+1. **Set the Railway service Variables** (Railway dashboard → Variables):
+   - `JWT_SECRET` — a long random value
+   - `DATABASE_URL` — the Postgres connection (Supabase session-pooler URL)
+   - `OPENAI_API_KEY` — required (embeddings + chat); the app boot refuses production without it
+   - `DEMO_LOGIN=1` — **required for the public demo**: without it, `/auth/dev-login` returns 404 in
+     production and every screen is blank (there is no other auth path yet)
+2. **Deploy** (push to the connected branch). The `preDeployCommand` auto-applies migrations and, on a
+   fresh DB, seeds + runs P01/P02.
+3. **Open the app.** Login is automatic (DEMO_LOGIN). Cohorts, Cockpit and Observatory already show real
+   data. **Diagnosis / Cost / Knowledge / Health** authenticate immediately and fill on the first in-app
+   **"Run flow"** (the POOL-PAY diagnosis scenario is intentionally not staged at deploy time).
 
-The tracking table does not exist on a DB created before this change, so the **order matters** — get
-it wrong and a missing migration gets silently marked "applied" and never runs.
+## Adopting an EXISTING prod DB that predates migration tracking (one-time, exact order)
 
-1. **Apply any genuinely-missing migration manually, FIRST.** As of this change prod is missing
-   `supabase/migrations/20260620000010_fn_generate_business_base.sql` (it is `create or replace`, so
-   safe to run):
-   ```bash
-   railway run node -e "const{Pool}=require('pg'),fs=require('fs');new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}}).query(fs.readFileSync('supabase/migrations/20260620000010_fn_generate_business_base.sql','utf8')).then(()=>console.log('applied')).catch(e=>{console.error(e);process.exit(1)})"
-   ```
-2. **Then baseline**, so the runner won't try to re-run the already-present (non-idempotent) DDL:
+If the DB was created before `_schema_migrations` existed, **order matters** — baseline before applying a
+genuinely-missing migration and that migration is silently marked "applied" and never runs.
+
+1. Apply any genuinely-missing migration manually FIRST (use the Supabase SQL Editor — paste the file).
+2. Then baseline so the runner won't re-run already-present (non-idempotent) DDL:
    ```bash
    railway run pnpm db:migrate -- --baseline
    ```
-3. Merge this PR. From now on every deploy auto-applies only genuinely-new migration files.
+3. From then on every deploy auto-applies only genuinely-new migrations.
 
-> ⚠️ If you baseline **before** step 1, the missing migration is recorded as applied but never runs —
-> the original `function ... does not exist` error stays. Step 1 before step 2, always.
-
-If you are unsure which migrations prod is missing, baseline only marks files as applied; it does not
-verify the schema. Spot-check the most recent migrations against prod before baselining.
+> Baseline only marks files as applied; it does not verify the schema. Spot-check recent migrations
+> against prod before baselining.
 
 ## CI
 
-CI runs `pnpm db:migrate` against a fresh postgres service each run — empty tracking table → all
-migrations apply once. Behaviour is unchanged by this tracking (just additive bookkeeping).
+CI runs `pnpm db:migrate` (the tracked runner) against a fresh Postgres service each run — empty ledger
+→ all migrations apply once. `apply-hosted` reuses that same `migrate()`, so CI and prod share one
+migration mechanism.
