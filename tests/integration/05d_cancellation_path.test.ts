@@ -3,6 +3,7 @@ import type pg from "pg";
 import { makePool, resetDb } from "../helpers/db";
 import { appRouter } from "../../server/routers/_app";
 import { runDiagnosis } from "../../server/diagnosis/orchestrator";
+import { resolveDescriptor } from "../../server/diagnosis/resolveDescriptor";
 import type { Context } from "../../server/_core/context";
 
 // 05D — a THIRD problem type (cancellation) flows E2E through the SAME descriptor-driven engine:
@@ -148,12 +149,16 @@ describe("05D — cancellation E2E via the general descriptor path (zero payment
     expect(out.revenueLost).toBeGreaterThan(0);
   });
 
-  it("cancellation descriptor area_type is 'operations' in the catalog registry (the honest domain area)", async () => {
-    await stageCancellation();
-    const r = await pool.query<{ area_type: string }>(
-      `select area_type from catalog."Problem_Type" where problem_type = 'cancellation'`,
+  it("cancellation resolves to 'operations' from CODE; the registry holds only live types (L3 single-source)", async () => {
+    // 05D L3 — builtins live in shared/problem_types.ts (+ their SQL detector), NOT the catalog. The dead
+    // duplicate rows were removed; resolveDescriptor reads a builtin from code and a live type from the DB.
+    const d = await resolveDescriptor("cancellation");
+    expect(d.area_type).toBe("operations");
+    expect(d.origin).toBe("builtin");
+    const c = await pool.query<{ n: number }>(
+      `select count(*)::int n from catalog."Problem_Type" where problem_type = 'cancellation'`,
     );
-    expect(r.rows[0]!.area_type).toBe("operations");
+    expect(c.rows[0]!.n).toBe(0); // absent from the live-only registry
   });
 
   it("cancellation where_concentrated derived from Affected on the 'zone' axis (Centro = 8, the peak)", async () => {

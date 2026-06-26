@@ -10,6 +10,7 @@ import { AutonomousRegistry } from "@/features/cockpit/AutonomousRegistry";
 import { EscalatedList } from "@/features/cockpit/EscalatedList";
 import { AutonomyControls } from "@/features/cockpit/AutonomyControls";
 import { CockpitSetup } from "@/features/cockpit/CockpitSetup";
+import { TeachTypeModal } from "@/features/cockpit/TeachTypeModal";
 import { CockpitFocusCue } from "@/features/cockpit/CockpitFocusCue";
 import { Button } from "@/components/ui/Button";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
@@ -38,6 +39,7 @@ export function CockpitPage() {
   const [escalationsOpen, setEscalationsOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [teachOpen, setTeachOpen] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [motorResult, setMotorResult] = useState<MotorRunResult | null>(null);
@@ -198,6 +200,10 @@ export function CockpitPage() {
           <Button variant="ghost" onClick={() => setControlsOpen(true)} aria-haspopup="dialog">
             Autonomy Controls
           </Button>
+          {/* 05D L3 — teach the engine a NEW problem type at runtime (manager-gated; no source edit). */}
+          <Button variant="ghost" onClick={() => setTeachOpen(true)} aria-haspopup="dialog">
+            Teach a type
+          </Button>
         </div>
       </header>
 
@@ -314,6 +320,7 @@ export function CockpitPage() {
       <EscalatedList open={escalationsOpen} onClose={() => setEscalationsOpen(false)} />
       <AutonomyControls open={controlsOpen} onClose={() => setControlsOpen(false)} />
       <CockpitSetup open={setupOpen} onClose={() => setSetupOpen(false)} />
+      <TeachTypeModal open={teachOpen} onClose={() => setTeachOpen(false)} />
     </main>
   );
 }

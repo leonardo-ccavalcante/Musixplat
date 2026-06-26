@@ -4,9 +4,15 @@ export interface AffectedDescriptor { table: string; signal: string; operator?: 
 export interface ImpactDescriptor { kind: "sum_net_value" | "gmv_window" | "at_risk_gmv"; }
 export interface ProblemDescriptor {
   problem_type: string; area_type: "finance" | "performance" | "product" | "operations";
-  label: string; affected: AffectedDescriptor; impact: ImpactDescriptor;
+  label: string;
+  // affected/impact/metric describe the MEASUREMENT. Builtins always carry them; a LIVE (operator-taught)
+  // type INHERITS them from its bound producer (measured_by) and leaves them UNDEFINED when nothing is
+  // bound — that type is unmeasurable and the engine degrades-to-human (§14). concentration_dim +
+  // hypotheses are always present (the operator owns those for a live type).
+  affected?: AffectedDescriptor; impact?: ImpactDescriptor; metric?: string;
   concentration_dim: "zone" | "cuisine"; hypotheses: string[];
-  metric: string; origin: "builtin" | "live";
+  origin: "builtin" | "live";
+  measured_by?: string | null; // live: bound vetted producer (null/absent ⇒ unmeasurable). builtin: absent.
 }
 export const PROBLEM_TYPES: Record<string, ProblemDescriptor> = {
   payment: {
@@ -65,4 +71,36 @@ export function getDescriptor(t: string): ProblemDescriptor {
   const d = PROBLEM_TYPES[t];
   if (!d) throw new Error(`unknown problem_type (fail-closed): ${t}`);
   return d;
+}
+
+// 05D L3 — the registry row of a LIVE (operator-taught) type. No SQL here (shared); the server reads it.
+export interface LiveTypeRow {
+  problem_type: string; area_type: string; label: string | null;
+  hypotheses: unknown; measured_by: string | null; concentration_dim: string;
+}
+
+// Build a descriptor for a LIVE type from its registry row. The operator owns the FRAME
+// (area/label/concentration/hypotheses); the MEASUREMENT (affected/impact/metric) is INHERITED from the
+// bound vetted producer (measured_by) so it can never desync from the real detector. An unbound — or
+// unknown-bound — live type leaves affected/impact undefined ⇒ unmeasurable ⇒ degrade-to-human (§14).
+export function liveDescriptor(row: LiveTypeRow): ProblemDescriptor {
+  const bound = row.measured_by ? PROBLEM_TYPES[row.measured_by] : undefined;
+  return {
+    problem_type: row.problem_type,
+    area_type: row.area_type as ProblemDescriptor["area_type"],
+    label: row.label ?? row.problem_type,
+    concentration_dim: row.concentration_dim as ProblemDescriptor["concentration_dim"],
+    hypotheses: Array.isArray(row.hypotheses) ? row.hypotheses.map(String) : [],
+    origin: "live",
+    measured_by: row.measured_by,
+    affected: bound?.affected,
+    impact: bound?.impact,
+    metric: bound?.metric,
+  };
+}
+
+// Measurable iff there is a deterministic producer to run: builtins always have one; a live type only when
+// measured_by binds to a real builtin (⇒ affected was inherited). No producer ⇒ honest degrade-to-human.
+export function isMeasurable(d: ProblemDescriptor): boolean {
+  return d.affected !== undefined;
 }

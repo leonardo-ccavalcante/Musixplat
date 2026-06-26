@@ -326,7 +326,7 @@ describe("05D descriptor-refactor — proactive path is descriptor-authoritative
     expect(after[0]?.prov.area_type).toBe("[C]"); // a classification marker, never promoted to a fact (§8)
     expect(after[0]?.confidence).toBeNull(); // persisted NULL — honest about the inference that never ran (Codex P1)
     // the consulted source is the descriptor's OWN evidence table, not a regex guess on the hypothesis (Codex P2)
-    expect(after[0]?.issue_tree.paths[0]?.source_consulted).toBe(`tenant.${getDescriptor("connection").affected.table}`);
+    expect(after[0]?.issue_tree.paths[0]?.source_consulted).toBe(`tenant.${getDescriptor("connection").affected!.table}`);
   });
 });
 

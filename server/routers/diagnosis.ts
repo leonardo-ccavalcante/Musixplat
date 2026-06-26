@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc.js";
+import { router, tenantProcedure, managerProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 import { readDossier, emitDossier } from "../diagnosis/dossier.js";
 import { computeImpactLedger } from "../diagnosis/impact.js";
@@ -8,12 +8,14 @@ import { runDiagnosis } from "../diagnosis/orchestrator.js";
 import { triggerActionForProblem } from "../diagnosis/triggerAction.js";
 import { diagnosisReasoning } from "../diagnosis/provider.js";
 import { recordHumanDecision, listRecentlyVerified } from "../diagnosis/decision.js";
+import { defineType } from "../diagnosis/defineType.js";
 import {
   reportProblemInput,
   getDossierInput,
   getKnowledgeCaseInput,
   runDiagnosisInput,
   decideDiagnosisInput,
+  defineTypeInput,
   type ReportProblemResult,
   type DiagnosisListRow,
   type DiagnosisOrigin,
@@ -21,6 +23,7 @@ import {
   type RunDiagnosisResult,
   type DecideDiagnosisResult,
   type RecentlyVerifiedRow,
+  type DefineTypeResult,
 } from "../../shared/contracts_05b.js";
 
 // 05B:US-B1.1.1 (gate tenant_id + restaurant_id) + 05B:B.1.3 (dedup create-or-increment).
@@ -110,6 +113,13 @@ export async function firstPoolRestaurant(tenantId: string, exec: Exec): Promise
 }
 
 export const diagnosisRouter = router({
+  // 05D L3 — teach a NEW problem type at runtime. Governance act ⇒ managerProcedure (senior manager only,
+  // role read server-side), mirroring cockpit.uploadConfig. The engine then reads it via resolveDescriptor;
+  // §14: stores INPUT only (area/hypotheses/measured_by), never a produced number.
+  defineType: managerProcedure
+    .input(defineTypeInput)
+    .mutation(({ ctx, input }): Promise<DefineTypeResult> => defineType(ctx.tenantId, ctx.userId, input)),
+
   reportProblem: tenantProcedure
     .input(reportProblemInput)
     .mutation(async ({ ctx, input }): Promise<ReportProblemResult> => {

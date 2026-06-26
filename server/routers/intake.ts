@@ -23,7 +23,7 @@ async function runSpine(
   reportOn: string,
   conversationId: string | null,
   crit: string | null,
-): Promise<{ affected: number; silent: number; revenue_lost: number; dossier_complete: boolean; artifact: boolean }> {
+): Promise<{ affected: number | null; silent: number | null; revenue_lost: number | null; dossier_complete: boolean; artifact: boolean }> {
   // create-or-increment the open problem (same contract as diagnosis.reportProblem B.1.3).
   const ins = await query<{ problem_id: string }>(
     `insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, conversation_id, criticality, status, frequency)
