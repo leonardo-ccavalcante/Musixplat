@@ -103,7 +103,9 @@ export function CockpitHero({
         {/* 02:CP2 — run the engine: it proposes + the AI acts ALONE on the safe, non-money ones (money always
             waits for you). The spectrum is produced live (§14), then surfaced as plain language. */}
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-mxm-border pt-4">
-          <Button onClick={onRunNba} disabled={running} aria-busy={running}>
+          {/* a11y: the coral primary needs dark (inverted) text — white on --mxm-brand is only 3.27:1, below
+              WCAG 2.1 AA 4.5:1 for normal-weight 14px. Matches the diagnosis "Run flow" CTA (text-inverted). */}
+          <Button onClick={onRunNba} disabled={running} aria-busy={running} className="text-mxm-content-inverted">
             {running ? "Running the engine…" : "Run NBA"}
           </Button>
           <span aria-live="polite" className="text-xs text-mxm-content-secondary">

@@ -121,7 +121,8 @@ export function CohortsExplorerPage() {
             <Button type="button" onClick={() => void runFlow()} disabled={running} variant="ghost">
               {running ? "Running P01…" : "Run flow"}
             </Button>
-            <Button type="button" variant="primary" onClick={() => void onGenerate()} disabled={running}>
+            {/* a11y: coral primary needs dark (inverted) text — white on --mxm-brand is 3.27:1 (< AA 4.5:1). */}
+            <Button type="button" variant="primary" onClick={() => void onGenerate()} disabled={running} className="text-mxm-content-inverted">
               Generate example base
             </Button>
             <Button type="button" variant="ghost" onClick={() => setUploadOpen(true)} disabled={running}>

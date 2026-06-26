@@ -11,6 +11,9 @@ test("@a11y Autonomy Cockpit renders proposals + verdicts + passes axe (WCAG 2.1
 
   // Proposals load (the hero posture + the grouped queue), and both verdicts appear on the board.
   await expect(page.getByRole("region", { name: "Fleet autonomy posture" })).toBeVisible({ timeout: 20_000 });
+  // The "Auto-handled" group folds closed by default (CockpitBoard.tsx), so its per-row AUTO badge starts
+  // hidden — expand every group so the "AI acts alone" verdict renders. "Needs human" groups open by default.
+  await page.getByRole("button", { name: "Expand all" }).click();
   await expect(page.getByText(/AUTO · AI acts alone/).first()).toBeVisible();
   await expect(page.getByText(/Needs human/).first()).toBeVisible();
 
@@ -21,15 +24,26 @@ test("@a11y Autonomy Cockpit renders proposals + verdicts + passes axe (WCAG 2.1
   expect(serious, JSON.stringify(serious.map((v) => v.id))).toEqual([]);
 });
 
-test("a human Release records a Decision_Trace (shows the trace id)", async ({ page }) => {
+test("a human Release goes through the dispatch screen and sends (records a Decision_Trace)", async ({ page }) => {
   await page.goto("/cockpit");
   await expect(page.getByRole("region", { name: "Fleet autonomy posture" })).toBeVisible({ timeout: 20_000 });
 
-  // needs-human groups (money/level/gate) are open by default → the first Release is reachable.
+  // needs-human groups (money/level) are open by default → the first Release is reachable.
   const release = page.getByRole("button", { name: "Release" }).first();
   await expect(release).toBeVisible();
   await release.click();
-  await expect(page.getByText(/Released ✓ trace/).first()).toBeVisible({ timeout: 10_000 });
+
+  // 02:1a — Release no longer resolves inline; it opens the dispatch screen, where the operator reviews the
+  // outgoing message and then sends. Send writes Release_Batch + Decision_Trace + Action_Dispatch atomically.
+  await expect(page).toHaveURL(/\/cockpit\/dispatch\//);
+  const send = page.getByRole("button", { name: /Send to all/i });
+  await expect(send).toBeVisible({ timeout: 15_000 });
+  await send.click();
+
+  // On success the dispatch returns to the cockpit board (the trace is persisted server-side, not surfaced
+  // as an id). Back on /cockpit with the board rendered = the release went through end-to-end.
+  await expect(page).toHaveURL(/\/cockpit$/, { timeout: 15_000 });
+  await expect(page.getByRole("region", { name: "Fleet autonomy posture" })).toBeVisible({ timeout: 15_000 });
 });
 
 // 02:CP — "View cohort in Cockpit" focus (?focus=<cohort>). Alt 1 = guide the eye, never narrow the board.

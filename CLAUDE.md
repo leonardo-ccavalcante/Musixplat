@@ -43,7 +43,7 @@ Stack is all-TypeScript, proven on Manus deploy (ref `leonardo-ccavalcante/bocat
 | `<comando test RLS>`, `<comando test concurrencia>` | `pnpm test:integration` (RLS/concurrency are integration tests; `RLS_TESTS_ENABLED=1`) |
 | build / lint / db | `pnpm build` · `pnpm lint` · `supabase db reset` · `supabase migration new <name>` |
 
-CI gate (GitHub Actions). **Blocking jobs:** **gate** (lint · typecheck · test · db:migrate · test:antifake · test:integration) and **pgtap** (`test:sql` via pg_prove on a fresh seeded pgvector service — incl. the §3.10 autonomy `compute_effective_level` semantics). **Non-blocking:** **e2e** (Playwright `test:e2e` incl. `@a11y` axe) runs every PR for visibility but does not gate yet — several specs are stale vs the evolved UI and knowledge.spec needs an `OPENAI_API_KEY` secret; flip to blocking once the specs are refreshed. Lighthouse is local/manual. A piece is not done until its gate is green **with evidence** (command + output).
+CI gate (GitHub Actions). **Blocking jobs:** **gate** (lint · typecheck · test · db:migrate · test:antifake · test:integration), **pgtap** (`test:sql` via pg_prove on a fresh seeded pgvector service — incl. the §3.10 autonomy `compute_effective_level` semantics), and **e2e** (Playwright `test:e2e` incl. `@a11y` axe — fresh pgvector service → migrate → seed → P01/P02/05B producers → specs). `knowledge.spec` self-skips when `OPENAI_API_KEY` is absent (the KB classify LLM step), so CI's lack of that secret doesn't gate it; add the secret to the e2e job `env` to exercise that path. Lighthouse is local/manual. A piece is not done until its gate is green **with evidence** (command + output).
 
 ## §2 — Task framing (Block B)
 
