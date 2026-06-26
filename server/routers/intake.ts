@@ -1,6 +1,7 @@
 import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 import { runDiagnosis } from "../diagnosis/orchestrator.js";
+import { triggerActionForProblem } from "../diagnosis/triggerAction.js";
 import { diagnosisReasoning } from "../diagnosis/provider.js";
 import { computeImpactLedger } from "../diagnosis/impact.js";
 import { emitDossier } from "../diagnosis/dossier.js";
@@ -39,12 +40,23 @@ async function runSpine(
   await computeImpactLedger(problemId);
   const gate = await emitDossier(problemId);
   if (gate.emitted) {
-    await query(
+    // Stamp the FIRST emission only — the returned row is the one-shot signal for the close-the-loop trigger
+    // (a dedup-rerun of the same complete problem never re-stamps nor re-fires the motor; idempotent, Codex P2).
+    const stamped = await query(
       `update tenant."Diagnosed_Problem"
-          set dossier_emitted_at = coalesce(dossier_emitted_at, now())
-        where problem_id=$1 and tenant_id=$2`,
+          set dossier_emitted_at = now()
+        where problem_id=$1 and tenant_id=$2 and dossier_emitted_at is null
+        returning 1`,
       [problemId, tenantId],
     );
+    // 05D close-the-loop: on first completion, fire the action motor for the diagnosed restaurants.
+    // Fail-CLOSED (a partial dossier never auto-acts, §7) + one-shot + fail-OPEN (never breaks intake).
+    if (stamped.length)
+      await triggerActionForProblem(problemId, tenantId).catch((e) => {
+        // Observability (Codex P1): fail-OPEN (intake/dossier stands) but the failure is LOGGED, not swallowed.
+        console.warn(`[05D close-loop] trigger failed for problem ${problemId}:`, e);
+        return null;
+      });
   }
   let artifact = false;
   if (gate.emitted) {
