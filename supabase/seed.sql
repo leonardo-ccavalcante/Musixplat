@@ -219,3 +219,13 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('motor_min_confidence',          '0.6',      '[C]', 'leo'),
   ('motor_allowed_actions_default', 'A1,A4,A6', '[C]', 'leo')
 on conflict (key) do nothing;
+
+-- ── EPIC-B4 eval-evaluator thresholds (§3.8 by-name). [C] config, not RESULTs ⇒ seeding allowed (§14).
+--    The status gate (server/eval/runEval.ts) reads these by name; a missing knob ⇒ NaN ⇒ status red
+--    (fail-closed §3.7). Mirrored in the migration (hosted full-reset path); both use on-conflict-do-nothing
+--    so an operator-tuned value is never clobbered. ──
+insert into catalog."Config_Knobs"(key, value, provenance, owner) values
+  ('eval_pass_threshold', '0.80', '[C]', 'b4'),   -- min pass_rate (AI label == correct_label)
+  ('eval_min_n',          '30',   '[C]', 'b4'),   -- min golden cases graded (archive: >=30/root-cause)
+  ('eval_kappa_min',      '0.60', '[C]', 'b4')    -- min Fleiss κ (substantial judge agreement)
+on conflict (key) do nothing;

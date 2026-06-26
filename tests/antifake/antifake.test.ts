@@ -30,6 +30,10 @@ describe("§14 anti-fake — results are NULL/empty pre-run", () => {
     // 02:1A/02:1B producers — the engine writes these at runtime, never seeded (§14).
     expect(await count(pool, 'gov."NBA_Proposal"')).toBe(0);
     expect(await count(pool, 'gov."min_calculation"')).toBe(0);
+    // EPIC-B4 eval evaluator — the VERDICT is produced by runEval, never seeded. The golden-set
+    // INPUT (Eval_Set/Eval_Case/Eval_Judge_Label) is seedable [V], but Eval_Cell verdict rows are NOT.
+    expect(await count(pool, 'gov."Eval_Cell"')).toBe(0);
+    expect(await count(pool, 'gov."Eval_Cell" where released_evals is not null or status is not null or n_golden_cases is not null')).toBe(0);
     // 05C artifact — generateFromDossier creates rows at runtime; never seeded (§14).
     expect(await count(pool, 'gov."Generated_Artifact"')).toBe(0);
     expect(await count(pool, 'gov."Artifact_Decision"')).toBe(0);
