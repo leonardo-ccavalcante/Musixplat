@@ -24,7 +24,9 @@ preDeployCommand: node dist/server/scripts/apply-hosted.js
    - `DATABASE_URL` — the Postgres connection (Supabase session-pooler URL)
    - `OPENAI_API_KEY` — required (embeddings + chat); the app boot refuses production without it
    - `DEMO_LOGIN=1` — **required for the public demo**: without it, `/auth/dev-login` returns 404 in
-     production and every screen is blank (there is no other auth path yet)
+     production and every screen is blank (there is no other auth path yet).
+     **⚠️ Security:** with it set, ANY visitor gets a senior-manager session (write access — uploadConfig,
+     autonomy controls). Use only on a disposable demo DB, never on a deploy holding real data.
 2. **Deploy** (push to the connected branch). The `preDeployCommand` auto-applies migrations and, on a
    fresh DB, seeds + runs P01/P02.
 3. **Open the app.** Login is automatic (DEMO_LOGIN). Cohorts, Cockpit and Observatory already show real
