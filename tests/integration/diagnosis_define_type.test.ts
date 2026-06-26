@@ -122,3 +122,42 @@ describe("05D L3 — rot-lock (one home per type; the registry stays honest)", (
     await expect(resolveDescriptor("does_not_exist")).rejects.toThrow(/unknown problem_type/);
   });
 });
+
+// 05D L3 — the registry is PLATFORM-WIDE BY DESIGN (Leo, 2026-06-26): a taught type is shared across pools
+// like a builtin (the Config_Knobs governance model), and the immutability freeze is intentionally CROSS-POOL
+// (protects every pool's baseline). These tests PIN that intended behavior so it can't silently drift.
+describe("05D L3 — platform-wide registry (intended global semantics, pinned)", () => {
+  const POOL_B = "POOL-DEF-B";
+  beforeEach(async () => {
+    await pool.query(
+      `insert into gov."User"(user_id, tenant_id, org_level, role) values ('U-MGR-B', $1, 'team', 'agent_manager_senior')`,
+      [POOL_B],
+    );
+  });
+
+  it("a type taught by one pool is resolvable platform-wide (global, no tenant)", async () => {
+    await caller("U-MGR").diagnosis.defineType({ ...INPUT, problem_type: "global_type" });
+    const d = await resolveDescriptor("global_type");
+    expect(d.origin).toBe("live");
+    expect(d.measured_by).toBe("connection");
+  });
+
+  it("once ANY pool USES a type, its definition is frozen against EVERY pool (cross-pool baseline protection)", async () => {
+    await caller("U-MGR").diagnosis.defineType({ ...INPUT, problem_type: "shared_frozen" });
+    // POOL-DEF reports a problem of it ⇒ now used.
+    await pool.query(
+      `insert into tenant."Restaurant"(restaurant_id, tenant_id, tier_base, segment, signup_date, zone)
+       values ('R-A', $1, 'long_tail', 'long_tail'::segment, date '2026-01-01', 'Centro')`,
+      [POOL],
+    );
+    await pool.query(
+      `insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, status, frequency, problem_type)
+       values ($1, 'R-A', 'open', 1, 'shared_frozen')`,
+      [POOL],
+    );
+    // A DIFFERENT pool's senior manager can no longer redefine it (frozen cross-pool).
+    await expect(
+      caller("U-MGR-B", POOL_B).diagnosis.defineType({ ...INPUT, problem_type: "shared_frozen", measured_by: "cancellation" }),
+    ).rejects.toThrow(/in use|frozen/i);
+  });
+});

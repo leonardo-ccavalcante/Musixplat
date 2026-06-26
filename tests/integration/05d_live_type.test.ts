@@ -117,6 +117,23 @@ describe("05D L3 — a live type with NO bound producer degrades-to-human (§14 
     expect(res.silent_status).toBe("not_evaluable");
     expect(res.dossier_emitted).toBe(false); // partial — nothing measured (§14)
   });
+
+  it("a BOUND live type with NO backing data (empty source table) degrades-to-human (Codex P1 / §14)", async () => {
+    // stageRestaurant inserts Orders but NO Weekly_Connection rows. A type bound to 'connection' therefore
+    // has its producer present but its SOURCE TABLE empty for this tenant ⇒ "can't measure yet", never a 0.
+    await stageRestaurant();
+    await pool.query(
+      `insert into catalog."Problem_Type"
+         (problem_type, area_type, label, hypotheses, measured_by, concentration_dim, origin, defined_by)
+       values ('blackout_nodata', 'operations', 'Blackout (no data)', $1::jsonb, 'connection', 'zone', 'live', 'U-LIVE-001')`,
+      [JSON.stringify(["staff gap", "POS not provisioned"])],
+    );
+    const reported = await caller(POOL).diagnosis.reportProblem({ restaurantId: "LX-001", problem_type: "blackout_nodata" });
+    const out = await runDiagnosis(reported.problem_id, POOL);
+    expect(out.degraded).toBe(true);
+    expect(out.affected).toBeNull();
+    expect(out.revenueLost).toBeNull();
+  });
 });
 
 describe("05D L3 — a live type BOUND to an existing producer MEASURES via that detector (B-lite)", () => {
@@ -150,5 +167,38 @@ describe("05D L3 — a live type BOUND to an existing producer MEASURES via that
     );
     const got = tree.rows[0]!.paths.map((p) => p.hypothesis).sort();
     expect(got).toEqual([...WB_HYPOTHESES].sort());
+  });
+});
+
+describe("05D L3 (C) — a REACTIVE live type ranks the OPERATOR's taught hypotheses (area-matched)", () => {
+  it("reactive weekend_blackout (operations chat) ranks the taught set, not the generic area map", async () => {
+    await stageConnectionPool(); // WB-001..003 + Weekly_Connection (measurable) + Orders
+    // a conversation whose intent classifies as 'operations' (matches the taught type's area).
+    await pool.query(
+      `insert into catalog."Intent_Catalog"(intent_id, label) values ('cancellation','Order cancellation') on conflict (intent_id) do nothing`,
+    );
+    await pool.query(
+      `insert into tenant."Conversation_Episode"(episode_id, conversation_id, tenant_id, restaurant_id, intent)
+       values ('WB-001:C1', 'WB-001:conv1', $1, 'WB-001', 'cancellation')`,
+      [POOL],
+    );
+    await pool.query(
+      `insert into catalog."Problem_Type"
+         (problem_type, area_type, label, hypotheses, measured_by, concentration_dim, origin, defined_by)
+       values ('weekend_blackout', 'operations', 'Weekend blackout', $1::jsonb, 'connection', 'zone', 'live', 'U-LIVE-001')`,
+      [JSON.stringify(WB_HYPOTHESES)],
+    );
+    const reported = await caller(POOL).diagnosis.reportProblem({
+      restaurantId: "WB-001",
+      conversationId: "WB-001:conv1", // reactive
+      problem_type: "weekend_blackout",
+    });
+    await runDiagnosis(reported.problem_id, POOL);
+    const tree = await pool.query<{ paths: { hypothesis: string }[] }>(
+      `select issue_tree -> 'paths' as paths from tenant."Diagnosed_Problem" where problem_id = $1`,
+      [reported.problem_id],
+    );
+    const got = tree.rows[0]!.paths.map((p) => p.hypothesis).sort();
+    expect(got).toEqual([...WB_HYPOTHESES].sort()); // the operator's taught causes, not the generic operations map
   });
 });

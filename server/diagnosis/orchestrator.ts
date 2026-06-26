@@ -22,7 +22,7 @@ import {
 import { searchKnowledge } from "../knowledge/store.js";
 import type { Embedder } from "../knowledge/embedder.js";
 import type { Criticality } from "../../shared/contracts_05b.js";
-import { isMeasurable } from "../../shared/problem_types.js";
+import { isMeasurable, type ProblemDescriptor } from "../../shared/problem_types.js";
 import { resolveDescriptor } from "./resolveDescriptor.js";
 import { redactPII } from "../pieces/pii.js";
 
@@ -38,6 +38,35 @@ const HYPOTHESES: Record<string, string[]> = {
 // REAL Restaurant column. Allowlist (never raw interpolation) so the generic concentration query
 // stays injection-proof even though the dim comes from our own vetted registry (§8 defense-in-depth).
 const CONCENTRATION_DIMS: Record<string, string> = { zone: "zone", cuisine: "cuisine" };
+
+// 05D L3 — source-table allowlist: the per-signal tables the 5 vetted producers read. A bound LIVE type is
+// only measurable if its detector's source table ACTUALLY has rows for this tenant — otherwise it is "no
+// backing data" and must degrade-to-human (§14, never a measured 0). Allowlist (never raw interpolation,
+// §8 defense-in-depth) — every value comes from our own vetted descriptor, never operator free-text.
+const SOURCE_TABLES: Record<string, string> = {
+  Order: "Order",
+  Weekly_Connection: "Weekly_Connection",
+  Usage_Event: "Usage_Event",
+};
+
+// Is this descriptor measurable RIGHT NOW for this tenant? Builtins: producer-bound ⇒ yes (their empty-set→0
+// honesty is the deferred-F6 symmetric fix, out of L3 scope). LIVE types: also require BACKING DATA — a bound
+// detector with NO source rows for the tenant is "can't measure yet" (Codex P1 / the Done-when), fail-closed.
+async function isMeasurableWithData(d: ProblemDescriptor, tenantId: string): Promise<boolean> {
+  if (!isMeasurable(d)) return false; // no producer bound (measured_by null/unknown)
+  if (d.origin !== "live" || !d.affected) return true; // builtins unchanged
+  const tbl = SOURCE_TABLES[d.affected.table];
+  if (!tbl) return false; // unknown source table ⇒ fail-closed (can't confirm data)
+  const r = await query<{ ok: boolean }>(
+    `select exists(
+       select 1 from tenant."${tbl}" t
+       join tenant."Restaurant" rr on rr.restaurant_id = t.restaurant_id
+       where rr.tenant_id = $1
+     ) as ok`,
+    [tenantId],
+  );
+  return r[0]?.ok === true;
+}
 
 // 05D Part A — cap the (already-redacted) transcript handed to the model: the intake contract allows many
 // turns of up to 8000 chars; an unbounded prompt could blow the chat-model context and fail an otherwise-
@@ -117,6 +146,10 @@ export async function runDiagnosis(
   // LIVE (operator-taught) type from the registry. Fail-closed: an unknown type RAISES (never a silent
   // wrong pipeline, §8).
   const descriptor = await resolveDescriptor(prob.problem_type);
+  // 05D L3 — measurable = producer bound AND (for a live type) backing data exists for this tenant. A bound
+  // live type whose detector has no source rows degrades-to-human just like an unbound one ("can't measure
+  // yet", §14) — resolved once here, used by the proactive degrade + the short-circuit below.
+  const measurable = await isMeasurableWithData(descriptor, tenantId);
 
   // B.2 classify + B.3 rank — TWO honest modes (05D descriptor-refactor):
   //  • REACTIVE (a Conversation exists): the AGENTE blind-classifies the episode text (§8) — it infers
@@ -183,7 +216,16 @@ export async function runDiagnosis(
       // floor (low confidence + no KB precedent). Both route to the human console; never an optimistic
       // default (§7 fail-closed). The disagreement gate is ADDITIVE — it only ever ADDS a degrade.
       degraded = gate.disagreement || (gate.confidence < floor && (kb[0]?.n ?? 0) === 0);
-      rankSeed = HYPOTHESES[gate.areaType] ?? ["unclassified hypothesis"];
+      // 05D L3 (C) — a LIVE type ranks the OPERATOR's taught hypotheses even reactively (not the generic
+      // area map). But only when the blind read CONFIRMS the taught area; a conversation about a DIFFERENT
+      // area than the taught type means the label is suspect ⇒ ALSO degrade-to-human (§7), never rank the
+      // taught causes on a mismatched chat. Builtins keep the area-keyed seed (the blind net, unchanged).
+      if (descriptor.origin === "live") {
+        if (gate.areaType !== descriptor.area_type) degraded = true;
+        rankSeed = descriptor.hypotheses;
+      } else {
+        rankSeed = HYPOTHESES[gate.areaType] ?? ["unclassified hypothesis"];
+      }
       cls = { areaType: gate.areaType, confidence: gate.confidence };
     } else {
       // proactive/typed: descriptor authoritative. No classifyArea ran ⇒ confidence is NULL — we never
@@ -194,7 +236,7 @@ export async function runDiagnosis(
       // ⇒ NOT degraded (an unknown type already RAISED at resolveDescriptor). The short-circuit below stops
       // the unmeasurable case before any producer runs, with honest NULL numbers (§14).
       cls = { areaType: descriptor.area_type, confidence: null };
-      degraded = !isMeasurable(descriptor);
+      degraded = !measurable;
       rankSeed = descriptor.hypotheses;
     }
     await query(
@@ -256,7 +298,7 @@ export async function runDiagnosis(
   // measured 0, §14) and the case routes to a human (§7). Covers BOTH paths: a reactive unbound type would
   // otherwise RAISE at the dispatcher (huntSilent is outside the rank try/catch). The ranked operator
   // hypotheses ARE persisted above for the human console. (Resolves the old TODO(05D-F5/L3).)
-  if (!isMeasurable(descriptor)) {
+  if (!measurable) {
     await query(
       `update tenant."Diagnosed_Problem"
           set status = 'needs_human', silent_status = 'not_evaluable',
