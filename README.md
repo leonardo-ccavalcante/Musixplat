@@ -67,7 +67,7 @@ UI is dark-only, token-based (`--mxm-*`), and checked for WCAG 2.1 AA.
 ## Prerequisites
 
 - **Node 22** (`nvm use` — the repo pins `engines.node >= 22`)
-- **pnpm** via `corepack enable` (the repo pins `packageManager`)
+- **pnpm 11** via `corepack enable` (matches CI's pnpm major)
 - **Docker** running — `pnpm db:start` boots the local Supabase stack in Docker
 
 ## Run Locally
