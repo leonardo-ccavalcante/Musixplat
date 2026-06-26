@@ -30,7 +30,7 @@ async function appliedSet(): Promise<Set<string>> {
   return new Set(res.rows.map((r) => r.filename));
 }
 
-async function migrate(): Promise<void> {
+export async function migrate(): Promise<void> {
   await ensureTable();
   const pending = pendingMigrations(allFiles(), await appliedSet());
   if (pending.length === 0) {

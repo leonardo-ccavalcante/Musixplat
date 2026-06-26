@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "preDeployCommand": "node dist/server/scripts/apply-migrations.js",
+    "preDeployCommand": "node dist/server/scripts/apply-hosted.js",
     "startCommand": "pnpm start"
   }
 }
