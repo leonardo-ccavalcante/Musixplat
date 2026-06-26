@@ -5,6 +5,7 @@ import { query } from "../db/pool.js";
 import { readDossier, emitDossier } from "../diagnosis/dossier.js";
 import { computeImpactLedger } from "../diagnosis/impact.js";
 import { runDiagnosis } from "../diagnosis/orchestrator.js";
+import { triggerActionForProblem } from "../diagnosis/triggerAction.js";
 import { diagnosisReasoning } from "../diagnosis/provider.js";
 import { recordHumanDecision, listRecentlyVerified } from "../diagnosis/decision.js";
 import {
@@ -190,12 +191,26 @@ export const diagnosisRouter = router({
       await computeImpactLedger(input.problemId);
       const gate = await emitDossier(input.problemId);
       if (gate.emitted) {
-        await query(
+        // Stamp the FIRST emission only (where … is null returning): the returned row is the one-shot signal
+        // for the close-the-loop trigger below, so a re-run never re-stamps nor re-fires (idempotent, Codex P2).
+        const stamped = await query(
           `update tenant."Diagnosed_Problem"
-              set dossier_emitted_at = coalesce(dossier_emitted_at, now())
-            where problem_id=$1 and tenant_id=$2`,
+              set dossier_emitted_at = now()
+            where problem_id=$1 and tenant_id=$2 and dossier_emitted_at is null
+            returning 1`,
           [input.problemId, ctx.tenantId],
         );
+        // 05D close-the-loop: on the dossier's FIRST completion, trigger the action motor for the diagnosed
+        // restaurants. Fail-CLOSED — a partial/ungated dossier never reaches autonomous action (§7; it stays
+        // with the human); one-shot — a re-run of an already-emitted problem never re-fires; fail-OPEN — a
+        // trigger error never breaks the response. The §7 money hard-no + autonomy range live in runMotorAttempt.
+        if (stamped.length)
+          await triggerActionForProblem(input.problemId, ctx.tenantId).catch((e) => {
+            // Observability (Codex P1): the trigger is fail-OPEN (the dossier already stands), but the failure
+            // is LOGGED — never silently swallowed — so a transient outage that skips the close-loop is visible.
+            console.warn(`[05D close-loop] trigger failed for problem ${input.problemId}:`, e);
+            return null;
+          });
       }
       // Refresh the 1:10 leverage from the produced counts (deterministic, §14). Read-only surface = roi.summary.
       await query(`select gov.fn_roi_1_10($1)`, [ctx.tenantId]);
