@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
 import { FreedomTier } from "@/features/observatory/FreedomTier";
+import { EvalCoachPanel } from "@/features/observatory/EvalCoachPanel";
 import { LearningTier } from "@/features/observatory/LearningTier";
 import { ActivityTier } from "@/features/observatory/ActivityTier";
 import type { ExpandCmd } from "@/features/observatory/useExpandGroup";
@@ -104,6 +105,7 @@ export function ObservatoryPage() {
 
           <div className="[&>section:first-child]:mt-0">
             <FreedomTier ready={ready} cmd={expandCmd} />
+            <EvalCoachPanel />
             <LearningTier ready={ready} cmd={expandCmd} />
             <ActivityTier ready={ready} cmd={expandCmd} />
           </div>
