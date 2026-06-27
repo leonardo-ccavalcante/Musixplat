@@ -55,7 +55,11 @@ export const evalRouter = router({
   // AUTO-DOWNGRADES released_evals→LOW on fail. It NEVER raises (promotion is the human act below).
   run: managerProcedure.input(cellInput).mutation(async ({ ctx, input }) => {
     await assertCohortInPool(input.cohortId, ctx.tenantId);
-    return runEval(input.cohortId, input.intent, input.version);
+    // grade the LEARNING motor (same provider as authorFromTemplate) so re-grading after a human coaches a
+    // lesson actually moves the score — NOT runEval's deterministic default (which answers "" for authored
+    // cases that carry no ai_label).
+    const { provider } = await evalProviderFor(ctx.tenantId);
+    return runEval(input.cohortId, input.intent, input.version, provider);
   }),
 
   // Promote = HUMAN + evidence (00_vision §148). Raises released_evals to the level this golden set
@@ -127,6 +131,27 @@ export const evalRouter = router({
   // grading the learning motor. Promotion stays a separate human act (eval.promote). §14 throughout.
   authorFromTemplate: managerProcedure.input(authorInput).mutation(async ({ ctx, input }) => {
     await assertCohortInPool(input.cohortId, ctx.tenantId);
+    // §3.4/§14 evidence integrity: every authored case must be a DISTINCT real member of THIS cohort in the
+    // caller's pool. Reject the whole upload (fail-closed) otherwise — a tampered file or direct call could
+    // duplicate one easy restaurant to clear eval_min_n, or inject another pool's restaurant as fake evidence.
+    const members = new Set(
+      (
+        await query<{ restaurant_id: string }>(
+          `select cms.restaurant_id from cohort."Cohort_Membership_Snapshot" cms
+             join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+            where cms.cohort_id = $1`,
+          [input.cohortId, ctx.tenantId],
+        )
+      ).map((x) => x.restaurant_id),
+    );
+    const seen = new Set<string>();
+    for (const row of input.rows) {
+      if (!members.has(row.restaurantId))
+        throw new TRPCError({ code: "FORBIDDEN", message: `a case references a restaurant not in this cohort/pool: ${row.restaurantId}` });
+      if (seen.has(row.restaurantId))
+        throw new TRPCError({ code: "BAD_REQUEST", message: `duplicate restaurant in the golden set: ${row.restaurantId}` });
+      seen.add(row.restaurantId);
+    }
     const authored = await authorGoldenSet({
       cohortId: input.cohortId,
       intent: input.intent,

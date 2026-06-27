@@ -30,6 +30,13 @@ export async function authorGoldenSet(input: {
   if (valid.length === 0) return { version: input.version, n: 0 };
 
   return withTx(async (cx) => {
+    // Reusing an existing version with a DIFFERENT target_level would silently keep the old certification
+    // (on conflict do nothing) while the UI promotes to the new one — promote then raises to the wrong level.
+    // Fail-closed: a version name certifies exactly one level (§14 evidence integrity).
+    const prior = await cx.query<{ target_level: string }>(`select target_level from gov."Eval_Set" where version=$1`, [input.version]);
+    if (prior.rows[0] && prior.rows[0].target_level !== input.targetLevel) {
+      throw new Error(`version '${input.version}' already certifies ${prior.rows[0].target_level} — choose a new version name`);
+    }
     await cx.query(
       `insert into gov."Eval_Set"(version,target_level,description)
        values ($1,$2::public.autonomy_level,$3) on conflict (version) do nothing`,

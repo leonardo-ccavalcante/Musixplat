@@ -9,10 +9,10 @@ import { motorAnswerGrounded, groundedEvalProvider, type VerdictLoader } from ".
 import type { MotorReasoning } from "../../server/motor/reasoning";
 import type { NbaVerdict } from "../../server/agente/reasoning";
 
-// EPIC-B4 coach loop — the operator authors their OWN golden set (INPUT [V]); the eval grades the LEARNING
-// motor; and TEACHING a lesson (a reviewed Knowledge_Case) raises the score from red→green, after which a
-// human promotes the green cell and released_evals lifts LOW→MEDIUM. Hermetic: an injected reasoning stub +
-// verdict loader prove the loop with no LLM and no P01 run; every number is still SQL (pass/κ).
+// EPIC-B4 coach loop — the operator authors their OWN golden set (INPUT [V], one case per DISTINCT member);
+// the eval grades the LEARNING motor; TEACHING a lesson (a reviewed Knowledge_Case) raises the score red→green;
+// then a human promotes and released_evals lifts LOW→MEDIUM. Hermetic: an injected reasoning stub + verdict
+// loader prove the loop with no LLM and no P01 run; every number is still SQL (pass/κ).
 function caller(tenantId: string, userId: string) {
   const ctx: Context = { session: { user_id: userId, tenant_id: tenantId, org_level: "team" }, tenantId, userId };
   return appRouter.createCaller(ctx);
@@ -29,16 +29,16 @@ const v = (action_code: string, verdict: string): NbaVerdict => ({
 
 let pool: pg.Pool;
 let intent: string;
-let r1: string; // an "act" restaurant — correct call A4
-let r2: string; // a "no-act" restaurant — correct call A8
+let members: string[]; // 30 DISTINCT cohort members
+let foreign: string; // a POOL-001 restaurant NOT in the cohort (for the anti-tamper test)
+let actSet: Set<string>; // the first 20 — an actionable A4 connection gap; the other 10 are no-act (A8)
 
-// The injected loader: r1 has an actionable connection gap (A4 'below'); r2 has none (all 'ok' ⇒ A8).
+// The injected loader: members in actSet have an A4 'below' gap; the rest are all 'ok' ⇒ A8 (no-act).
 const load: VerdictLoader = (restaurantId) =>
-  Promise.resolve(restaurantId === r1 ? [v("A4", "below"), v("A1", "ok")] : [v("A4", "ok"), v("A1", "ok")]);
+  Promise.resolve(actSet.has(restaurantId) ? [v("A4", "below"), v("A1", "ok")] : [v("A4", "ok"), v("A1", "ok")]);
 
-// A coachable reasoning stub: UNTAUGHT (no grounding) it MISSES — always picks A1. TAUGHT (a reviewed lesson
-// grounds the area) it picks the actionable lever, else no-act (lever null ⇒ A8). So approving the lesson is
-// exactly what flips the answer ⇒ raises the eval score. It never invents a number (§8).
+// Coachable reasoning: UNTAUGHT (no grounding) it MISSES — always picks A1. TAUGHT (a reviewed lesson grounds
+// the area) it picks the actionable lever, else no-act (null ⇒ A8). Approving the lesson is what flips it.
 const coachable: MotorReasoning = {
   proposeHypothesis: ({ verdicts, grounding }) =>
     Promise.resolve(
@@ -51,20 +51,24 @@ const coachable: MotorReasoning = {
 const teach = (reviewed: boolean) =>
   pool.query(`update tenant."Knowledge_Case" set reviewed=$2 where tenant_id=$1 and area_type='m_connection'`, [TENANT, reviewed]);
 
+// one case per DISTINCT member: the first 20 → A4, the last 10 → A8 (2 categories ⇒ Fleiss κ defined)
+const casesFor = (ms: string[]) => ms.map((restaurantId, i) => ({ restaurantId, correctLabel: i < 20 ? "A4" : "A8" }));
+
 beforeAll(async () => {
   pool = makePool();
   await resetDb(pool);
   const crv = (await rows<{ value: string }>(pool, `select value from catalog."Config_Knobs" where key='cohort_rule_version_current'`))[0]!.value;
   intent = (await rows<{ intent_id: string }>(pool, `select intent_id from catalog."Intent_Catalog" order by intent_id limit 1`))[0]!.intent_id;
-  const rs = await rows<{ restaurant_id: string }>(pool, `select restaurant_id from tenant."Restaurant" where tenant_id='POOL-001' order by restaurant_id limit 2`);
-  r1 = rs[0]!.restaurant_id;
-  r2 = rs[1]!.restaurant_id;
+  const rs = await rows<{ restaurant_id: string }>(pool, `select restaurant_id from tenant."Restaurant" where tenant_id='POOL-001' order by restaurant_id limit 31`);
+  members = rs.slice(0, 30).map((x) => x.restaurant_id);
+  foreign = rs[30]!.restaurant_id;
+  actSet = new Set(members.slice(0, 20));
 
   await pool.query(
     `insert into cohort."Cohort"(cohort_id,cuisine,zone,tier_base,cohort_rule_version) values ($1,'pizza','north','long_tail',$2) on conflict do nothing`,
     [COHORT, crv],
   );
-  for (const r of [r1, r2]) {
+  for (const r of members) {
     await pool.query(
       `insert into cohort."Cohort_Membership_Snapshot"(restaurant_id,cohort_id,week,cohort_rule_version,percentile_in_cohort,gap_to_top,provenance)
        values ($1,$2,$3,$4,50,0.5,'[V]')`,
@@ -86,18 +90,14 @@ afterAll(async () => {
 describe("EPIC-B4 coach loop", () => {
   it("teaching a lesson flips the grounded motor's answer A1→A4 (the coach step)", async () => {
     await teach(false);
-    expect(await motorAnswerGrounded(r1, WEEK, TENANT, coachable, load)).toBe("A1"); // untaught ⇒ misses
+    expect(await motorAnswerGrounded(members[0]!, WEEK, TENANT, coachable, load)).toBe("A1"); // untaught ⇒ misses
     await teach(true);
-    expect(await motorAnswerGrounded(r1, WEEK, TENANT, coachable, load)).toBe("A4"); // taught ⇒ correct
-    expect(await motorAnswerGrounded(r2, WEEK, TENANT, coachable, load)).toBe("A8"); // taught + no gap ⇒ no-act
+    expect(await motorAnswerGrounded(members[0]!, WEEK, TENANT, coachable, load)).toBe("A4"); // taught ⇒ correct
+    expect(await motorAnswerGrounded(members[29]!, WEEK, TENANT, coachable, load)).toBe("A8"); // taught + no gap ⇒ no-act
   });
 
   it("author own golden set → grade the learning motor → coach to green → promote lifts LOW→MEDIUM", async () => {
-    const cases = [
-      ...Array.from({ length: 20 }, () => ({ restaurantId: r1, correctLabel: "A4" })),
-      ...Array.from({ length: 10 }, () => ({ restaurantId: r2, correctLabel: "A8" })),
-    ];
-    const authored = await authorGoldenSet({ cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases, authorId: "U-OP-001" });
+    const authored = await authorGoldenSet({ cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases: casesFor(members), authorId: "U-OP-001" });
     expect(authored.n).toBe(30);
 
     // §14 anti-fake: authoring writes INPUT only (cases + judges) — NO Eval_Cell verdict exists yet.
@@ -130,24 +130,34 @@ describe("EPIC-B4 coach loop", () => {
   });
 
   it("re-authoring the same version is idempotent (no duplicate / partial set)", async () => {
-    const again = await authorGoldenSet({ cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases: [{ restaurantId: r1, correctLabel: "A4" }], authorId: "U-OP-001" });
+    const again = await authorGoldenSet({ cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases: [{ restaurantId: members[0]!, correctLabel: "A4" }], authorId: "U-OP-001" });
     expect(again.n).toBe(0);
     const n = (await rows<{ c: string }>(pool, `select count(*)::text c from gov."Eval_Case" where cohort_id=$1 and intent=$2 and version=$3`, [COHORT, intent, VERSION]))[0]!.c;
     expect(n).toBe("30");
   });
 
-  it("router: authorFromTemplate authors + produces a verdict; misses lists diffs; cross-pool blocked", async () => {
+  it("re-using a version with a DIFFERENT target level is rejected (§14 evidence integrity)", async () => {
+    await authorGoldenSet({ cohortId: COHORT, intent, version: "conflict-v", targetLevel: "MEDIUM", week: WEEK, cases: [{ restaurantId: members[0]!, correctLabel: "A4" }], authorId: "U-OP-001" });
+    await expect(
+      authorGoldenSet({ cohortId: COHORT, intent, version: "conflict-v", targetLevel: "HIGH", week: WEEK, cases: [{ restaurantId: members[1]!, correctLabel: "A4" }], authorId: "U-OP-001" }),
+    ).rejects.toThrow(/already certifies/i);
+  });
+
+  it("router: authorFromTemplate authors + produces a verdict; rejects tamper/cross-pool; cross-pool caller blocked", async () => {
     const V2 = "coach-router-medium";
-    const rows2 = [
-      ...Array.from({ length: 20 }, () => ({ restaurantId: r1, correctLabel: "A4" })),
-      ...Array.from({ length: 10 }, () => ({ restaurantId: r2, correctLabel: "A8" })),
-    ];
-    const res = await caller(TENANT, "U-OP-001").eval.authorFromTemplate({ cohortId: COHORT, intent, version: V2, targetLevel: "MEDIUM", week: WEEK, rows: rows2 });
+    const res = await caller(TENANT, "U-OP-001").eval.authorFromTemplate({ cohortId: COHORT, intent, version: V2, targetLevel: "MEDIUM", week: WEEK, rows: casesFor(members) });
     expect(res.authored).toBe(30);
     expect(typeof res.coachable).toBe("boolean");
-    expect(res.verdict.n).toBe(30); // the learning motor was graded on all 30 cases
-    const m = await caller(TENANT, "U-OP-001").eval.misses({ cohortId: COHORT, intent, version: V2 });
-    expect(Array.isArray(m.misses)).toBe(true);
+    expect(res.verdict.n).toBe(30);
+
+    // anti-tamper (§3.4/§14): a restaurant not in the cohort/pool, or a duplicate, is rejected whole.
+    await expect(
+      caller(TENANT, "U-OP-001").eval.authorFromTemplate({ cohortId: COHORT, intent, version: "tamper-v", targetLevel: "MEDIUM", week: WEEK, rows: [{ restaurantId: foreign, correctLabel: "A1" }] }),
+    ).rejects.toThrow(/not in this cohort/i);
+    await expect(
+      caller(TENANT, "U-OP-001").eval.authorFromTemplate({ cohortId: COHORT, intent, version: "dup-v", targetLevel: "MEDIUM", week: WEEK, rows: [{ restaurantId: members[0]!, correctLabel: "A4" }, { restaurantId: members[0]!, correctLabel: "A4" }] }),
+    ).rejects.toThrow(/duplicate/i);
+
     // cross-pool: a different pool's manager cannot touch this cohort (§3.4/§7)
     await expect(caller("POOL-002", "U-OP-002").eval.misses({ cohortId: COHORT, intent, version: V2 })).rejects.toThrow();
   });
