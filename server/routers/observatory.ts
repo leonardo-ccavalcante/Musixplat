@@ -90,12 +90,13 @@ export const observatoryRouter = router({
         discarded_branches: unknown;
         probability: number | null;
         reviewed: boolean;
+        verification_status: string | null;
         provenance_by_field: Record<string, string>;
         created_at: string;
       }>(
         `select kb_case_id, area_type, pattern, outcome, resolution, not_resolved_reason,
                 discarded_branches, probability::float8 as probability, reviewed,
-                provenance_by_field, created_at::text as created_at
+                verification_status, provenance_by_field, created_at::text as created_at
            from tenant."Knowledge_Case"
           where ${where.join(" and ")}
           order by created_at desc limit 100`,
@@ -111,6 +112,7 @@ export const observatoryRouter = router({
         discardedBranches: x.discarded_branches,
         probability: x.probability,
         reviewed: x.reviewed,
+        verificationStatus: x.verification_status,
         provenanceByField: x.provenance_by_field ?? {},
         createdAt: x.created_at,
       }));

@@ -31,6 +31,7 @@
     "db:p01": "tsx scripts/run-p01.ts",
     "db:p02": "tsx scripts/run-p02.ts",
     "db:05b": "tsx scripts/run-05b.ts",
+    "db:remeasure": "tsx scripts/run-remeasure.ts",
     "db:migrate": "tsx scripts/apply-migrations.ts",
     "db:hosted": "tsx scripts/apply-hosted.ts",
     "prototype:reset": "tsx scripts/prototype-reset.ts",
