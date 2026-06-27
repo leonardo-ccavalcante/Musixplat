@@ -4,6 +4,7 @@
 // (server/routers/eval.ts → eval.promote · 00_vision §: promote = human + evidence, downgrade = auto).
 // §2/§14: the number (pass_rate, κ, status) is SQL/math; the LLM is ONLY the evaluated, never the grader.
 import { query, withTx } from "../db/pool.js";
+import { motorAnswer } from "./motorAnswer.js";
 
 /** The AI under evaluation: given a golden case scenario, which call (NBA action_code A1–A8) does it make? */
 export interface EvalProvider {
@@ -14,6 +15,18 @@ export interface EvalProvider {
  *  to force a known answer, so the verdict is reproducible and provider-independent. */
 export const deterministicEvalProvider: EvalProvider = {
   answer: (scenario) => Promise.resolve(String((scenario as { ai_label?: string } | null)?.ai_label ?? "")),
+};
+
+/** The REAL AI under eval (demo wiring, operator decision: real motor + fixture fallback). Runs the actual
+ *  motor on the case's (restaurant_id, week); if the motor has no attributable lever (A8/no data) it falls
+ *  back to the seeded `ai_label_fallback` so the demo never goes empty. The number stays the motor's. */
+export const motorEvalProvider: EvalProvider = {
+  answer: async (scenario) => {
+    const s = scenario as { restaurant_id?: string; week?: string; ai_label_fallback?: string } | null;
+    if (!s?.restaurant_id || !s?.week) return String(s?.ai_label_fallback ?? "A8"); // A8 (no-act), never "" (latent footgun)
+    const code = await motorAnswer(s.restaurant_id, s.week);
+    return code === "A8" ? String(s.ai_label_fallback ?? "A8") : code;
+  },
 };
 
 async function knobNum(key: string): Promise<number> {
