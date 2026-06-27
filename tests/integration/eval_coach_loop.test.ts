@@ -97,7 +97,7 @@ describe("EPIC-B4 coach loop", () => {
   });
 
   it("author own golden set → grade the learning motor → coach to green → promote lifts LOW→MEDIUM", async () => {
-    const authored = await authorGoldenSet({ cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases: casesFor(members), authorId: "U-OP-001" });
+    const authored = await authorGoldenSet({ tenantId: TENANT, cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases: casesFor(members), authorId: "U-OP-001" });
     expect(authored.n).toBe(30);
 
     // §14 anti-fake: authoring writes INPUT only (cases + judges) — NO Eval_Cell verdict exists yet.
@@ -130,16 +130,16 @@ describe("EPIC-B4 coach loop", () => {
   });
 
   it("re-authoring the same version is idempotent (no duplicate / partial set)", async () => {
-    const again = await authorGoldenSet({ cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases: [{ restaurantId: members[0]!, correctLabel: "A4" }], authorId: "U-OP-001" });
+    const again = await authorGoldenSet({ tenantId: TENANT, cohortId: COHORT, intent, version: VERSION, targetLevel: "MEDIUM", week: WEEK, cases: [{ restaurantId: members[0]!, correctLabel: "A4" }], authorId: "U-OP-001" });
     expect(again.n).toBe(0);
     const n = (await rows<{ c: string }>(pool, `select count(*)::text c from gov."Eval_Case" where cohort_id=$1 and intent=$2 and version=$3`, [COHORT, intent, VERSION]))[0]!.c;
     expect(n).toBe("30");
   });
 
   it("re-using a version with a DIFFERENT target level is rejected (§14 evidence integrity)", async () => {
-    await authorGoldenSet({ cohortId: COHORT, intent, version: "conflict-v", targetLevel: "MEDIUM", week: WEEK, cases: [{ restaurantId: members[0]!, correctLabel: "A4" }], authorId: "U-OP-001" });
+    await authorGoldenSet({ tenantId: TENANT, cohortId: COHORT, intent, version: "conflict-v", targetLevel: "MEDIUM", week: WEEK, cases: [{ restaurantId: members[0]!, correctLabel: "A4" }], authorId: "U-OP-001" });
     await expect(
-      authorGoldenSet({ cohortId: COHORT, intent, version: "conflict-v", targetLevel: "HIGH", week: WEEK, cases: [{ restaurantId: members[1]!, correctLabel: "A4" }], authorId: "U-OP-001" }),
+      authorGoldenSet({ tenantId: TENANT, cohortId: COHORT, intent, version: "conflict-v", targetLevel: "HIGH", week: WEEK, cases: [{ restaurantId: members[1]!, correctLabel: "A4" }], authorId: "U-OP-001" }),
     ).rejects.toThrow(/already certifies/i);
   });
 
@@ -160,5 +160,15 @@ describe("EPIC-B4 coach loop", () => {
 
     // cross-pool: a different pool's manager cannot touch this cohort (§3.4/§7)
     await expect(caller("POOL-002", "U-OP-002").eval.misses({ cohortId: COHORT, intent, version: V2 })).rejects.toThrow();
+  });
+
+  it("a low-confidence pick grades as no-act (A8) — mirrors the production motor's escalate (§7 fidelity)", async () => {
+    await teach(true);
+    const lowConf: MotorReasoning = {
+      proposeHypothesis: ({ verdicts }) =>
+        Promise.resolve({ lever: verdicts.find((x) => x.verdict === "below") ?? null, rootCause: "x", confidence: 0.3, reasoning: "x" }),
+    };
+    // 0.3 < motor_min_confidence (0.6) ⇒ A8, even though a lever exists — the live motor would escalate here.
+    expect(await motorAnswerGrounded(members[0]!, WEEK, TENANT, lowConf, load)).toBe("A8");
   });
 });

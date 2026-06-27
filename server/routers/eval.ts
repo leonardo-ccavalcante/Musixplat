@@ -116,13 +116,23 @@ export const evalRouter = router({
     .input(z.object({ cohortId: z.string().min(1), intent: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       await assertCohortInPool(input.cohortId, ctx.tenantId);
+      // tenant-scope (§3.4): a cohort spans pools, so return ONLY this pool's members — never leak another
+      // tenant's restaurant ids into the downloaded template.
       const week =
-        (await query<{ week: string }>(`select max(week)::text week from cohort."Cohort_Membership_Snapshot" where cohort_id=$1`, [input.cohortId]))[0]
-          ?.week ?? null;
+        (
+          await query<{ week: string }>(
+            `select max(cms.week)::text week from cohort."Cohort_Membership_Snapshot" cms
+               join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+              where cms.cohort_id = $1`,
+            [input.cohortId, ctx.tenantId],
+          )
+        )[0]?.week ?? null;
       if (!week) return { week: null as string | null, restaurantIds: [] as string[] };
       const r = await query<{ restaurant_id: string }>(
-        `select restaurant_id from cohort."Cohort_Membership_Snapshot" where cohort_id=$1 and week=$2 order by restaurant_id`,
-        [input.cohortId, week],
+        `select cms.restaurant_id from cohort."Cohort_Membership_Snapshot" cms
+           join tenant."Restaurant" rr on rr.restaurant_id = cms.restaurant_id and rr.tenant_id = $3
+          where cms.cohort_id = $1 and cms.week = $2 order by cms.restaurant_id`,
+        [input.cohortId, week, ctx.tenantId],
       );
       return { week: week as string | null, restaurantIds: r.map((x) => x.restaurant_id) };
     }),
@@ -153,6 +163,7 @@ export const evalRouter = router({
       seen.add(row.restaurantId);
     }
     const authored = await authorGoldenSet({
+      tenantId: ctx.tenantId,
       cohortId: input.cohortId,
       intent: input.intent,
       version: input.version,
@@ -169,9 +180,13 @@ export const evalRouter = router({
   // misses: which golden cases the learning motor gets WRONG (its call ≠ yours) — the cases to teach.
   misses: managerProcedure.input(cellInput).query(async ({ ctx, input }) => {
     await assertCohortInPool(input.cohortId, ctx.tenantId);
+    // tenant-scope (§3.4): only this pool's cases (anchored on the scenario restaurant's owner) — never
+    // expose another pool's golden scenarios/labels for a shared cohort+version.
     const cases = await query<{ scenario: unknown; correct_label: string }>(
-      `select scenario, correct_label from gov."Eval_Case" where cohort_id=$1 and intent=$2 and version=$3 order by eval_case_id`,
-      [input.cohortId, input.intent, input.version],
+      `select ec.scenario, ec.correct_label from gov."Eval_Case" ec
+         join tenant."Restaurant" r on r.restaurant_id = (ec.scenario->>'restaurant_id') and r.tenant_id = $4
+        where ec.cohort_id=$1 and ec.intent=$2 and ec.version=$3 order by ec.eval_case_id`,
+      [input.cohortId, input.intent, input.version, ctx.tenantId],
     );
     const { provider, coachable } = await evalProviderFor(ctx.tenantId);
     const out: { restaurantId: string | null; aiLabel: string; correctLabel: string }[] = [];

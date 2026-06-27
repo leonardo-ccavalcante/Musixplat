@@ -18,6 +18,7 @@ const isLabel = (s: string): boolean => /^A[1-8]$/.test(s);
  *  holds). Returns how many cases were authored (0 ⇒ nothing valid, or already authored). INPUT [V] only —
  *  no verdict is written here (that is runEval's job, §14). */
 export async function authorGoldenSet(input: {
+  tenantId: string;
   cohortId: string;
   intent: string;
   version: string;
@@ -42,13 +43,19 @@ export async function authorGoldenSet(input: {
        values ($1,$2::public.autonomy_level,$3) on conflict (version) do nothing`,
       [input.version, input.targetLevel, `operator-authored golden set (by ${input.authorId})`],
     );
-    // idempotent: if this cell already has cases for this version, do not re-author (a re-upload of the same
-    // version must not duplicate or half-write — gather-then-write is atomic inside this one tx).
-    const already = await cx.query(
-      `select 1 from gov."Eval_Case" where cohort_id=$1 and intent=$2 and version=$3 limit 1`,
-      [input.cohortId, input.intent, input.version],
+    // pool-aware idempotency (§3.4): Eval_Case has no tenant_id and a cohort spans pools, so anchor on the
+    // scenario restaurant's owner. Cases already authored by US ⇒ idempotent no-op (no duplicate/half-write).
+    // Cases under this version owned by ANOTHER pool ⇒ reject — a version is single-pool, so runEval/promote
+    // never grade or raise on another tenant's evidence.
+    const ex = await cx.query<{ in_pool: boolean | null }>(
+      `select bool_or(r.tenant_id = $4) as in_pool from gov."Eval_Case" ec
+         left join tenant."Restaurant" r on r.restaurant_id = (ec.scenario->>'restaurant_id')
+        where ec.cohort_id = $1 and ec.intent = $2 and ec.version = $3`,
+      [input.cohortId, input.intent, input.version, input.tenantId],
     );
-    if (already.rowCount) return { version: input.version, n: 0 };
+    const inPool = ex.rows[0]?.in_pool ?? null;
+    if (inPool === true) return { version: input.version, n: 0 };
+    if (inPool === false) throw new Error(`version '${input.version}' is already used by another pool — choose a new version name`);
 
     let n = 0;
     for (const c of valid) {

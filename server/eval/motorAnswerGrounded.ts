@@ -7,6 +7,7 @@
 // motor answer (the floor) — the eval still runs honestly, it just can't be coached until a key is set. It
 // never fabricates a pass.
 import { query, withTx } from "../db/pool.js";
+import { knobNum } from "../_core/knobs.js";
 import { readGrounding } from "../motor/learn.js";
 import { motorAnswer } from "./motorAnswer.js";
 import type { MotorReasoning } from "../motor/reasoning.js";
@@ -39,7 +40,12 @@ export async function motorAnswerGrounded(
   const areas = [...new Set(verdicts.map((v) => v.dimension).filter((d): d is string => !!d))];
   const grounding = await withTx((c) => readGrounding(tenantId, areas, c));
   const hyp = await reasoning.proposeHypothesis({ verdicts, discarded: [], grounding });
-  return hyp.lever ? hyp.lever.action_code : "A8";
+  // Mirror runMotor's gate (runMotor.ts:80): no lever / null / below motor_min_confidence ⇒ escalate = NO
+  // autonomous act. The eval must grade what PRODUCTION would actually do — else it certifies (and a human
+  // could promote) MEDIUM for a low-confidence pick the live motor would escalate, never execute.
+  const minConf = await knobNum("motor_min_confidence");
+  if (!hyp.lever || hyp.confidence == null || hyp.confidence < minConf) return "A8";
+  return hyp.lever.action_code;
 }
 
 /** An EvalProvider that grades the LEARNING motor (so teaching a lesson can raise the score). Fail-closed:
