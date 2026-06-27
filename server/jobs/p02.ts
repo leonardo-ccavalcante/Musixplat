@@ -1,5 +1,7 @@
 import { query } from "../db/pool.js";
 import { proposeNba } from "../agente/nba_engine.js";
+import { seedGoldenSet } from "../eval/seedGoldenSet.js";
+import { runEval, motorEvalProvider } from "../eval/runEval.js";
 
 // P02 batch (02:1A producer). Runs AFTER P01 (cohorts + funnel signals). Bootstraps governance then
 // proposes one NBA per problem restaurant across a sample of cohorts — the data the Autonomy Cockpit shows.
@@ -77,5 +79,19 @@ export async function runP02(opts: P02Options): Promise<P02Result> {
     if (m?.auto_releasable) auto++;
     else human++;
   }
+
+  // EPIC-B4 demo wiring — PRODUCE a real measured eval verdict so the hosted cockpit/observatory shows a
+  // [V] cell (status green + real κ/n) instead of only the [I] LOW floor seeded above. seedGoldenSet writes
+  // INPUT only (the verdict is still produced by runEval, §14); promotion stays HUMAN (no promote call here,
+  // so released_evals is left at the floor/NULL until someone signs). No-data ⇒ seedGoldenSet returns null ⇒
+  // no demo cell (honest, never a faked one). BEST-EFFORT: this is demo decoration — a failure must NEVER
+  // abort runP02 (the cockpit-critical proposals already committed; apply-hosted must stay self-healing).
+  try {
+    const gs = await seedGoldenSet(week);
+    if (gs) await runEval(gs.cohortId, gs.intent, gs.version, motorEvalProvider);
+  } catch (err) {
+    console.warn(`[runP02] demo eval wiring skipped (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   return { auto, human, skipped };
 }
