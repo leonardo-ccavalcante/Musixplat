@@ -135,4 +135,20 @@ describe("EPIC-B4 coach loop", () => {
     const n = (await rows<{ c: string }>(pool, `select count(*)::text c from gov."Eval_Case" where cohort_id=$1 and intent=$2 and version=$3`, [COHORT, intent, VERSION]))[0]!.c;
     expect(n).toBe("30");
   });
+
+  it("router: authorFromTemplate authors + produces a verdict; misses lists diffs; cross-pool blocked", async () => {
+    const V2 = "coach-router-medium";
+    const rows2 = [
+      ...Array.from({ length: 20 }, () => ({ restaurantId: r1, correctLabel: "A4" })),
+      ...Array.from({ length: 10 }, () => ({ restaurantId: r2, correctLabel: "A8" })),
+    ];
+    const res = await caller(TENANT, "U-OP-001").eval.authorFromTemplate({ cohortId: COHORT, intent, version: V2, targetLevel: "MEDIUM", week: WEEK, rows: rows2 });
+    expect(res.authored).toBe(30);
+    expect(typeof res.coachable).toBe("boolean");
+    expect(res.verdict.n).toBe(30); // the learning motor was graded on all 30 cases
+    const m = await caller(TENANT, "U-OP-001").eval.misses({ cohortId: COHORT, intent, version: V2 });
+    expect(Array.isArray(m.misses)).toBe(true);
+    // cross-pool: a different pool's manager cannot touch this cohort (§3.4/§7)
+    await expect(caller("POOL-002", "U-OP-002").eval.misses({ cohortId: COHORT, intent, version: V2 })).rejects.toThrow();
+  });
 });

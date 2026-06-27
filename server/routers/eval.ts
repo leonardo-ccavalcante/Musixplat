@@ -2,7 +2,11 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, managerProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
-import { runEval } from "../eval/runEval.js";
+import { runEval, motorEvalProvider, type EvalProvider } from "../eval/runEval.js";
+import { authorGoldenSet } from "../eval/authorGoldenSet.js";
+import { groundedEvalProvider } from "../eval/motorAnswerGrounded.js";
+import { llmMotorReasoning } from "../motor/llmReasoning.js";
+import { openaiChatClient } from "../_core/llm.js";
 
 // EPIC-B4 — the eval cockpit's two governance acts. Both are managerProcedure (senior-manager only):
 // running the evaluator can DROP autonomy, and promoting RAISES it — each is a §6 "human owns the
@@ -25,6 +29,26 @@ async function assertCohortInPool(cohortId: string, tenantId: string): Promise<v
   );
   if (!r[0]?.ok) throw new TRPCError({ code: "FORBIDDEN", message: "cohort is not in your pool (cross-pool blocked)" });
 }
+
+// The eval's "AI answer" grades the LEARNING motor when an OPENAI key exists (so teaching a lesson can raise
+// the score); without a key it degrades to the deterministic floor — coaching needs the key, surfaced to the
+// GUI as `coachable=false`. Built per call; tenant resolved server-side.
+async function evalProviderFor(tenantId: string): Promise<{ provider: EvalProvider; coachable: boolean }> {
+  try {
+    return { provider: groundedEvalProvider(tenantId, llmMotorReasoning(await openaiChatClient())), coachable: true };
+  } catch {
+    return { provider: motorEvalProvider, coachable: false };
+  }
+}
+
+const authorInput = z.object({
+  cohortId: z.string().min(1),
+  intent: z.string().min(1),
+  version: z.string().min(1),
+  targetLevel: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  week: z.string().min(1),
+  rows: z.array(z.object({ restaurantId: z.string().min(1), correctLabel: z.string().regex(/^A[1-8]$/) })).min(1),
+});
 
 export const evalRouter = router({
   // Run the golden-set evaluator for one cell → PRODUCES the [V] verdict (status/κ/n/redteam) and
@@ -81,5 +105,58 @@ export const evalRouter = router({
         signedBy: ctx.userId,
       };
     });
+  }),
+
+  // template: the cohort's members for the latest week → the operator labels each (CSV in the GUI).
+  template: managerProcedure
+    .input(z.object({ cohortId: z.string().min(1), intent: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      await assertCohortInPool(input.cohortId, ctx.tenantId);
+      const week =
+        (await query<{ week: string }>(`select max(week)::text week from cohort."Cohort_Membership_Snapshot" where cohort_id=$1`, [input.cohortId]))[0]
+          ?.week ?? null;
+      if (!week) return { week: null as string | null, restaurantIds: [] as string[] };
+      const r = await query<{ restaurant_id: string }>(
+        `select restaurant_id from cohort."Cohort_Membership_Snapshot" where cohort_id=$1 and week=$2 order by restaurant_id`,
+        [input.cohortId, week],
+      );
+      return { week: week as string | null, restaurantIds: r.map((x) => x.restaurant_id) };
+    }),
+
+  // authorFromTemplate: write the operator's OWN golden set (INPUT [V]) then PRODUCE the verdict via runEval
+  // grading the learning motor. Promotion stays a separate human act (eval.promote). §14 throughout.
+  authorFromTemplate: managerProcedure.input(authorInput).mutation(async ({ ctx, input }) => {
+    await assertCohortInPool(input.cohortId, ctx.tenantId);
+    const authored = await authorGoldenSet({
+      cohortId: input.cohortId,
+      intent: input.intent,
+      version: input.version,
+      targetLevel: input.targetLevel,
+      week: input.week,
+      cases: input.rows.map((x) => ({ restaurantId: x.restaurantId, correctLabel: x.correctLabel })),
+      authorId: ctx.userId,
+    });
+    const { provider, coachable } = await evalProviderFor(ctx.tenantId);
+    const verdict = await runEval(input.cohortId, input.intent, input.version, provider);
+    return { authored: authored.n, coachable, verdict };
+  }),
+
+  // misses: which golden cases the learning motor gets WRONG (its call ≠ yours) — the cases to teach.
+  misses: managerProcedure.input(cellInput).query(async ({ ctx, input }) => {
+    await assertCohortInPool(input.cohortId, ctx.tenantId);
+    const cases = await query<{ scenario: unknown; correct_label: string }>(
+      `select scenario, correct_label from gov."Eval_Case" where cohort_id=$1 and intent=$2 and version=$3 order by eval_case_id`,
+      [input.cohortId, input.intent, input.version],
+    );
+    const { provider, coachable } = await evalProviderFor(ctx.tenantId);
+    const out: { restaurantId: string | null; aiLabel: string; correctLabel: string }[] = [];
+    for (const c of cases) {
+      const aiLabel = await provider.answer(c.scenario);
+      if (aiLabel !== c.correct_label) {
+        const s = c.scenario as { restaurant_id?: string } | null;
+        out.push({ restaurantId: s?.restaurant_id ?? null, aiLabel, correctLabel: c.correct_label });
+      }
+    }
+    return { coachable, misses: out };
   }),
 });
