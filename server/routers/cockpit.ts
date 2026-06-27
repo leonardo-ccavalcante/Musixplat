@@ -219,11 +219,19 @@ export async function recordRelease(i: ReleaseInput, client: pg.PoolClient): Pro
      values ($1, $2, $3::public.release_action, $4::public.autonomy_level, $5, $6, $7)`,
     [releaseId, prop.cohort_id, i.action, i.resultingLevel, ai.user_id, i.operatorId, pol.policy_version],
   );
+  // 02:BR-LOG-2 — score this human signature INLINE. Decision_Trace is append-only, so the two RESULT
+  // columns (time_to_signature_sec, rubber_stamp_flag) must be set at the trace's birth. The named producer
+  // gov.fn_signature_quality reads proposed_at = NBA_Proposal.created_at, signs at now() on the 'desktop'
+  // channel, and reads the umbral knob BY NAME (§3.8, fail-closed). §14: the value comes only from here.
   await client.query(
     `insert into gov."Decision_Trace"(trace_id, release_id, calculation_id, action, proposer_id, confirmer_id,
-        effective_level_applied, policy_version, origin)
-     values ($1, $2, $3::uuid, $4::public.trace_action, $5, $6, $7::public.autonomy_level, $8, 'desktop'::public.trace_origin)`,
-    [traceId, releaseId, prop.calc_id, traceAction, ai.user_id, i.operatorId, i.resultingLevel, pol.policy_version],
+        effective_level_applied, policy_version, origin, time_to_signature_sec, rubber_stamp_flag)
+     select $1, $2, $3::uuid, $4::public.trace_action, $5, $6, $7::public.autonomy_level, $8,
+            'desktop'::public.trace_origin, q.time_to_signature_sec, q.rubber_stamp_flag
+       from gov."NBA_Proposal" p
+       cross join lateral gov.fn_signature_quality(p.created_at, now(), 'desktop'::public.trace_origin) q
+      where p.nba_id = $9::uuid`,
+    [traceId, releaseId, prop.calc_id, traceAction, ai.user_id, i.operatorId, i.resultingLevel, pol.policy_version, i.nbaId],
   );
   await client.query(`update gov."Release_Batch" set decision_trace_id = $1 where release_id = $2`, [traceId, releaseId]);
 

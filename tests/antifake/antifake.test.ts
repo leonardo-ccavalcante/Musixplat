@@ -55,6 +55,11 @@ describe("§14 anti-fake — results are NULL/empty pre-run", () => {
     expect(await count(pool, 'tenant."Restaurant" where tenure_months is not null')).toBe(0);
     expect(await count(pool, 'tenant."KPI" where current_value is not null')).toBe(0);
     expect(await count(pool, 'tenant."Conversation_Episode" where metrics_layer is not null')).toBe(0);
+    // 02:BR-LOG-2 — Decision_Trace signature-quality is a RESULT computed ONLY by gov.fn_signature_quality
+    // (called inline by the human-signed writer). NEVER seeded: seed inserts no traces, so post-seed both
+    // columns are NULL on every row. Guards against a future seed faking a signed/non-rubber-stamp trace.
+    expect(await count(pool, 'gov."Decision_Trace" where time_to_signature_sec is not null')).toBe(0);
+    expect(await count(pool, 'gov."Decision_Trace" where rubber_stamp_flag is not null')).toBe(0);
   });
 
   it("BRUTOS are present (seed actually ran)", async () => {
