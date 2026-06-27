@@ -41,6 +41,12 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
 -- resetDb (seed-only, table truncated first) the table is empty ⇒ on-conflict never fires ⇒ every knob inserts.
 on conflict (key) do nothing;
 
+-- ── 02:BR-LOG-2 governance knob (§3.8 by name): rubber-stamp umbral in seconds. [C] engineering default;
+--    Leo ratifies in the cockpit. Mirrored in migration 20260627000000 for the hosted full-reset path. ──
+insert into catalog."Config_Knobs"(key, value, provenance, owner) values
+  ('rubber_stamp_max_sec', '30', '[C]', 'leo')
+on conflict (key) do nothing;
+
 -- ── 05B Diagnosis knobs ([C] placeholders, read BY NAME). ──
 insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('threshold_classification',      '0.60', '[C]', 'leo'),
