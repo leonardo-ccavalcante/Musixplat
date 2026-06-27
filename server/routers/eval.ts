@@ -2,7 +2,11 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, managerProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
-import { runEval } from "../eval/runEval.js";
+import { runEval, motorEvalProvider, type EvalProvider } from "../eval/runEval.js";
+import { authorGoldenSet } from "../eval/authorGoldenSet.js";
+import { groundedEvalProvider } from "../eval/motorAnswerGrounded.js";
+import { llmMotorReasoning } from "../motor/llmReasoning.js";
+import { openaiChatClient } from "../_core/llm.js";
 
 // EPIC-B4 — the eval cockpit's two governance acts. Both are managerProcedure (senior-manager only):
 // running the evaluator can DROP autonomy, and promoting RAISES it — each is a §6 "human owns the
@@ -26,12 +30,36 @@ async function assertCohortInPool(cohortId: string, tenantId: string): Promise<v
   if (!r[0]?.ok) throw new TRPCError({ code: "FORBIDDEN", message: "cohort is not in your pool (cross-pool blocked)" });
 }
 
+// The eval's "AI answer" grades the LEARNING motor when an OPENAI key exists (so teaching a lesson can raise
+// the score); without a key it degrades to the deterministic floor — coaching needs the key, surfaced to the
+// GUI as `coachable=false`. Built per call; tenant resolved server-side.
+async function evalProviderFor(tenantId: string): Promise<{ provider: EvalProvider; coachable: boolean }> {
+  try {
+    return { provider: groundedEvalProvider(tenantId, llmMotorReasoning(await openaiChatClient())), coachable: true };
+  } catch {
+    return { provider: motorEvalProvider, coachable: false };
+  }
+}
+
+const authorInput = z.object({
+  cohortId: z.string().min(1),
+  intent: z.string().min(1),
+  version: z.string().min(1),
+  targetLevel: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  week: z.string().min(1),
+  rows: z.array(z.object({ restaurantId: z.string().min(1), correctLabel: z.string().regex(/^A[1-8]$/) })).min(1),
+});
+
 export const evalRouter = router({
   // Run the golden-set evaluator for one cell → PRODUCES the [V] verdict (status/κ/n/redteam) and
   // AUTO-DOWNGRADES released_evals→LOW on fail. It NEVER raises (promotion is the human act below).
   run: managerProcedure.input(cellInput).mutation(async ({ ctx, input }) => {
     await assertCohortInPool(input.cohortId, ctx.tenantId);
-    return runEval(input.cohortId, input.intent, input.version);
+    // grade the LEARNING motor (same provider as authorFromTemplate) so re-grading after a human coaches a
+    // lesson actually moves the score — NOT runEval's deterministic default (which answers "" for authored
+    // cases that carry no ai_label).
+    const { provider } = await evalProviderFor(ctx.tenantId);
+    return runEval(input.cohortId, input.intent, input.version, provider);
   }),
 
   // Promote = HUMAN + evidence (00_vision §148). Raises released_evals to the level this golden set
@@ -81,5 +109,94 @@ export const evalRouter = router({
         signedBy: ctx.userId,
       };
     });
+  }),
+
+  // template: the cohort's members for the latest week → the operator labels each (CSV in the GUI).
+  template: managerProcedure
+    .input(z.object({ cohortId: z.string().min(1), intent: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      await assertCohortInPool(input.cohortId, ctx.tenantId);
+      // tenant-scope (§3.4): a cohort spans pools, so return ONLY this pool's members — never leak another
+      // tenant's restaurant ids into the downloaded template.
+      const week =
+        (
+          await query<{ week: string }>(
+            `select max(cms.week)::text week from cohort."Cohort_Membership_Snapshot" cms
+               join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+              where cms.cohort_id = $1`,
+            [input.cohortId, ctx.tenantId],
+          )
+        )[0]?.week ?? null;
+      if (!week) return { week: null as string | null, restaurantIds: [] as string[] };
+      const r = await query<{ restaurant_id: string }>(
+        `select cms.restaurant_id from cohort."Cohort_Membership_Snapshot" cms
+           join tenant."Restaurant" rr on rr.restaurant_id = cms.restaurant_id and rr.tenant_id = $3
+          where cms.cohort_id = $1 and cms.week = $2 order by cms.restaurant_id`,
+        [input.cohortId, week, ctx.tenantId],
+      );
+      return { week: week as string | null, restaurantIds: r.map((x) => x.restaurant_id) };
+    }),
+
+  // authorFromTemplate: write the operator's OWN golden set (INPUT [V]) then PRODUCE the verdict via runEval
+  // grading the learning motor. Promotion stays a separate human act (eval.promote). §14 throughout.
+  authorFromTemplate: managerProcedure.input(authorInput).mutation(async ({ ctx, input }) => {
+    await assertCohortInPool(input.cohortId, ctx.tenantId);
+    // §3.4/§14 evidence integrity: every authored case must be a DISTINCT real member of THIS cohort in the
+    // caller's pool. Reject the whole upload (fail-closed) otherwise — a tampered file or direct call could
+    // duplicate one easy restaurant to clear eval_min_n, or inject another pool's restaurant as fake evidence.
+    const members = new Set(
+      (
+        await query<{ restaurant_id: string }>(
+          `select cms.restaurant_id from cohort."Cohort_Membership_Snapshot" cms
+             join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+            where cms.cohort_id = $1`,
+          [input.cohortId, ctx.tenantId],
+        )
+      ).map((x) => x.restaurant_id),
+    );
+    const seen = new Set<string>();
+    for (const row of input.rows) {
+      if (!members.has(row.restaurantId))
+        throw new TRPCError({ code: "FORBIDDEN", message: `a case references a restaurant not in this cohort/pool: ${row.restaurantId}` });
+      if (seen.has(row.restaurantId))
+        throw new TRPCError({ code: "BAD_REQUEST", message: `duplicate restaurant in the golden set: ${row.restaurantId}` });
+      seen.add(row.restaurantId);
+    }
+    const authored = await authorGoldenSet({
+      tenantId: ctx.tenantId,
+      cohortId: input.cohortId,
+      intent: input.intent,
+      version: input.version,
+      targetLevel: input.targetLevel,
+      week: input.week,
+      cases: input.rows.map((x) => ({ restaurantId: x.restaurantId, correctLabel: x.correctLabel })),
+      authorId: ctx.userId,
+    });
+    const { provider, coachable } = await evalProviderFor(ctx.tenantId);
+    const verdict = await runEval(input.cohortId, input.intent, input.version, provider);
+    return { authored: authored.n, coachable, verdict };
+  }),
+
+  // misses: which golden cases the learning motor gets WRONG (its call ≠ yours) — the cases to teach.
+  misses: managerProcedure.input(cellInput).query(async ({ ctx, input }) => {
+    await assertCohortInPool(input.cohortId, ctx.tenantId);
+    // tenant-scope (§3.4): only this pool's cases (anchored on the scenario restaurant's owner) — never
+    // expose another pool's golden scenarios/labels for a shared cohort+version.
+    const cases = await query<{ scenario: unknown; correct_label: string }>(
+      `select ec.scenario, ec.correct_label from gov."Eval_Case" ec
+         join tenant."Restaurant" r on r.restaurant_id = (ec.scenario->>'restaurant_id') and r.tenant_id = $4
+        where ec.cohort_id=$1 and ec.intent=$2 and ec.version=$3 order by ec.eval_case_id`,
+      [input.cohortId, input.intent, input.version, ctx.tenantId],
+    );
+    const { provider, coachable } = await evalProviderFor(ctx.tenantId);
+    const out: { restaurantId: string | null; aiLabel: string; correctLabel: string }[] = [];
+    for (const c of cases) {
+      const aiLabel = await provider.answer(c.scenario);
+      if (aiLabel !== c.correct_label) {
+        const s = c.scenario as { restaurant_id?: string } | null;
+        out.push({ restaurantId: s?.restaurant_id ?? null, aiLabel, correctLabel: c.correct_label });
+      }
+    }
+    return { coachable, misses: out };
   }),
 });
