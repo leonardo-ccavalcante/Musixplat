@@ -41,6 +41,9 @@ export const observatoryLearningCase = z.object({
   discardedBranches: z.unknown(),
   probability: z.number().nullable(),
   reviewed: z.boolean(),
+  // 05D Part D — the re-measurement verdict (the only [V] field): 'unverified' | 'verified_fixed' |
+  // 'verified_reopened'. Surfaced so a minted verified_fixed is observable (reviewed is a separate axis).
+  verificationStatus: z.string().nullable(),
   provenanceByField: provMap,
   createdAt: z.string(),
 });

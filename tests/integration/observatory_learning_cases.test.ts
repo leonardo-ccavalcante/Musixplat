@@ -40,4 +40,16 @@ describe("observatory.learningCases — own-tenant, provenance + reviewed surfac
     expect(one.reviewed).toBe(false);
     expect(one.probability).toBeNull(); // never written by motor ⇒ NULL, not 0
   });
+
+  it("surfaces verification_status so a re-measured verified_fixed reads as verified, not amber", async () => {
+    await pool.query(
+      `insert into tenant."Knowledge_Case"
+        (tenant_id,area_type,pattern,outcome,resolution,reviewed,verification_status,provenance_by_field)
+       values ('POOL-002','connection','conn fixed','resolved','reset device',false,'verified_fixed',
+               jsonb_build_object('outcome','[C]','verification_status','[V]'))`,
+    );
+    const rows = await caller("POOL-002", "U-OP-002").observatory.learningCases({});
+    const v = rows.find((c) => c.pattern === "conn fixed")!;
+    expect(v.verificationStatus).toBe("verified_fixed"); // the [V] re-measurement verdict is observable
+  });
 });

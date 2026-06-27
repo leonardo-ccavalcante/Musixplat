@@ -17,13 +17,35 @@ export function LearningTier({ ready, cmd }: { ready: boolean; cmd: ExpandCmd | 
   const keys = useMemo(() => (cases.data ?? []).map((c) => c.kbCaseId), [cases.data]);
   const { isOpen, setOpen } = useExpandGroup(cmd, keys);
 
+  // 05D Part D — re-measure acted cases whose verify-window now has data. A verified_fixed mints the only
+  // [V] lesson and activates precedent-first; deterministic re-measurement, no money/LLM (§7/§14). Tenant =
+  // the signed-in pool (server-side). The cron runs this on a cadence; this button is the on-demand trigger.
+  const utils = trpc.useUtils();
+  const remeasure = trpc.motor.verifyResolutions.useMutation({
+    onSuccess: () => void utils.observatory.learningCases.invalidate(),
+  });
+
   return (
     <section className="mt-8" aria-label="What the AI learned">
       <TierHeader title="Learning" count={cases.isSuccess ? rows.length : undefined}>
+        <Button variant="ghost" onClick={() => remeasure.mutate()} disabled={!ready || remeasure.isPending}>
+          {remeasure.isPending ? "Re-measuring…" : "Re-measure now"}
+        </Button>
         <Button variant="ghost" onClick={() => setReviewOpen(true)}>
           Review &amp; approve…
         </Button>
       </TierHeader>
+
+      {remeasure.isSuccess ? (
+        <p className="mb-2 text-xs text-mxm-content-secondary" aria-live="polite">
+          Re-measured · <span className="text-mxm-green">{remeasure.data.verified_fixed} verified-fixed</span> ·{" "}
+          {remeasure.data.verified_reopened} reopened · {remeasure.data.unmeasurable} not yet measurable
+        </p>
+      ) : remeasure.isError ? (
+        <p className="mb-2 text-xs text-mxm-red" aria-live="polite">
+          Couldn&apos;t re-measure — try again.
+        </p>
+      ) : null}
 
       {!ready || cases.isLoading ? (
         <div className="h-24 animate-pulse rounded-mxm border border-mxm-border" />
@@ -46,7 +68,13 @@ export function LearningTier({ ready, cmd }: { ready: boolean; cmd: ExpandCmd | 
                       <span className={measuredResolved ? "text-mxm-green" : "text-mxm-amber"}>
                         {c.outcome === null ? "pending" : c.provenanceByField?.outcome ? c.outcome : "no provenance"}
                       </span>
-                      <span className="text-mxm-content-tertiary">{c.reviewed ? "✓ vetted" : "awaiting your OK"}</span>
+                      {c.verificationStatus === "verified_fixed" ? (
+                        <span className="text-mxm-green">✓ verified-fixed</span>
+                      ) : c.verificationStatus === "verified_reopened" ? (
+                        <span className="text-mxm-amber">reopened</span>
+                      ) : (
+                        <span className="text-mxm-content-tertiary">{c.reviewed ? "✓ vetted" : "awaiting your OK"}</span>
+                      )}
                     </span>
                   }
                 >
