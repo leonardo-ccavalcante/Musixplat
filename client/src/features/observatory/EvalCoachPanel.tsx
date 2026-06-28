@@ -196,18 +196,29 @@ function CoachModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+// THE hero: the one path that raises the AI above the LOW floor (LOW→MEDIUM), and the operator's recurring
+// "where do I update the evals" answer. Accent-bordered so it reads as the primary action of the screen.
 export function EvalCoachPanel() {
   const [open, setOpen] = useState(false);
   return (
-    <section className="mt-6 rounded-mxm border border-mxm-border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className="mt-6 rounded-mxm border-2 border-mxm-brand bg-mxm-bg-elevated p-[clamp(1rem,2vw,1.25rem)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-mxm-content">Raise autonomy (golden set)</h2>
-          <p className="mt-0.5 max-w-[64ch] text-xs text-mxm-content-secondary">
-            Today the AI is capped at LOW until you prove it safe. Author an answer key, coach it to a pass, sign — and it earns MEDIUM for that cohort.
+          <h2 className="flex items-center gap-2 text-base font-semibold text-mxm-brand">
+            <span aria-hidden="true">↗</span> Raise autonomy — author a golden set
+          </h2>
+          <p className="mt-1 max-w-[68ch] text-sm leading-relaxed text-mxm-content-secondary">
+            Today the AI is capped at <span className="font-medium text-mxm-content">LOW</span> until you prove it safe.
+            Author your own answer key → the AI takes the exam → coach the misses (approve the right lesson) → re-grade →
+            sign to promote, and it earns <span className="font-medium text-mxm-content">MEDIUM</span> for that cohort. You
+            never type a grade — authoring is the input, the verdict is measured, promotion is your signature.
           </p>
         </div>
-        <Button variant="ghost" onClick={() => setOpen(true)}>Start</Button>
+        {/* ghost, not primary: coral-on-white (primary) fails WCAG AA contrast; the hero's prominence comes
+            from the accent border + heading, and the e2e axe gate is blocking. */}
+        <Button variant="ghost" onClick={() => setOpen(true)}>
+          Start
+        </Button>
       </div>
       <CoachModal open={open} onClose={() => setOpen(false)} />
     </section>
