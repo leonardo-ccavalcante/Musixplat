@@ -8,6 +8,7 @@ import { handleChatTurn, type ChatDeps, type EngineCaller } from "../../server/a
 import { getBinding, resolveRestaurant, upsertBinding } from "../../server/agent/identity";
 import { loadHistory, appendTurn } from "../../server/agent/memory";
 import { scanSignals, restaurantAtRisk } from "../../server/agent/signals";
+import { writeChatCase } from "../../server/agent/knowledge";
 
 // Agent chat gateway (Fatia 1) end-to-end against the real DB, with a FAKE chat (no OpenAI/network).
 // Proves the load-bearing invariants:
@@ -47,6 +48,7 @@ function makeDeps(chatResponses: string[]): ChatDeps {
     getBinding: (c, e) => getBinding(query, c, e),
     scanSignals: (rid) => scanSignals(query, rid),
     restaurantAtRisk: (rid, pt) => restaurantAtRisk(query, rid, pt),
+    recordCase: (tid, area, pattern) => writeChatCase(query, tid, area, pattern),
     resolveRestaurant: (rid) => resolveRestaurant(query, rid),
     upsertBinding: (b) => upsertBinding(query, b),
     loadHistory: (s) => loadHistory(query, s),
@@ -134,5 +136,11 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
     );
     expect(hist.rows[0]!.n).toBe(2); // composite session key (channel:external_id)
     expect(hist.rows[0]!.tenant_id).toBe("POOL-RUN"); // tenant carried best-effort for future RLS
+    // the conversation became a Knowledge_Case (reviewed=false) — the chat's learning contribution
+    const kc = await pool.query<{ n: number }>(
+      `select count(*)::int n from tenant."Knowledge_Case"
+        where tenant_id='POOL-RUN' and reviewed=false and pattern like 'chat:%'`,
+    );
+    expect(kc.rows[0]!.n).toBe(1);
   });
 });

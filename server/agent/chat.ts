@@ -43,7 +43,7 @@ export interface EngineCaller {
       restaurantId: string;
       problem_type: string;
       conversationId?: string;
-    }): Promise<{ problem_id: string }>;
+    }): Promise<{ problem_id: string; created: boolean }>;
     run(input: { problemId: string }): Promise<{
       affected: number | null;
       silent: number | null;
@@ -60,6 +60,7 @@ export interface ChatDeps {
   getBinding: (channel: string, externalId: string) => Promise<Binding | null>;
   scanSignals: (restaurantId: string) => Promise<{ problem_type: string; direction: string }[]>;
   restaurantAtRisk: (restaurantId: string, problemType: string) => Promise<number>;
+  recordCase: (tenantId: string, areaType: string, pattern: string) => Promise<void>;
   resolveRestaurant: (restaurantId: string) => Promise<{ tenantId: string; userId: string } | null>;
   upsertBinding: (b: Binding) => Promise<void>;
   loadHistory: (sessionId: string) => Promise<Turn[]>;
@@ -170,6 +171,16 @@ async function runDiagnose(
     problem_type: problemType,
   });
   const r = await engine.diagnosis.run({ problemId: reported.problem_id });
+
+  // The conversation becomes a Knowledge_Case (reviewed=false, outcome NULL) — the chat's learning
+  // contribution: it enters the human RLHF queue and, once reviewed, grounds future diagnoses (BR-B3).
+  // Only on a NEW problem (not a dedup-increment) so a chatty owner doesn't spam cases. Best-effort:
+  // a learning-write failure must never break the owner's reply.
+  if (reported.created) {
+    await deps
+      .recordCase(binding.tenant_id, r.area_type, `chat: ${ownerText} → ${problemType}`)
+      .catch(() => undefined);
+  }
 
   // Unmeasurable → honest, still TRACKED (the ticket exists), a person follows up. No number invented (§14).
   if (r.degraded || r.affected == null || r.revenue_lost == null) {

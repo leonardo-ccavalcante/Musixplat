@@ -25,6 +25,7 @@ function makeDeps(over: Partial<ChatDeps> & { chatResponses: string[] }): {
   caller: { diagnosis: { reportProblem: ReturnType<typeof vi.fn>; run: ReturnType<typeof vi.fn> } };
   upsert: ReturnType<typeof vi.fn>;
   append: ReturnType<typeof vi.fn>;
+  recordCase: ReturnType<typeof vi.fn>;
 } {
   const chatCalls: { system: string; user: string }[] = [];
   let i = 0;
@@ -49,6 +50,7 @@ function makeDeps(over: Partial<ChatDeps> & { chatResponses: string[] }): {
   };
   const upsert = vi.fn(async () => {});
   const append = vi.fn(async () => {});
+  const recordCase = vi.fn(async () => {});
   const deps: ChatDeps = {
     chat: async (system, user) => {
       chatCalls.push({ system, user });
@@ -57,13 +59,14 @@ function makeDeps(over: Partial<ChatDeps> & { chatResponses: string[] }): {
     getBinding: over.getBinding ?? (async () => null),
     scanSignals: over.scanSignals ?? (async () => ALL_SIGNALS),
     restaurantAtRisk: over.restaurantAtRisk ?? (async () => 80), // this restaurant's OWN figure (not pool 320)
+    recordCase: over.recordCase ?? recordCase,
     resolveRestaurant: over.resolveRestaurant ?? (async () => RESOLVED),
     upsertBinding: upsert,
     loadHistory: over.loadHistory ?? (async () => []),
     appendTurn: append,
     caller: () => caller as never,
   };
-  return { deps, chatCalls, caller, upsert, append };
+  return { deps, chatCalls, caller, upsert, append, recordCase };
 }
 
 const bound: Binding = {
@@ -187,6 +190,31 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "quero vender mais" }, deps);
     expect(caller.diagnosis.run).toHaveBeenCalled(); // it DID diagnose adoption
     expect(out.reply).not.toMatch(/\d/); // but shows NO number (no fake money for a non-money problem)
+  });
+
+  it("diagnose on a NEW problem → records a Knowledge_Case (the chat's learning contribution)", async () => {
+    const { deps, recordCase } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: [
+        '{"action":"diagnose","problem_type":"payment","reply":"vou ver"}',
+        "Vejo [[FIG]] em risco. Já registrei. Seguir?",
+      ],
+    });
+    await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falham" }, deps);
+    expect(recordCase).toHaveBeenCalledWith("POOL-X", "finance", expect.stringContaining("payment"));
+  });
+
+  it("diagnose on a dedup-increment (problem not new) → does NOT record a duplicate case", async () => {
+    const { deps, caller, recordCase } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: [
+        '{"action":"diagnose","problem_type":"payment","reply":"vou ver"}',
+        "Vejo [[FIG]] em risco. Seguir?",
+      ],
+    });
+    caller.diagnosis.reportProblem.mockResolvedValueOnce({ problem_id: "P-1", status: "open", frequency: 2, created: false });
+    await handleChatTurn({ channel: "telegram", externalId: "777", text: "de novo os pagamentos" }, deps);
+    expect(recordCase).not.toHaveBeenCalled();
   });
 
   it("diagnose: model drops the figure → deterministic fallback still carries the exact € (§14)", async () => {
