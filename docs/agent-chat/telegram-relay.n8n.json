@@ -1,0 +1,53 @@
+{
+  "name": "Musixplat Support Relay (Telegram)",
+  "nodes": [
+    {
+      "parameters": { "updates": ["message"], "additionalFields": {} },
+      "id": "trigger-1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "webhookId": "musixplat-support-telegram",
+      "credentials": { "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL", "name": "Musixplat Bot" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://REPLACE-WITH-YOUR-RAILWAY-DOMAIN/api/chat",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"telegram\",\n  \"external_id\": {{ $json.message.chat.id }},\n  \"text\": {{ JSON.stringify($json.message.text || \"\") }}\n}",
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "POST /api/chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 0],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE_WITH_GATEWAY_TOKEN_CREDENTIAL", "name": "Musixplat Gateway Token" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.reply }}",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "id": "send-1",
+      "name": "Telegram Send",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [560, 0],
+      "webhookId": "musixplat-support-telegram-send",
+      "credentials": { "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL", "name": "Musixplat Bot" } }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": { "main": [[{ "node": "POST /api/chat", "type": "main", "index": 0 }]] },
+    "POST /api/chat": { "main": [[{ "node": "Telegram Send", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}
