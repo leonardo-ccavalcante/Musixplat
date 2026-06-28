@@ -6,6 +6,7 @@ import { appRouter } from "./routers/_app.js";
 import { createContext } from "./_core/context.js";
 import { env, assertProdSecrets } from "./_core/env.js";
 import { signSession, SESSION_COOKIE } from "./_core/auth.js";
+import { registerAgentGateway } from "./agent/gateway.js";
 import { query, pool } from "./db/pool.js";
 
 assertProdSecrets();
@@ -58,6 +59,10 @@ app.use(
   trpcExpress.createExpressMiddleware({ router: appRouter, createContext }),
 );
 
+// Channel-agnostic chat gateway (Telegram/Intercom relay → agent loop → engines). Token-authed; tenant
+// resolved server-side from the channel binding (never the payload). See server/agent/gateway.ts.
+registerAgentGateway(app);
+
 // Single-service deploy (Railway): serve the built SPA from the same origin so the client's
 // relative `/trpc` calls work with no CORS. API routes above are matched first; any other GET
 // falls back to index.html for client-side routing (wouter).
@@ -69,7 +74,12 @@ const indexHtml = readFileSync(path.join(clientDir, "index.html"), "utf8");
 app.use(express.static(clientDir));
 app.use((req, res, next) => {
   if (req.method !== "GET") return next();
-  if (req.path.startsWith("/trpc") || req.path.startsWith("/auth") || req.path === "/healthz") {
+  if (
+    req.path.startsWith("/trpc") ||
+    req.path.startsWith("/auth") ||
+    req.path.startsWith("/api") ||
+    req.path === "/healthz"
+  ) {
     return next();
   }
   res.type("html").send(indexHtml);

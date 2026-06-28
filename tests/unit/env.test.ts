@@ -9,6 +9,7 @@ const REAL: NodeJS.ProcessEnv = {
   JWT_SECRET: "a-real-injected-32-char-secret-value",
   DATABASE_URL: "postgresql://user:pass@db.prod.example.com:5432/app",
   OPENAI_API_KEY: "sk-real-key",
+  AGENT_GATEWAY_TOKEN: "a-real-injected-gateway-token",
 };
 
 describe("assertProdSecrets — fail-closed prod boot guard", () => {
@@ -45,9 +46,19 @@ describe("assertProdSecrets — fail-closed prod boot guard", () => {
     expect(() => assertProdSecrets({ ...REAL, OPENAI_API_KEY: undefined })).toThrow(/OPENAI_API_KEY/);
   });
 
+  it("refuses the dev AGENT_GATEWAY_TOKEN default (would accept unauthenticated chat traffic)", () => {
+    expect(() =>
+      assertProdSecrets({ ...REAL, AGENT_GATEWAY_TOKEN: "dev-only-agent-gateway-token-change-me" }),
+    ).toThrow(/AGENT_GATEWAY_TOKEN/);
+  });
+
+  it("refuses a missing AGENT_GATEWAY_TOKEN", () => {
+    expect(() => assertProdSecrets({ ...REAL, AGENT_GATEWAY_TOKEN: undefined })).toThrow(/AGENT_GATEWAY_TOKEN/);
+  });
+
   it("reports ALL missing secrets at once (one clear deploy-time error)", () => {
     expect(() => assertProdSecrets({ NODE_ENV: "production" })).toThrow(
-      /JWT_SECRET.*DATABASE_URL.*OPENAI_API_KEY/,
+      /JWT_SECRET.*DATABASE_URL.*OPENAI_API_KEY.*AGENT_GATEWAY_TOKEN/,
     );
   });
 });
