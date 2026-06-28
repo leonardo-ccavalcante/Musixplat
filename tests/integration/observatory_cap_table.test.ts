@@ -42,6 +42,7 @@ describe("observatory.capTable — yourCap [V] vs proven (measured-only) vs runs
     await pool.query(
       `insert into gov."Policy_Tier"(policy_id, tier_id, policy_version, tier_cap, how_measured, human_signature)
        values ('PT-brand-p2','managed_brand','pv-brand-p2','MEDIUM','test','U-OP-002'),
+              ('PT-mid-p2','managed_midmarket','pv-mid-p2','MEDIUM','test','U-OP-002'),
               ('PT-long-p2','long_tail','pv-long-p2','LOW','test','U-OP-002')
        on conflict (policy_id) do nothing`,
     );
@@ -86,9 +87,36 @@ describe("observatory.capTable — yourCap [V] vs proven (measured-only) vs runs
       [intent],
     );
 
+    // A managed_midmarket cohort with a MEASURED green verdict (status [V]) but released_evals still the
+    // [I] floor — i.e. evaluated but NOT yet promoted. proven must stay null (gate on released_evals [V],
+    // not status). Pins the §14 honesty Codex flagged.
+    await pool.query(
+      `insert into cohort."Cohort"(cohort_id,cuisine,zone,tier_base,cohort_rule_version)
+       values ('c_cap_mid','pizza','este','managed_midmarket',$1) on conflict do nothing`,
+      [version],
+    );
+    await pool.query(
+      `insert into cohort."Cohort_Membership_Snapshot"
+        (restaurant_id,cohort_id,week,cohort_rule_version,percentile_in_cohort,gap_to_top,provenance)
+       values ($1,'c_cap_mid','2026-06-22',$2,50,0.5,'[V]')`,
+      [r2.restaurant_id, version],
+    );
+    await pool.query(
+      `insert into gov."Eval_Cell"(cohort_id,intent,version,released_evals,status,provenance_by_field)
+       values ('c_cap_mid',$1,'gs-1','MEDIUM'::public.autonomy_level,'green'::public.eval_status,
+               jsonb_build_object('released_evals','[I]','status','[V]'))
+       on conflict (cohort_id,intent,version) do nothing`,
+      [intent],
+    );
+
     const owner = await caller("POOL-002", "U-OP-002").observatory.capTable();
     const brand = owner.find((t) => t.tier === "managed_brand");
     const long = owner.find((t) => t.tier === "long_tail");
+    const mid = owner.find((t) => t.tier === "managed_midmarket");
+
+    expect(mid).toBeDefined();
+    expect(mid!.proven).toBeNull(); // verdict measured ([V] status) but level NOT promoted ([I]) ⇒ not proven
+    expect(mid!.runsAlone).toBe("LOW"); // least(MEDIUM cap, coalesce(null,'LOW')) = LOW
 
     expect(brand).toBeDefined();
     expect(brand!.yourCap).toBe("MEDIUM"); // the human-approved ceiling [V]

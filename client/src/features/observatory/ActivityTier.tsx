@@ -18,12 +18,17 @@ export function ActivityTier({ open, onOpenChange }: { open: boolean; onOpenChan
   const [escOpen, setEscOpen] = useState(false);
   const rows = traces.data ?? [];
   const flagged = rows.filter((t) => t.rubberStampFlag === true).length;
+  // "all clear" only when EVERY check was measured false — a NULL rubber_stamp_flag is pre-run, not clean
+  // (§14): never fabricate a clean governance result from unmeasured data.
+  const allMeasuredClean = rows.length > 0 && rows.every((t) => t.rubberStampFlag === false);
 
   const summary = !traces.isSuccess
     ? "· …"
     : rows.length === 0
       ? "· nothing autonomous yet"
-      : `· ${rows.length} autonomous${flagged > 0 ? ` · ${flagged} to check` : " · all clear"}`;
+      : `· ${rows.length} autonomous${
+          flagged > 0 ? ` · ${flagged} to check` : allMeasuredClean ? " · all clear" : " · checks pending"
+        }`;
 
   return (
     <>
@@ -34,6 +39,11 @@ export function ActivityTier({ open, onOpenChange }: { open: boolean; onOpenChan
         onOpenChange={onOpenChange}
         actions={
           <>
+            {/* the full per-trace audit (proposer/confirmer/independence/time-to-sign/gates) lives in the
+                registry — always reachable, not only when the preview table is truncated. */}
+            <Button variant="ghost" onClick={() => setRegistryOpen(true)}>
+              Full registry…
+            </Button>
             <Button variant="ghost" onClick={() => setEscOpen(true)}>
               Escalations…
             </Button>

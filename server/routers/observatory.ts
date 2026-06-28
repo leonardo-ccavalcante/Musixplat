@@ -85,11 +85,14 @@ export const observatoryRouter = router({
           order by pt.tier_id, pt.policy_version desc
        ),
        proven as (
+         -- proven = the highest PROMOTED level: gate on released_evals provenance '[V]' (the human promote),
+         -- NOT just status — runEval writes a measured status '[V]' while LEAVING released_evals at the [I]
+         -- floor until a human promotes it, so a status check alone would label an un-promoted floor "proven".
          select c.tier_base::text as tier, max(e.released_evals) as proven
            from gov."Eval_Cell" e
            join cohort."Cohort" c on c.cohort_id = e.cohort_id
           where e.status = 'green'
-            and e.provenance_by_field->>'status' = '[V]'
+            and e.provenance_by_field->>'released_evals' = '[V]'
             and exists (
               select 1 from cohort."Cohort_Membership_Snapshot" cms
                 join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1

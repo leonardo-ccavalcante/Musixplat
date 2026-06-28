@@ -20,6 +20,23 @@ export function NeedsYouBar({ ready }: { ready: boolean }) {
   // Both inputs settle fast; until then the page's global loading state covers the screen — render nothing
   // rather than flash a premature "all quiet".
   if (!ready || cockpit.isLoading || cases.isLoading) return null;
+
+  // Fail-closed (§7): a failed/errored read leaves data undefined, which would otherwise compute total=0 and
+  // render a FALSE "all quiet" while money sign-offs or lessons sit hidden. Show an honest unknown state.
+  if (cockpit.isError || cases.isError) {
+    return (
+      <p
+        role="alert"
+        className="mt-4 flex items-center gap-2 rounded-mxm border border-mxm-amber bg-mxm-bg-elevated px-4 py-2.5 text-sm text-mxm-content-secondary"
+      >
+        <span aria-hidden="true" className="text-mxm-amber">
+          ⚠
+        </span>
+        Couldn&apos;t check what needs you — a read failed. Refresh to try again.
+      </p>
+    );
+  }
+
   const n = computeNeedsYou(cockpit.data, cases.data);
 
   if (n.total === 0) {
