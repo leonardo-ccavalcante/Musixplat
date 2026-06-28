@@ -47,6 +47,14 @@ insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('rubber_stamp_max_sec', '30', '[C]', 'leo')
 on conflict (key) do nothing;
 
+-- ── 05A:A.5.3 anti-fracturing knob (§3.3/§7, read BY NAME): €-volume ceiling per restaurant/window above
+--    which a human money RELEASE is held for fracturing review (server/cockpit/antifrac.ts via financial_abort).
+--    [C] conservative default — inert on the seeded base (max per-restaurant 30d volume ≈ €1.4k); tune DOWN
+--    to activate. Mirrored in migration 20260628000002 for the hosted full-reset path. ──
+insert into catalog."Config_Knobs"(key, value, provenance, owner) values
+  ('umbral_antifrac', '10000', '[C]', 'leo')
+on conflict (key) do nothing;
+
 -- ── 05B Diagnosis knobs ([C] placeholders, read BY NAME). ──
 insert into catalog."Config_Knobs"(key, value, provenance, owner) values
   ('threshold_classification',      '0.60', '[C]', 'leo'),

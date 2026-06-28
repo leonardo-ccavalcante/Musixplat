@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, managerProcedure } from "../_core/trpc.js";
 import { query, withTx } from "../db/pool.js";
 import { type Level } from "../conversation/min.js";
+import { assertNoFracturing } from "../cockpit/antifrac.js";
 import {
   cockpitReleaseInput,
   cockpitSendDispatchInput,
@@ -167,8 +168,9 @@ export interface ReleaseResult {
 
 export async function recordRelease(i: ReleaseInput, client: pg.PoolClient): Promise<ReleaseResult> {
   const prop = (
-    await client.query<{ cohort_id: string; tier_base: string; effective_level: Level | null; calc_id: string | null }>(
-      `select p.cohort_id, ct.tier_base, m.effective_level::text as effective_level, m.calculation_id::text as calc_id
+    await client.query<{ cohort_id: string; tier_base: string; effective_level: Level | null; calc_id: string | null; financial_class: string | null; cohort_rule_version: string }>(
+      `select p.cohort_id, ct.tier_base, m.effective_level::text as effective_level, m.calculation_id::text as calc_id,
+              p.financial_class::text as financial_class, p.cohort_rule_version
        from gov."NBA_Proposal" p
        join cohort."Cohort" ct on ct.cohort_id = p.cohort_id
        left join lateral (
@@ -206,6 +208,12 @@ export async function recordRelease(i: ReleaseInput, client: pg.PoolClient): Pro
   ).rows[0];
   if (!ai || ai.user_id === i.operatorId) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "no distinct AI proposer for 4-eyes" });
+  }
+
+  // §3.3 anti-fracturing: a money RELEASE to a cohort is refused if a member restaurant shows fracturing
+  // (recent volume > umbral_antifrac). PAUSE disburses nothing ⇒ not gated; non-money actions skip inside.
+  if (i.action === "RELEASE") {
+    await assertNoFracturing(client, i.tenantId, prop.cohort_id, prop.cohort_rule_version, prop.financial_class);
   }
 
   const releaseId = randomUUID();
