@@ -214,7 +214,9 @@ export function EvalCoachPanel() {
             never type a grade — authoring is the input, the verdict is measured, promotion is your signature.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setOpen(true)}>
+        {/* ghost, not primary: coral-on-white (primary) fails WCAG AA contrast; the hero's prominence comes
+            from the accent border + heading, and the e2e axe gate is blocking. */}
+        <Button variant="ghost" onClick={() => setOpen(true)}>
           Start
         </Button>
       </div>
