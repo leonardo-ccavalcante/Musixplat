@@ -1,7 +1,10 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { trpc } from "@/lib/trpc";
+import { NBA_CATALOG } from "@/features/cockpit/nbaCatalog";
+import { INTENT_CATALOG, cohortOptionLabel, csvTemplate, parseGoldenCsv } from "./evalCoachFormat";
 
 // EPIC-B4 coach — the ONLY path that RAISES autonomy above the LOW floor, from the app (no .ts). You author
 // your OWN golden set (the right call per real member), the eval grades the learning motor, you coach the
@@ -9,15 +12,8 @@ import { trpc } from "@/lib/trpc";
 // grade — authoring is INPUT, the verdict is produced, promotion is your signature.
 type Verdict = { status: "red" | "green"; passRate: number; kappa: number | null; n: number };
 
-const csvOf = (ids: string[]) => "restaurant_id,correct_label\n" + ids.map((r) => `${r},`).join("\n") + "\n";
-const parseCsv = (text: string): { restaurantId: string; correctLabel: string }[] =>
-  text
-    .trim()
-    .split(/\r?\n/)
-    .slice(1) // drop header
-    .map((l) => l.split(","))
-    .map((c) => ({ restaurantId: (c[0] ?? "").trim(), correctLabel: (c[1] ?? "").trim().toUpperCase() }))
-    .filter((r) => r.restaurantId && /^A[1-8]$/.test(r.correctLabel));
+// the legend embedded in the downloaded CSV (closed A1..A8 reference, not a §14 result — see nbaCatalog.ts)
+const CSV_LEGEND = NBA_CATALOG.map((e) => `${e.code} — ${e.name}`);
 
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
@@ -33,8 +29,28 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
   );
 }
 
+// A native <select> picker so the operator chooses real cohorts/topics instead of typing opaque ids blind
+// (the root cause of "it won't let me upload anything": a wrong free-text id → template fetch failed → the
+// upload button stayed disabled). Native = free WCAG a11y (keyboard, labelable).
+function Picker({ label, value, onChange, disabled, children }: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean; children: ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1 text-xs text-mxm-content-secondary">
+      {label}
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-mxm border border-mxm-border bg-mxm-bg-elevated px-2 py-1 text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-mxm-brand disabled:opacity-50"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
 function CoachModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const utils = trpc.useUtils();
+  const cohorts = trpc.cohorts.list.useQuery(undefined, { enabled: open });
   const author = trpc.eval.authorFromTemplate.useMutation();
   const run = trpc.eval.run.useMutation();
   const promote = trpc.eval.promote.useMutation();
@@ -51,23 +67,26 @@ function CoachModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const ready = cohortId.trim() && intent.trim() && version.trim();
+  const ready = Boolean(cohortId && intent && version.trim());
   const reset = () => { setErr(null); setMsg(null); };
+  // picking a different cohort invalidates a previously-downloaded template (its members differ) — drop it so
+  // the operator can never upload a CSV authored against a different cohort.
+  const pickCohort = (v: string) => { setCohortId(v); setWeek(null); setIds([]); };
 
   const onDownload = async () => {
     reset();
     try {
-      const t = await utils.eval.template.fetch({ cohortId: cohortId.trim(), intent: intent.trim() });
-      if (!t.week || t.restaurantIds.length === 0) { setErr("No members for that cohort — check the cohort id."); return; }
+      const t = await utils.eval.template.fetch({ cohortId, intent });
+      if (!t.week || t.restaurantIds.length === 0) { setErr("This cohort has no members yet — pick another, or run the Cohorts screen first."); return; }
       setWeek(t.week);
       setIds(t.restaurantIds);
-      const url = URL.createObjectURL(new Blob([csvOf(t.restaurantIds)], { type: "text/csv" }));
+      const url = URL.createObjectURL(new Blob([csvTemplate(t.restaurantIds, CSV_LEGEND)], { type: "text/csv" }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `golden-set-${cohortId.trim()}.csv`;
+      a.download = `golden-set-${cohortId}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      setMsg(`Template ready: ${t.restaurantIds.length} members. Fill correct_label (A1–A8), then upload.`);
+      setMsg(`Template ready: ${t.restaurantIds.length} members. Open it, fill the correct_label column (A1–A8) for each row, then upload it below.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load the cohort.");
     }
@@ -78,10 +97,10 @@ function CoachModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     setVerdict(null);
     setMisses(null);
     setReleased(null);
-    const rows = parseCsv(await file.text());
+    const rows = parseGoldenCsv(await file.text());
     if (fileRef.current) fileRef.current.value = "";
-    if (rows.length === 0) { setErr("No valid rows (each needs a correct_label A1–A8)."); return; }
-    if (!week) { setErr("Download the template first (it sets the week)."); return; }
+    if (!week) { setErr("Download the template first — it lists this cohort's members and sets the week."); return; }
+    if (rows.length === 0) { setErr("No labelled rows found. Fill the correct_label column with A1–A8 for each restaurant, keep the header row, then upload."); return; }
     author.mutate(
       { cohortId: cohortId.trim(), intent: intent.trim(), version: version.trim(), targetLevel: "MEDIUM", week, rows },
       {
@@ -123,16 +142,53 @@ function CoachModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       </p>
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <Field label="cohort id" value={cohortId} onChange={setCohortId} placeholder="pizza_zone_centro_long_tail_v1" />
-        <Field label="intent" value={intent} onChange={setIntent} placeholder="INT-…" />
-        <Field label="version (a name you pick)" value={version} onChange={setVersion} placeholder="my-gs-medium" />
+        <Picker label="cohort" value={cohortId} onChange={pickCohort} disabled={cohorts.isLoading}>
+          <option value="">{cohorts.isLoading ? "Loading…" : "Select a cohort…"}</option>
+          {(cohorts.data ?? []).map((c) => (
+            <option key={c.cohort_id} value={c.cohort_id}>{cohortOptionLabel(c)}</option>
+          ))}
+        </Picker>
+        <Picker label="topic" value={intent} onChange={setIntent}>
+          <option value="">Select a topic…</option>
+          {INTENT_CATALOG.map((i) => (
+            <option key={i.intent_id} value={i.intent_id}>{i.label}</option>
+          ))}
+        </Picker>
+        <Field label="version (a name you pick)" value={version} onChange={setVersion} placeholder="pizza-centro-jun" />
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      {cohorts.isSuccess && (cohorts.data?.length ?? 0) === 0 && (
+        <p className="mt-2 text-xs text-mxm-content-tertiary">
+          No cohorts yet — run the Cohorts screen (or &ldquo;Prepare cockpit&rdquo;) to build them, then come back.
+        </p>
+      )}
+
+      <div className="mt-3">
+        <Disclosure title="What do the labels (A1–A8) mean?">
+          <ul className="space-y-1 text-xs">
+            {NBA_CATALOG.map((e) => (
+              <li key={e.code} className="text-mxm-content-secondary">
+                <span className="font-mono text-mxm-content">{e.code}</span> · <span className="text-mxm-content">{e.name}</span>
+                {e.money && (
+                  <span className="ml-1 rounded bg-mxm-bg-secondary px-1 align-middle text-[0.6rem] uppercase text-mxm-content-tertiary">money</span>
+                )}
+                <span className="text-mxm-content-tertiary"> — {e.desc}</span>
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button variant="ghost" onClick={() => void onDownload()} disabled={!ready}>1 · Download template</Button>
         <Button variant="ghost" onClick={() => fileRef.current?.click()} disabled={!ready || ids.length === 0 || author.isPending}>
           {author.isPending ? "Grading…" : "2 · Upload filled CSV"}
         </Button>
+        {!ready ? (
+          <span className="text-xs text-mxm-content-tertiary">Pick a cohort, a topic, and a version name to start.</span>
+        ) : ids.length === 0 ? (
+          <span className="text-xs text-mxm-content-tertiary">← download the template, fill the labels, then upload.</span>
+        ) : null}
         <input
           ref={fileRef}
           type="file"
