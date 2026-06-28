@@ -4,34 +4,42 @@ import { Button } from "@/components/ui/Button";
 import { CapEditModal } from "./CapEditModal";
 import { EvalStatusBadge } from "./EvalStatusBadge";
 import { CollapsibleTier } from "./CollapsibleTier";
-import type { ObservatoryEvalCell } from "@shared/contracts_observatory";
+import type { ObservatoryCapRow, ObservatoryEvalCell } from "@shared/contracts_observatory";
 
 // §14 honest-pending + §3.10 provenance gate.
 const cell = (v: number | boolean | null, prov?: string): string =>
   v === null ? "not measured" : !prov ? "no provenance" : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
 
 // Limits = how far the AI may go, per tier, as a scannable table: tier · proven · your cap · runs-alone.
-// The honest split (§3.10/§14): PROVEN is producer-measured ([V], read-only); YOUR CAP is the human lever
-// ([V], edited via the EXISTING cockpit template/upload — CapEditModal → managerProcedure); the AI acts at
-// RUNS-ALONE = least(proven, cap). A tier row expands to its per-cohort eval evidence (n/kappa/red-team/
-// provenance) so the measured detail is never lost. The expand toggle is a real <button aria-expanded>.
+// The honest split (§3.10/§14): PROVEN is producer-measured ([V], read-only) and shown as the BEST cohort
+// promoted in the tier (with a K/M count so it never reads as tier-wide — runtime autonomy is per cohort via
+// least()); YOUR CAP is the human lever ([V], edited via the EXISTING cockpit template/upload); RUNS-ALONE =
+// least(proven, cap). A tier row expands to its per-cohort eval evidence (n/κ/red-team/provenance) so the
+// measured detail is never lost. A tier with evals but NO in-pool cap still renders (evidence stays visible).
 export function LimitsTier({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const caps = trpc.observatory.capTable.useQuery(undefined, { enabled: true });
   const evals = trpc.observatory.evalList.useQuery(undefined, { enabled: true });
   const [capOpen, setCapOpen] = useState(false);
   const [openTiers, setOpenTiers] = useState<Set<string>>(() => new Set());
-  const rows = caps.data ?? [];
+
+  const capByTier = new Map((caps.data ?? []).map((c) => [c.tier, c]));
   const cellsByTier = (evals.data ?? []).reduce<Record<string, ObservatoryEvalCell[]>>((acc, e) => {
     const k = e.tierBase ?? "—";
     (acc[k] ??= []).push(e);
     return acc;
   }, {});
+  // a row per tier with EITHER an approved cap OR eval cells — so the [I]/[V] eval evidence stays visible even
+  // for a tier/pool with no in-pool-signed Policy_Tier (cap rows and eval floors are scoped differently).
+  const tiers = [...new Set([...capByTier.keys(), ...Object.keys(cellsByTier)])].sort();
+  const isLoading = caps.isLoading || evals.isLoading;
+  const isError = caps.isError || evals.isError;
+  const summary = capByTier.size > 0 ? "· you set the ceiling, signed by you" : "· measured evals (no cap set yet)";
 
   return (
     <>
       <CollapsibleTier
         title="Limits"
-        summary={rows.length > 0 ? `· ${rows.length} tiers · you set the ceiling, signed by you` : "· you set the ceiling here"}
+        summary={summary}
         open={open}
         onOpenChange={onOpenChange}
         actions={
@@ -40,13 +48,13 @@ export function LimitsTier({ open, onOpenChange }: { open: boolean; onOpenChange
           </Button>
         }
       >
-        {caps.isLoading ? (
+        {isLoading ? (
           <div className="h-20 animate-pulse rounded-mxm border border-mxm-border" />
-        ) : caps.isError ? (
+        ) : isError ? (
           <p className="text-sm text-mxm-red">Couldn&apos;t read limits — try again.</p>
-        ) : rows.length === 0 ? (
+        ) : tiers.length === 0 ? (
           <p className="text-sm text-mxm-content-secondary">
-            No approved limits for this pool yet — prepare the cockpit or upload limits to set a ceiling.
+            No approved limits or measured evals for this pool yet — prepare the cockpit or upload limits.
           </p>
         ) : (
           <div className="overflow-hidden rounded-mxm border border-mxm-border">
@@ -54,26 +62,24 @@ export function LimitsTier({ open, onOpenChange }: { open: boolean; onOpenChange
               <thead>
                 <tr className="text-mxm-content-tertiary">
                   <th scope="col" className="px-3 py-2 font-normal">Tier</th>
-                  <th scope="col" className="px-3 py-2 font-normal">Proven (measured)</th>
+                  <th scope="col" className="px-3 py-2 font-normal">Proven (best, measured)</th>
                   <th scope="col" className="px-3 py-2 font-normal text-mxm-brand">Your cap</th>
                   <th scope="col" className="px-3 py-2 font-normal">Runs alone</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((t) => (
+                {tiers.map((tier) => (
                   <TierRow
-                    key={t.tier}
-                    tier={t.tier}
-                    proven={t.proven}
-                    yourCap={t.yourCap}
-                    runsAlone={t.runsAlone}
-                    cells={cellsByTier[t.tier] ?? []}
-                    open={openTiers.has(t.tier)}
+                    key={tier}
+                    tier={tier}
+                    cap={capByTier.get(tier)}
+                    cells={cellsByTier[tier] ?? []}
+                    open={openTiers.has(tier)}
                     onToggle={() =>
                       setOpenTiers((p) => {
                         const n = new Set(p);
-                        if (n.has(t.tier)) n.delete(t.tier);
-                        else n.add(t.tier);
+                        if (n.has(tier)) n.delete(tier);
+                        else n.add(tier);
                         return n;
                       })
                     }
@@ -82,7 +88,9 @@ export function LimitsTier({ open, onOpenChange }: { open: boolean; onOpenChange
               </tbody>
             </table>
             <p className="border-t border-mxm-border px-3 py-2 text-[0.7rem] text-mxm-content-tertiary">
-              Proven is measured by the AI (read-only). You set the cap; it acts at the lower of the two.
+              Proven is the highest cohort the AI has promoted in this tier (measured, read-only); the count shows
+              how many. You set the cap. Each cohort acts at the lower of its own level and the cap — unmeasured
+              cohorts act at LOW. Open a tier for the per-cohort detail.
             </p>
           </div>
         )}
@@ -100,22 +108,21 @@ export function LimitsTier({ open, onOpenChange }: { open: boolean; onOpenChange
 
 function TierRow({
   tier,
-  proven,
-  yourCap,
-  runsAlone,
+  cap,
   cells,
   open,
   onToggle,
 }: {
   tier: string;
-  proven: string | null;
-  yourCap: string;
-  runsAlone: string;
+  cap?: ObservatoryCapRow;
   cells: ObservatoryEvalCell[];
   open: boolean;
   onToggle: () => void;
 }) {
   const id = useId();
+  // promoted = cells whose LEVEL is human-promoted ([V]); the count makes the tier "best" honest (most cells
+  // are usually not promoted). Only shown for a tier with an approved cap (where proven is producer-computed).
+  const promoted = cells.filter((c) => c.provenanceByField?.released_evals === "[V]").length;
   return (
     <Fragment>
       <tr className="border-t border-mxm-border">
@@ -133,9 +140,18 @@ function TierRow({
             {tier}
           </button>
         </td>
-        <td className="px-3 py-2 text-mxm-content-tertiary">{proven ?? "not graded"}</td>
-        <td className="px-3 py-2 font-medium text-mxm-content">{yourCap}</td>
-        <td className="px-3 py-2 text-mxm-content-secondary">{runsAlone}</td>
+        <td className="px-3 py-2 text-mxm-content-tertiary">
+          {cap ? (
+            <>
+              {cap.proven ?? "not graded"}
+              {cells.length > 0 ? <span> · {promoted}/{cells.length} promoted</span> : null}
+            </>
+          ) : (
+            "—"
+          )}
+        </td>
+        <td className="px-3 py-2 font-medium text-mxm-content">{cap ? cap.yourCap : "not set"}</td>
+        <td className="px-3 py-2 text-mxm-content-secondary">{cap ? cap.runsAlone : "LOW"}</td>
       </tr>
       <tr id={id} hidden={!open}>
         <td colSpan={4} className="bg-mxm-bg-secondary px-3 py-2">
