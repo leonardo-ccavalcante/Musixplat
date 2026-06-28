@@ -10,6 +10,21 @@ export const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,
   max: 10,
   ssl: isLocalDb ? undefined : { rejectUnauthorized: false },
+  // TCP keepalive so a remote DB that silently drops an idle socket is detected, not handed to a query as
+  // a dead connection. (The 'error' handler below is the real safety net; this just reduces how often it
+  // fires.)
+  keepAlive: true,
+});
+
+// node-postgres Pools are EventEmitters. A remote DB (Supabase direct 5432 in prod) closes idle
+// connections; when it does, the pool emits 'error' on the idle client. Node rethrows an 'error' event
+// that has NO listener as an UNCAUGHT exception → the process exits non-zero → under Railway's
+// restartPolicy=ON_FAILURE that is a crash-loop (boots, "server on :PORT", then dies with no app stack,
+// on repeat). Logging and swallowing the idle-client error here keeps a dropped idle connection from ever
+// being fatal — the next query just checks out a fresh client. This is the node-postgres-documented prod
+// requirement; pinned by pool.test.ts (§3.11).
+pool.on("error", (err) => {
+  console.error("idle pg client error (recovered, non-fatal):", err);
 });
 
 export type Sql = typeof pool;

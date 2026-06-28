@@ -15,6 +15,7 @@ import { CockpitFocusCue } from "@/features/cockpit/CockpitFocusCue";
 import { Button } from "@/components/ui/Button";
 import { NbaModal, type KbImpact } from "@/features/cockpit/NbaModal";
 import { useDevLogin } from "@/features/cockpit/useDevLogin";
+import { EvalCoachPanel } from "@/features/observatory/EvalCoachPanel";
 import { type RowAction, type RowState, type KbReview } from "@/features/cockpit/CockpitRow";
 import type { NbaCockpitRow } from "@shared/contracts";
 
@@ -206,6 +207,12 @@ export function CockpitPage() {
           </Button>
         </div>
       </header>
+
+      {/* Raise-autonomy entry point (golden-set coach). Self-contained — its own modal + on-click eval
+          mutations, no dependency on the proposals list — so it renders once signed in, regardless of the
+          board's loading / empty / error state. Mirrors /observatory: the path to lift the AI above the LOW
+          floor, right where the operator manages autonomy. */}
+      {ready && <EvalCoachPanel />}
 
       {!ready || list.isLoading ? (
         <LoadingState label={!ready ? "Signing in…" : "Loading proposals…"} />

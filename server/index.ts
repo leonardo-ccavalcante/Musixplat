@@ -6,9 +6,23 @@ import { appRouter } from "./routers/_app.js";
 import { createContext } from "./_core/context.js";
 import { env, assertProdSecrets } from "./_core/env.js";
 import { signSession, SESSION_COOKIE } from "./_core/auth.js";
-import { query } from "./db/pool.js";
+import { query, pool } from "./db/pool.js";
 
 assertProdSecrets();
+
+// Last-resort visibility. The prod crash-loop had NO app stack — a silent ELIFECYCLE. Any uncaught
+// exception / unhandled rejection still exits the process (fail-closed §3.7 — never swallow and limp on
+// with corrupted state; Railway restarts), but log the full error + stack FIRST so the next incident is
+// diagnosable instead of a stackless mystery. (The pg idle-client drop is handled at the pool; this is the
+// net for everything else.)
+process.on("uncaughtException", (err) => {
+  console.error("FATAL uncaughtException — exiting non-zero:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("FATAL unhandledRejection — exiting non-zero:", reason);
+  process.exit(1);
+});
 
 const app = express();
 // 25mb body limit (default is 100kb): the cohort CSV onboarding uploads a base64-encoded CSV that can
@@ -61,6 +75,20 @@ app.use((req, res, next) => {
   res.type("html").send(indexHtml);
 });
 
-app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, () => {
   console.warn(`server on :${env.PORT}`);
 });
+
+// Graceful shutdown. Railway sends SIGTERM on every deploy / restart / scale. With no handler Node exits
+// 143 and pnpm reports `ELIFECYCLE Command failed` — which under restartPolicy=ON_FAILURE reads as a crash
+// and feeds the restart loop. Stop accepting connections, drop idle HTTP keep-alive sockets (Railway's edge
+// proxy holds them open, so without this server.close() would hang and its callback never fire), close the
+// pg pool, then exit 0 so a normal stop is a clean stop. The unref'd 10s timer is the hard backstop.
+for (const sig of ["SIGTERM", "SIGINT"] as const) {
+  process.once(sig, () => {
+    console.warn(`${sig} received — draining and shutting down`);
+    server.close(() => void pool.end().finally(() => process.exit(0)));
+    server.closeIdleConnections();
+    setTimeout(() => process.exit(0), 10_000).unref();
+  });
+}

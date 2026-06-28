@@ -66,6 +66,12 @@ export function ObservatoryPage() {
         </p>
       </header>
 
+      {/* The golden-set coach is self-contained — its own modal + on-click eval mutations, no dependency on
+          weekSummary — so it renders as soon as the session is ready, even while activity loads or errors.
+          It used to live INSIDE the week-data branch, so a pool with no cockpit activity hid the only in-app
+          path to raise the AI above the LOW floor. */}
+      {ready && <EvalCoachPanel />}
+
       {!ready || week.isLoading ? (
         <LoadingState label={!ready ? "Signing in…" : "Reading activity…"} />
       ) : week.isError || !week.data ? (
@@ -105,7 +111,6 @@ export function ObservatoryPage() {
 
           <div className="[&>section:first-child]:mt-0">
             <FreedomTier ready={ready} cmd={expandCmd} />
-            <EvalCoachPanel />
             <LearningTier ready={ready} cmd={expandCmd} />
             <ActivityTier ready={ready} cmd={expandCmd} />
           </div>
