@@ -7,6 +7,7 @@ import type { Context } from "../../server/_core/context";
 import { handleChatTurn, type ChatDeps, type EngineCaller } from "../../server/agent/chat";
 import { getBinding, resolveRestaurant, upsertBinding } from "../../server/agent/identity";
 import { loadHistory, appendTurn } from "../../server/agent/memory";
+import { scanSignals } from "../../server/agent/signals";
 
 // Agent chat gateway (Fatia 1) end-to-end against the real DB, with a FAKE chat (no OpenAI/network).
 // Proves the load-bearing invariants:
@@ -44,6 +45,7 @@ function makeDeps(chatResponses: string[]): ChatDeps {
   return {
     chat: async () => chatResponses[i++] ?? chatResponses[chatResponses.length - 1]!,
     getBinding: (c, e) => getBinding(query, c, e),
+    scanSignals: (rid) => scanSignals(query, rid),
     resolveRestaurant: (rid) => resolveRestaurant(query, rid),
     upsertBinding: (b) => upsertBinding(query, b),
     loadHistory: (s) => loadHistory(query, s),
@@ -81,6 +83,16 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
     expect(b.rows[0]?.user_id).toBe("U-RUN");
   });
 
+  it("the engine FINDS the signal: fn_restaurant_signals surfaces payment for a restaurant with failed orders", async () => {
+    const sig = await scanSignals(query, "R-RUN-1");
+    expect(sig.map((s) => s.problem_type)).toContain("payment"); // real failed orders → real signal (not a guess)
+  });
+
+  it("fn_restaurant_signals emits NO phantom signal for an unknown restaurant", async () => {
+    const sig = await scanSignals(query, "R-DOES-NOT-EXIST");
+    expect(sig).toHaveLength(0); // 'no usage' is vacuously true for an unknown id — guarded out
+  });
+
   it("unknown restaurant id binds NOTHING (no leak)", async () => {
     const deps = makeDeps([
       '{"action":"bind","restaurant_id":"R-NOPE","reply":"achei"}',
@@ -100,10 +112,13 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
       tenant_id: "POOL-RUN",
       user_id: "U-RUN",
     });
-    const deps = makeDeps(['{"action":"diagnose","problem_type":"payment","reply":"vou checar"}']);
+    const deps = makeDeps([
+      '{"action":"diagnose","problem_type":"payment","reply":"vou checar"}',
+      "Vejo que pagamentos podem estar te custando [[FIG]]. Já registrei pra acompanhar. Quer seguir?",
+    ]);
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "meus pagamentos falham" }, deps);
     expect(out.action).toBe("diagnose");
-    expect(out.reply).toContain("320"); // the produced revenue_lost, rendered deterministically (never fabricated)
+    expect(out.reply).toContain("€320"); // produced revenue_lost (SQL), code-formatted, narrator reproduced verbatim
     // the engine actually ran against the real DB:
     const pr = await pool.query<{ n: number }>(
       `select count(*)::int n from tenant."Diagnosed_Problem" where tenant_id='POOL-RUN'`,

@@ -52,9 +52,12 @@ O guard de boot agora exige `AGENT_GATEWAY_TOKEN` em produção. **Sem ela, o se
 
 1. **Credencial do Telegram** (nos nós `Telegram Trigger` e `Telegram Send`): crie/escolha uma
    credencial `Telegram API` com o **token do bot** (Passo 2).
-2. **Credencial do gateway** (no nó `POST /api/chat`): crie uma credencial **Header Auth**:
-   - Name = `Authorization`
-   - Value = `Bearer <AGENT_GATEWAY_TOKEN>`  ← o MESMO token do Railway (Passo "antes de mergear").
+2. **Credencial do gateway** (no nó `POST /api/chat`): crie uma credencial **Header Auth**.
+   ⚠️ **Cuidado — a tela tem DOIS campos "Name":**
+   - o **nome da credencial** (o rótulo, no topo) pode ser qualquer coisa, ex.: `Musixplat Gateway Token`;
+   - o campo **Name** (o nome do header HTTP) tem que ser **exatamente** `Authorization` — NÃO o rótulo.
+   - **Value** = `Bearer <AGENT_GATEWAY_TOKEN>`  ← o MESMO token do Railway (com `Bearer ` na frente).
+   - Se puser o rótulo no campo Name, dá `ERR_INVALID_HTTP_TOKEN: Header name must be a valid HTTP token`.
 3. **URL** (no nó `POST /api/chat`): troque `https://REPLACE-WITH-YOUR-RAILWAY-DOMAIN/api/chat` pelo
    seu domínio real do Railway. (Railway → Settings → Networking → Generate Domain, se ainda não tiver.)
 
