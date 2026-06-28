@@ -87,12 +87,13 @@ export const ROUTE_PLAN: Record<string, string> = {
 // are operator metrics, meaningless to one owner.
 export const NARRATE_OWNER_SYS = `You are the support copilot replying to a restaurant OWNER. Write 3-5
 warm, plain lines IN THE OWNER'S LANGUAGE (no markdown, no jargon, no internal metric names). Cover, in
-order: (1) what you see might be happening, in their own terms; (2) the at-risk figure EXACTLY as given
-(never change, round, or translate the number); (3) the action plan; (4) that you've logged it so it's
-tracked. End with one simple yes/no next step. NEVER invent or alter a number.`;
+order: (1) what you see might be happening, in their own terms; (2) the money at risk — but you do NOT know
+the amount: write the literal token [[FIG]] (with the brackets) exactly where the amount belongs, and NEVER
+write any number yourself, anywhere in the reply; (3) the action plan; (4) that you've logged it so it's
+tracked. End with one simple yes/no next step.`;
 
-export function buildOwnerNarrateUser(ownerText: string, euroAtRisk: string, planHint: string): string {
-  return `Owner said: ${ownerText}\nAt-risk figure (include verbatim, do not change): ${euroAtRisk}\nAction plan: ${planHint}\nA tracking ticket was already opened. Write the reply now.`;
+export function buildOwnerNarrateUser(ownerText: string, planHint: string): string {
+  return `Owner said: ${ownerText}\nAction plan: ${planHint}\nA tracking ticket was already opened. Put the at-risk amount as the literal token [[FIG]] (you do NOT know the number — never write a digit). Write the reply now.`;
 }
 
 /** The per-turn user message: identity state + recent history + the new (already redacted) message. */

@@ -102,7 +102,7 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
     });
     const deps = makeDeps([
       '{"action":"diagnose","problem_type":"payment","reply":"vou checar"}',
-      "Vejo que pagamentos podem estar te custando €320. Já registrei pra acompanhar. Quer seguir?",
+      "Vejo que pagamentos podem estar te custando [[FIG]]. Já registrei pra acompanhar. Quer seguir?",
     ]);
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "meus pagamentos falham" }, deps);
     expect(out.action).toBe("diagnose");

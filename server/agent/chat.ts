@@ -163,13 +163,16 @@ async function runDiagnose(
     return "Olhei aqui, mas ainda não consigo medir isso com confiança. Já registrei pra acompanhar e vou trazer uma pessoa do time pra investigar com você.";
   }
 
-  // §14: the € figure is rendered by CODE from the SQL result — NEVER the LLM. The narrator only frames it in
-  // the owner's language + adds the action plan (no pool internals like affected/silent — those are operator
-  // metrics, meaningless to one owner). A strict VERBATIM guard on the formatted figure catches any tampering.
+  // §14 STRICT: the LLM NEVER writes a number. It frames the reply in the owner's language and marks where
+  // the amount goes with the literal token [[FIG]]; CODE injects the ONLY number (euro(), from SQL). Any digit
+  // the model wrote itself, or a missing placeholder, ⇒ deterministic fallback. (No pool internals like
+  // affected/silent — those are operator metrics, meaningless to one owner.)
   const euroStr = euro(r.revenue_lost);
   const planHint = ROUTE_PLAN[r.route] ?? "it's being looked into by the team";
-  const narration = await deps.chat(NARRATE_OWNER_SYS, buildOwnerNarrateUser(ownerText, euroStr, planHint));
-  if (narration.includes(euroStr)) return narration;
-  // Fallback (rare: the model dropped the figure) — deterministic, owner-framed, no pool internals.
+  const narration = await deps.chat(NARRATE_OWNER_SYS, buildOwnerNarrateUser(ownerText, planHint));
+  const FIG = "[[FIG]]";
+  const modelWroteNoDigit = !/\d/.test(narration.split(FIG).join(""));
+  if (narration.includes(FIG) && modelWroteNoDigit) return narration.split(FIG).join(euroStr);
+  // Fallback (model dropped the placeholder or tried to write its own number) — deterministic, owner-framed.
   return `Pelo que vi, há cerca de ${euroStr} em risco no seu restaurante. Já registrei pra acompanhar e estou cuidando disso. Quer que eu detalhe?`;
 }
