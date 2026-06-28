@@ -89,8 +89,9 @@ export function LimitsTier({ open, onOpenChange }: { open: boolean; onOpenChange
             </table>
             <p className="border-t border-mxm-border px-3 py-2 text-[0.7rem] text-mxm-content-tertiary">
               Proven is the highest cohort the AI has promoted in this tier (measured, read-only); the count shows
-              how many. You set the cap. Each cohort acts at the lower of its own level and the cap — unmeasured
-              cohorts act at LOW. Open a tier for the per-cohort detail.
+              how many. You set the cap. &ldquo;Runs alone&rdquo; is a ceiling — &ldquo;up to X&rdquo; means the best
+              cohort; each cohort acts at the lower of its own level and the cap, unmeasured cohorts at LOW, and a
+              tier with no signed cap can&apos;t act alone at all. Open a tier for the per-cohort detail.
             </p>
           </div>
         )}
@@ -151,7 +152,18 @@ function TierRow({
           )}
         </td>
         <td className="px-3 py-2 font-medium text-mxm-content">{cap ? cap.yourCap : "not set"}</td>
-        <td className="px-3 py-2 text-mxm-content-secondary">{cap ? cap.runsAlone : "LOW"}</td>
+        {/* runs-alone honesty: no in-pool cap ⇒ auto-dispatch fails closed, the AI can't act alone here
+            ("none", not LOW); a cap with nothing promoted ⇒ every cohort runs at the LOW floor; a cap with
+            promoted cohorts ⇒ "up to X" (a ceiling — the best cohort; others run lower), never tier-wide. */}
+        <td className="px-3 py-2 text-mxm-content-secondary">
+          {!cap ? (
+            <span title="No in-pool signed cap — the AI can't act alone here">none</span>
+          ) : cap.proven ? (
+            `up to ${cap.runsAlone}`
+          ) : (
+            "LOW"
+          )}
+        </td>
       </tr>
       <tr id={id} hidden={!open}>
         <td colSpan={4} className="bg-mxm-bg-secondary px-3 py-2">
