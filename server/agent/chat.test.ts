@@ -10,6 +10,14 @@ import { handleChatTurn, type ChatDeps, type Binding } from "./chat.js";
 //  - a money/uncertain turn and an unparseable model reply both fail-closed to a human handoff.
 
 const RESOLVED = { tenantId: "POOL-X", userId: "U-1" };
+// Default: every type has signal, so existing diagnose tests aren't blocked by the signal gate.
+const ALL_SIGNALS = [
+  { problem_type: "payment", direction: "above" },
+  { problem_type: "connection", direction: "below" },
+  { problem_type: "cancellation", direction: "above" },
+  { problem_type: "menu_quality", direction: "below" },
+  { problem_type: "adoption", direction: "below" },
+];
 
 function makeDeps(over: Partial<ChatDeps> & { chatResponses: string[] }): {
   deps: ChatDeps;
@@ -47,6 +55,7 @@ function makeDeps(over: Partial<ChatDeps> & { chatResponses: string[] }): {
       return responses[i++] ?? responses[responses.length - 1]!;
     },
     getBinding: over.getBinding ?? (async () => null),
+    scanSignals: over.scanSignals ?? (async () => ALL_SIGNALS),
     resolveRestaurant: over.resolveRestaurant ?? (async () => RESOLVED),
     upsertBinding: upsert,
     loadHistory: over.loadHistory ?? (async () => []),
@@ -174,6 +183,27 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
     expect(out.reply).toContain("€320"); // guard caught the drop and rendered the SQL figure deterministically
+  });
+
+  it("diagnose is BLOCKED for a type the engine has NO signal for (no blind guessing)", async () => {
+    const { deps, caller } = makeDeps({
+      getBinding: async () => bound,
+      scanSignals: async () => [{ problem_type: "adoption", direction: "below" }], // only adoption has signal
+      chatResponses: ['{"action":"diagnose","problem_type":"payment","reply":"vou ver pagamentos"}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "acho que é pagamento" }, deps);
+    expect(caller.diagnosis.run).not.toHaveBeenCalled(); // payment has no signal → never measured
+    expect(out.reply).toBe("vou ver pagamentos");
+  });
+
+  it("the engine's real signals are handed to the model in the prompt", async () => {
+    const { deps, chatCalls } = makeDeps({
+      getBinding: async () => bound,
+      scanSignals: async () => [{ problem_type: "connection", direction: "below" }],
+      chatResponses: ['{"action":"ask","reply":"oi"}'],
+    });
+    await handleChatTurn({ channel: "telegram", externalId: "777", text: "tá estranho" }, deps);
+    expect(chatCalls[0]!.user).toContain("connection"); // the deterministic signal is in the decision prompt
   });
 
   it("diagnose WITHOUT a problem_type → never guesses payment (does not run the engine)", async () => {

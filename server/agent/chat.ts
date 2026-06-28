@@ -56,6 +56,7 @@ export interface EngineCaller {
 export interface ChatDeps {
   chat: (system: string, user: string, maxTokens?: number) => Promise<string>;
   getBinding: (channel: string, externalId: string) => Promise<Binding | null>;
+  scanSignals: (restaurantId: string) => Promise<{ problem_type: string; direction: string }[]>;
   resolveRestaurant: (restaurantId: string) => Promise<{ tenantId: string; userId: string } | null>;
   upsertBinding: (b: Binding) => Promise<void>;
   loadHistory: (sessionId: string) => Promise<Turn[]>;
@@ -93,9 +94,13 @@ export async function handleChatTurn(
   }
   const text = red.texto;
   const binding = await deps.getBinding(input.channel, input.externalId);
+  // The engine's deterministic ground truth: which problem types actually have signal for this restaurant.
+  // The agent may only diagnose WITHIN this set — no blind guessing.
+  const signals = binding ? await deps.scanSignals(binding.restaurant_id) : [];
+  const signalTypes = new Set(signals.map((s) => s.problem_type));
   const history = await deps.loadHistory(sessionId);
 
-  const raw = await deps.chat(SYSTEM_PROMPT, buildTurnUser(history, text, binding));
+  const raw = await deps.chat(SYSTEM_PROMPT, buildTurnUser(history, text, binding, signals));
   const decision = parseDecision(raw);
 
   let reply: string;
@@ -122,11 +127,16 @@ export async function handleChatTurn(
         // Unknown id: never confirm a link, never leak — a grounded "couldn't find it" in the owner's language.
         reply = await deps.chat(NOT_FOUND_SYS, `Owner said: ${text}\nUnknown id: ${rid ?? "(none)"}`);
       }
-    } else if (decision.action === "diagnose" && binding && decision.problem_type) {
+    } else if (
+      decision.action === "diagnose" &&
+      binding &&
+      decision.problem_type &&
+      signalTypes.has(decision.problem_type)
+    ) {
       reply = await runDiagnose(deps, binding, decision.problem_type, text);
     } else {
-      // ask | handoff | diagnose-without-a-type (NEVER guess payment — treat as the model's question) |
-      // diagnose-while-unlinked. Just send what the model said.
+      // ask | handoff | diagnose-without-a-type (never guess payment) | diagnose a type the engine has NO
+      // signal for (never run a no-signal diagnosis) | diagnose-while-unlinked. Send what the model said.
       reply = decision.reply;
     }
   }

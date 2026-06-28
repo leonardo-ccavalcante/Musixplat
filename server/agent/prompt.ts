@@ -51,6 +51,9 @@ RULES
   re-explanation didn't help.
 - Money (refunds/payouts/balance) -> action "handoff" (a person must act). Everything else: prefer to
   resolve. Escalating without trying is a failure, not a feature.
+- Diagnose ONLY a problem_type that appears in the engine signals shown for this restaurant THIS turn.
+  If the owner's concern has no signal, tell them what the engine DOES see (or that nothing measurable is
+  wrong) — NEVER diagnose a type with no signal (that's the guessing that dumps irrelevant numbers).
 - One question at a time. Short. Human.
 
 FEW-SHOT
@@ -96,11 +99,25 @@ export function buildOwnerNarrateUser(ownerText: string, planHint: string): stri
   return `Owner said: ${ownerText}\nAction plan: ${planHint}\nA tracking ticket was already opened. Put the at-risk amount as the literal token [[FIG]] (you do NOT know the number — never write a digit). Write the reply now.`;
 }
 
-/** The per-turn user message: identity state + recent history + the new (already redacted) message. */
-export function buildTurnUser(history: Turn[], text: string, binding: Binding | null): string {
+/** The per-turn user message: identity state + the ENGINE'S real signals + recent history + the new
+ *  (already redacted) message. The signals are the deterministic ground truth the agent must diagnose
+ *  WITHIN — it may never diagnose a type that isn't listed. */
+export function buildTurnUser(
+  history: Turn[],
+  text: string,
+  binding: Binding | null,
+  signals: { problem_type: string; direction: string }[],
+): string {
   const identity = binding
     ? `The owner's restaurant is linked (restaurant_id=${binding.restaurant_id}).`
     : `The owner is NOT linked yet - you still need their internal restaurant id before any diagnosis.`;
+  const sig = !binding
+    ? ""
+    : signals.length
+      ? `\nEngine signals for THIS restaurant right now (deterministic — the ONLY problem_types you may diagnose): ${signals
+          .map((s) => `${s.problem_type} (${s.direction})`)
+          .join(", ")}.`
+      : `\nEngine signals for THIS restaurant right now: NONE measurable. Do NOT diagnose — reassure the owner that nothing measurable is wrong and offer to keep watch, or ask what changed.`;
   const convo = history.map((h) => `${h.role === "human" ? "Owner" : "You"}: ${h.content}`).join("\n");
-  return `${identity}\n\nConversation so far:\n${convo || "(none)"}\n\nOwner now says: ${text}\n\nReturn ONLY the JSON decision.`;
+  return `${identity}${sig}\n\nConversation so far:\n${convo || "(none)"}\n\nOwner now says: ${text}\n\nReturn ONLY the JSON decision.`;
 }

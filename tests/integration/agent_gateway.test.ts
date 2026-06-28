@@ -7,6 +7,7 @@ import type { Context } from "../../server/_core/context";
 import { handleChatTurn, type ChatDeps, type EngineCaller } from "../../server/agent/chat";
 import { getBinding, resolveRestaurant, upsertBinding } from "../../server/agent/identity";
 import { loadHistory, appendTurn } from "../../server/agent/memory";
+import { scanSignals } from "../../server/agent/signals";
 
 // Agent chat gateway (Fatia 1) end-to-end against the real DB, with a FAKE chat (no OpenAI/network).
 // Proves the load-bearing invariants:
@@ -44,6 +45,7 @@ function makeDeps(chatResponses: string[]): ChatDeps {
   return {
     chat: async () => chatResponses[i++] ?? chatResponses[chatResponses.length - 1]!,
     getBinding: (c, e) => getBinding(query, c, e),
+    scanSignals: (rid) => scanSignals(query, rid),
     resolveRestaurant: (rid) => resolveRestaurant(query, rid),
     upsertBinding: (b) => upsertBinding(query, b),
     loadHistory: (s) => loadHistory(query, s),
@@ -79,6 +81,11 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
     );
     expect(b.rows[0]?.tenant_id).toBe("POOL-RUN"); // resolved server-side, not supplied by the caller
     expect(b.rows[0]?.user_id).toBe("U-RUN");
+  });
+
+  it("the engine FINDS the signal: fn_restaurant_signals surfaces payment for a restaurant with failed orders", async () => {
+    const sig = await scanSignals(query, "R-RUN-1");
+    expect(sig.map((s) => s.problem_type)).toContain("payment"); // real failed orders → real signal (not a guess)
   });
 
   it("unknown restaurant id binds NOTHING (no leak)", async () => {
