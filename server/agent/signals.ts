@@ -27,3 +27,13 @@ export async function scanSignals(exec: Exec, restaurantId: string): Promise<Sig
     [restaurantId, week],
   );
 }
+
+/** THIS restaurant's own at-risk € for the chosen type (payment/cancellation), 0 for non-money types.
+ *  Owner-honest: NOT the pool-wide revenue_lost (which is far too high for one restaurant). */
+export async function restaurantAtRisk(exec: Exec, restaurantId: string, problemType: string): Promise<number> {
+  const r = await exec<{ at_risk: string }>(
+    `select tenant.fn_restaurant_at_risk($1, $2)::text as at_risk`,
+    [restaurantId, problemType],
+  );
+  return Number(r[0]?.at_risk ?? 0);
+}

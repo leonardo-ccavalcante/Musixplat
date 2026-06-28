@@ -56,6 +56,7 @@ function makeDeps(over: Partial<ChatDeps> & { chatResponses: string[] }): {
     },
     getBinding: over.getBinding ?? (async () => null),
     scanSignals: over.scanSignals ?? (async () => ALL_SIGNALS),
+    restaurantAtRisk: over.restaurantAtRisk ?? (async () => 80), // this restaurant's OWN figure (not pool 320)
     resolveRestaurant: over.resolveRestaurant ?? (async () => RESOLVED),
     upsertBinding: upsert,
     loadHistory: over.loadHistory ?? (async () => []),
@@ -142,9 +143,9 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     expect(caller.diagnosis.reportProblem).toHaveBeenCalledWith(
       expect.objectContaining({ restaurantId: "R-1", problem_type: "cancellation" }),
     );
-    expect(out.reply).toContain("€320"); // code injected the figure at the [[FIG]] placeholder
+    expect(out.reply).toContain("€80"); // THIS restaurant's own at-risk, injected at [[FIG]]
+    expect(out.reply).not.toContain("320"); // NOT the pool-wide revenue_lost (the wrong-value bug)
     expect(out.reply).not.toContain("[[FIG]]"); // placeholder fully replaced
-    expect(out.reply).not.toContain("917"); // no pool internals (affected/silent) dumped on the owner
   });
 
   it("diagnose: model writes its OWN wrong number → rejected; only the SQL € reaches the owner (§14)", async () => {
@@ -156,7 +157,7 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
       ],
     });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
-    expect(out.reply).toContain("€320"); // the real SQL figure
+    expect(out.reply).toContain("€80"); // the real per-restaurant SQL figure
     expect(out.reply).not.toContain("€3200"); // the fabricated one never reaches the owner
   });
 
@@ -169,8 +170,23 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
       ],
     });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
-    expect(out.reply).toContain("€320");
+    expect(out.reply).toContain("€80");
     expect(out.reply).not.toContain("50"); // the model's stray number was discarded with its whole text
+  });
+
+  it("non-money type (adoption) → finding + plan with NO number at all", async () => {
+    const { deps, caller } = makeDeps({
+      getBinding: async () => bound,
+      scanSignals: async () => [{ problem_type: "adoption", direction: "below" }],
+      restaurantAtRisk: async () => 0, // adoption has no honest per-restaurant money figure
+      chatResponses: [
+        '{"action":"diagnose","problem_type":"adoption","reply":"vou ver seu uso"}',
+        "Vejo que dá pra usar melhor a plataforma pra vender mais. Já registrei e vou cuidar. Quer ajuda?",
+      ],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "quero vender mais" }, deps);
+    expect(caller.diagnosis.run).toHaveBeenCalled(); // it DID diagnose adoption
+    expect(out.reply).not.toMatch(/\d/); // but shows NO number (no fake money for a non-money problem)
   });
 
   it("diagnose: model drops the figure → deterministic fallback still carries the exact € (§14)", async () => {
@@ -182,7 +198,7 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
       ],
     });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
-    expect(out.reply).toContain("€320"); // guard caught the drop and rendered the SQL figure deterministically
+    expect(out.reply).toContain("€80"); // guard caught the drop and rendered the per-restaurant figure
   });
 
   it("diagnose is BLOCKED for a type the engine has NO signal for (no blind guessing)", async () => {

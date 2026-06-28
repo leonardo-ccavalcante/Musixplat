@@ -9,7 +9,7 @@ import { chatText, openaiChatClient } from "../_core/llm.js";
 import { handleChatTurn, type ChatDeps, type EngineCaller } from "./chat.js";
 import { getBinding, resolveRestaurant, upsertBinding } from "./identity.js";
 import { loadHistory, appendTurn } from "./memory.js";
-import { scanSignals } from "./signals.js";
+import { scanSignals, restaurantAtRisk } from "./signals.js";
 
 // POST /api/chat — the single channel-agnostic entry point (Opção B). A relay (n8n today) authenticates
 // with the service Bearer token and posts {channel, external_id, text}; the platform runs the agent loop
@@ -45,6 +45,7 @@ export function registerAgentGateway(app: Express): void {
         chat: async (system, user, maxTokens) => (await chatText(client, system, user, maxTokens ?? 300)).text,
         getBinding: (c, e) => getBinding(query, c, e),
         scanSignals: (rid) => scanSignals(query, rid),
+        restaurantAtRisk: (rid, pt) => restaurantAtRisk(query, rid, pt),
         resolveRestaurant: (rid) => resolveRestaurant(query, rid),
         upsertBinding: (b) => upsertBinding(query, b),
         loadHistory: (s) => loadHistory(query, s),

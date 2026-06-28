@@ -7,7 +7,7 @@ import type { Context } from "../../server/_core/context";
 import { handleChatTurn, type ChatDeps, type EngineCaller } from "../../server/agent/chat";
 import { getBinding, resolveRestaurant, upsertBinding } from "../../server/agent/identity";
 import { loadHistory, appendTurn } from "../../server/agent/memory";
-import { scanSignals } from "../../server/agent/signals";
+import { scanSignals, restaurantAtRisk } from "../../server/agent/signals";
 
 // Agent chat gateway (Fatia 1) end-to-end against the real DB, with a FAKE chat (no OpenAI/network).
 // Proves the load-bearing invariants:
@@ -46,6 +46,7 @@ function makeDeps(chatResponses: string[]): ChatDeps {
     chat: async () => chatResponses[i++] ?? chatResponses[chatResponses.length - 1]!,
     getBinding: (c, e) => getBinding(query, c, e),
     scanSignals: (rid) => scanSignals(query, rid),
+    restaurantAtRisk: (rid, pt) => restaurantAtRisk(query, rid, pt),
     resolveRestaurant: (rid) => resolveRestaurant(query, rid),
     upsertBinding: (b) => upsertBinding(query, b),
     loadHistory: (s) => loadHistory(query, s),
@@ -103,7 +104,7 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
     expect(b.rowCount).toBe(0);
   });
 
-  it("diagnose runs the real engine and narrates the PRODUCED figure (€320), persisting the turn", async () => {
+  it("diagnose runs the real engine and narrates the PER-RESTAURANT figure (€80, not the pool €320), persisting the turn", async () => {
     // pre-bind R-RUN-1
     await upsertBinding(query, {
       channel: "telegram",
@@ -118,7 +119,8 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
     ]);
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "meus pagamentos falham" }, deps);
     expect(out.action).toBe("diagnose");
-    expect(out.reply).toContain("€320"); // produced revenue_lost (SQL), code-formatted, narrator reproduced verbatim
+    expect(out.reply).toContain("€80"); // R-RUN-1's OWN at-risk (one failed order, net 80) — per-restaurant
+    expect(out.reply).not.toContain("320"); // NOT the pool-wide revenue_lost (the wrong-value bug Leo caught)
     // the engine actually ran against the real DB:
     const pr = await pool.query<{ n: number }>(
       `select count(*)::int n from tenant."Diagnosed_Problem" where tenant_id='POOL-RUN'`,
