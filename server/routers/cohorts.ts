@@ -164,13 +164,21 @@ export const cohortsRouter = router({
     const rows = await query(
       // percentile_delta exposed read-only (F-2.4 feature-attribution: why it moved). Additive —
       // does NOT touch the P02 handoff payload (fn_handoff / eventoPriorizadoNba unchanged).
+      // §3.2 n_min frontier: a sub-n_min cell is 'qualitative_no_percentile' (n_min_ok=false) — its
+      // within-cohort rank is computed from too few accounts to trust, so SUPPRESS every quantitative
+      // percentile-derived value (percentile, gap, AND the percentile_delta jsonb whose `magnitud` is a
+      // percentile-change number) at the output frontier, AND drop the gap from the ORDER (row position
+      // would otherwise leak the hidden rank). delta_status stays (qualitative carrier ⇒ reasonLabel(null)
+      // groups these under "no attributable cause"). Fail-closed: NULL n_min_ok ⇒ suppressed.
       `select e.evento_id, e.restaurant_id, e.cohort_id, e.week::text as week, e.delta_status,
-              e.percentile_in_cohort::float8 as percentile_in_cohort, e.gap_to_top::float8 as gap_to_top,
-              e.percentile_delta
+              case when e.n_min_ok then e.percentile_in_cohort::float8 end as percentile_in_cohort,
+              case when e.n_min_ok then e.gap_to_top::float8 end as gap_to_top,
+              case when e.n_min_ok then e.percentile_delta end as percentile_delta
        from cohort."Prioritized_NBA_Event" e
        join tenant."Restaurant" r on r.restaurant_id=e.restaurant_id and r.tenant_id=$1
        where e.cohort_rule_version=$2 and e.week=$3
-       order by (e.delta_status='at_risk') desc, e.gap_to_top desc nulls last
+       order by (e.delta_status='at_risk') desc, case when e.n_min_ok then e.gap_to_top end desc nulls last,
+                e.evento_id
        limit $4`,
       [ctx.tenantId, v, s, DELTA_PANEL_LIMIT],
     );
@@ -183,13 +191,19 @@ export const cohortsRouter = router({
     const s = await latestWeek(v, ctx.tenantId);
     if (!s) return [];
     return query(
-      `select p.restaurant_id, p.percentile_in_cohort::float8 as percentile_in_cohort,
-              p.gap_to_top::float8 as gap_to_top, p.subgroup_id,
+      // §3.2 n_min frontier: suppress the quantitative percentile + gap for a sub-n_min cell
+      // (n_min_ok=false ⇒ 'qualitative_no_percentile'); the render shows "—". The producer flags the
+      // mode but keeps the raw value (band math uses it internally) — the suppression is at this read
+      // frontier. Also drop the gap from the ORDER so a sub-n_min row's position can't leak the hidden
+      // rank (sorts nulls-last). Fail-closed: NULL n_min_ok ⇒ suppressed.
+      `select p.restaurant_id,
+              case when p.n_min_ok then p.percentile_in_cohort::float8 end as percentile_in_cohort,
+              case when p.n_min_ok then p.gap_to_top::float8 end as gap_to_top, p.subgroup_id,
               p.n_min_ok, p.mode, p.week::text as week, p.cohort_id
        from cohort."Cohort_Membership_Snapshot" p
        join tenant."Restaurant" r on r.restaurant_id=p.restaurant_id and r.tenant_id=$1
        where p.cohort_id=$2 and p.week=$3 and p.cohort_rule_version=$4
-       order by p.gap_to_top desc nulls last`,
+       order by case when p.n_min_ok then p.gap_to_top end desc nulls last, p.restaurant_id`,
       [ctx.tenantId, input.cohort_id, s, v],
     );
   }),

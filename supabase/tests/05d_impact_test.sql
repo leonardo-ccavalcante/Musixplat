@@ -17,6 +17,10 @@ select 'RPI-'||lpad(g::text,3,'0'), 'POOL-PAY-I', 'long_tail', 'long_tail'::segm
 insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status, zone)
 select 'RPI-'||lpad(g::text,3,'0'), current_date, 100, 20, 'failed', 'Centro'
   from generate_series(1,47) g;
+-- P1-6 window pin: an OUT-OF-WINDOW failed order (current_date - 60 > window_silent[30]) on an affected
+-- restaurant. It MUST be excluded from revenue_lost — un-windowed code would return €4260, not €3760.
+insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status, zone)
+  values ('RPI-001', current_date - 60, 600, 100, 'failed', 'Centro');
 insert into catalog."Intent_Catalog"(intent_id, label) values ('billing','Billing')
   on conflict (intent_id) do nothing;
 insert into tenant."Conversation_Episode"(episode_id, conversation_id, tenant_id, restaurant_id, intent)

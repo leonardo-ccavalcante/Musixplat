@@ -12,11 +12,14 @@ import { computeRevenueLost, writeLedger } from "../../server/diagnosis/impact";
 
 let pool: pg.Pool;
 
-// Two fixture restaurants in POOL-001. Order net_value = gross_value - fee (generated col).
-// Only failed orders over the AFFECTED restaurants count.
-//   R-DIAG-1: failed (100-20)=80, failed (50-10)=40, ok (999-0)=ignored   → 120
-//   R-DIAG-2: failed (200-50)=150                                         → 150
-// expected revenue_lost = 80 + 40 + 150 = 270 (the ok order is excluded by payment_status).
+// Two fixture restaurants in POOL-001. Order net_value = gross_value - fee (generated col). Only failed
+// orders over the AFFECTED restaurants AND inside the window count (window_silent=30): the impact frontier
+// matches fn_hunt_silent's affected frontier (review fix P1-6). Dates are current_date-relative ⇒ time-stable.
+//   R-DIAG-1: failed (100-20)=80 @ -2d, failed (50-10)=40 @ -3d, ok (999-0)=ignored,
+//             failed (600-100)=500 @ -60d = OUT OF WINDOW ⇒ EXCLUDED                 → 120
+//   R-DIAG-2: failed (200-50)=150 @ -1d                                              → 150
+// expected revenue_lost = 80 + 40 + 150 = 270 (ok excluded by status; the -60d failure excluded by the
+// window — un-windowed code would return 770, so this pins the fix).
 const EXPECTED_REVENUE_LOST = 270;
 
 async function seedFixture(): Promise<string> {
@@ -26,10 +29,11 @@ async function seedFixture(): Promise<string> {
            ('R-DIAG-2','POOL-001','long_tail','long_tail', date '2026-01-01');
 
     insert into tenant."Order"(restaurant_id, order_date, gross_value, fee, payment_status)
-    values ('R-DIAG-1', date '2026-06-01', 100, 20, 'failed'),
-           ('R-DIAG-1', date '2026-06-02',  50, 10, 'failed'),
-           ('R-DIAG-1', date '2026-06-03', 999,  0, 'ok'),
-           ('R-DIAG-2', date '2026-06-01', 200, 50, 'failed');
+    values ('R-DIAG-1', current_date - 2, 100, 20, 'failed'),
+           ('R-DIAG-1', current_date - 3,  50, 10, 'failed'),
+           ('R-DIAG-1', current_date - 1, 999,  0, 'ok'),
+           ('R-DIAG-1', current_date - 60, 600, 100, 'failed'),  -- out of window_silent ⇒ excluded (P1-6)
+           ('R-DIAG-2', current_date - 1, 200, 50, 'failed');
   `);
   const r = await pool.query<{ problem_id: string }>(`
     insert into tenant."Diagnosed_Problem"(tenant_id, restaurant_id, criticality, status)
