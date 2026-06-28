@@ -100,10 +100,13 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
       tenant_id: "POOL-RUN",
       user_id: "U-RUN",
     });
-    const deps = makeDeps(['{"action":"diagnose","problem_type":"payment","reply":"vou checar"}']);
+    const deps = makeDeps([
+      '{"action":"diagnose","problem_type":"payment","reply":"vou checar"}',
+      "Vejo que pagamentos podem estar te custando €320. Já registrei pra acompanhar. Quer seguir?",
+    ]);
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "meus pagamentos falham" }, deps);
     expect(out.action).toBe("diagnose");
-    expect(out.reply).toContain("320"); // the produced revenue_lost, rendered deterministically (never fabricated)
+    expect(out.reply).toContain("€320"); // produced revenue_lost (SQL), code-formatted, narrator reproduced verbatim
     // the engine actually ran against the real DB:
     const pr = await pool.query<{ n: number }>(
       `select count(*)::int n from tenant."Diagnosed_Problem" where tenant_id='POOL-RUN'`,

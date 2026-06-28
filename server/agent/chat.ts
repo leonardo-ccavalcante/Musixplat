@@ -1,7 +1,19 @@
 import type { Context } from "../_core/context.js";
 import { redactPII } from "../pieces/pii.js";
 import { parseDecision } from "./decision.js";
-import { SYSTEM_PROMPT, NOT_FOUND_SYS, buildTurnUser } from "./prompt.js";
+import {
+  SYSTEM_PROMPT,
+  NOT_FOUND_SYS,
+  NARRATE_OWNER_SYS,
+  ROUTE_PLAN,
+  buildTurnUser,
+  buildOwnerNarrateUser,
+} from "./prompt.js";
+
+// Owner-facing currency rendering — code-owned, NEVER the LLM (§14). e.g. 472111.2 -> "€472,111".
+function euro(n: number): string {
+  return `€${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
 
 // The channel-agnostic agent loop. ONE turn: redact PII -> decide (LLM) -> execute the chosen action by
 // reusing the existing engine procedures via the injected caller -> narrate honestly. All side-effects are
@@ -36,6 +48,7 @@ export interface EngineCaller {
       revenue_lost: number | null;
       area_type: string;
       degraded: boolean;
+      route: string;
     }>;
   };
 }
@@ -109,10 +122,11 @@ export async function handleChatTurn(
         // Unknown id: never confirm a link, never leak — a grounded "couldn't find it" in the owner's language.
         reply = await deps.chat(NOT_FOUND_SYS, `Owner said: ${text}\nUnknown id: ${rid ?? "(none)"}`);
       }
-    } else if (decision.action === "diagnose" && binding) {
-      reply = await runDiagnose(deps, binding, decision.problem_type ?? "payment");
+    } else if (decision.action === "diagnose" && binding && decision.problem_type) {
+      reply = await runDiagnose(deps, binding, decision.problem_type, text);
     } else {
-      // ask | handoff | (diagnose while unlinked — defensive: just send what the model said)
+      // ask | handoff | diagnose-without-a-type (NEVER guess payment — treat as the model's question) |
+      // diagnose-while-unlinked. Just send what the model said.
       reply = decision.reply;
     }
   }
@@ -121,31 +135,41 @@ export async function handleChatTurn(
   return { reply, action };
 }
 
-async function runDiagnose(deps: ChatDeps, binding: Binding, problemType: string): Promise<string> {
+async function runDiagnose(
+  deps: ChatDeps,
+  binding: Binding,
+  problemType: string,
+  ownerText: string,
+): Promise<string> {
   // Build the ctx server-side from the binding (tenant resolved at bind time from the restaurant id).
-  // Slice 1 is READ-ONLY diagnosis — it moves no money, so there is no §7.3 money action to veto here.
-  // (When slice 2 exposes propose/release, the financial hard-no becomes a deterministic pre-dispatch veto,
-  // not a prompt instruction.)
   const ctx: Context = {
     session: { user_id: binding.user_id, tenant_id: binding.tenant_id, org_level: "team" },
     tenantId: binding.tenant_id,
     userId: binding.user_id,
   };
   const engine = deps.caller(ctx);
-  // No conversationId: the agent already classified the struggle into problem_type, so this is the TYPED
-  // path (no stored Conversation_Episode to blind-classify). conversation_id NULL ⇒ the orchestrator uses
-  // the descriptor's area directly instead of degrading on a missing episode (the reactive path).
+  // reportProblem creates the TRACKED ticket (the Diagnosed_Problem shown on /diagnosis). run produces the
+  // numbers AND fires the close-loop that RESOLVES what's safe (non-money, in-range) and escalates the rest —
+  // money never auto-acts (§7, enforced in the engine). No conversationId ⇒ the TYPED path (the agent already
+  // classified the struggle), so the orchestrator uses the descriptor's area instead of degrading.
   const reported = await engine.diagnosis.reportProblem({
     restaurantId: binding.restaurant_id,
     problem_type: problemType,
   });
   const r = await engine.diagnosis.run({ problemId: reported.problem_id });
 
-  // §14: the agent NEVER emits a measured number. The figures below are rendered DETERMINISTICALLY from the
-  // SQL result — NO LLM in this path — so a fabricated or altered figure is structurally impossible.
-  // Fail-closed: unmeasurable (degraded / null) ⇒ honest "can't measure", no number, hand to a human.
+  // Unmeasurable → honest, still TRACKED (the ticket exists), a person follows up. No number invented (§14).
   if (r.degraded || r.affected == null || r.revenue_lost == null) {
-    return "Olhei aqui, mas ainda não consigo medir isso com confiança. Vou te conectar com uma pessoa do time pra investigar junto.";
+    return "Olhei aqui, mas ainda não consigo medir isso com confiança. Já registrei pra acompanhar e vou trazer uma pessoa do time pra investigar com você.";
   }
-  return `Já olhei o seu restaurante: ${r.affected} afetados (${r.silent} silenciosos) e cerca de ${r.revenue_lost} em risco. Quer que eu detalhe ou prefere falar com alguém do time?`;
+
+  // §14: the € figure is rendered by CODE from the SQL result — NEVER the LLM. The narrator only frames it in
+  // the owner's language + adds the action plan (no pool internals like affected/silent — those are operator
+  // metrics, meaningless to one owner). A strict VERBATIM guard on the formatted figure catches any tampering.
+  const euroStr = euro(r.revenue_lost);
+  const planHint = ROUTE_PLAN[r.route] ?? "it's being looked into by the team";
+  const narration = await deps.chat(NARRATE_OWNER_SYS, buildOwnerNarrateUser(ownerText, euroStr, planHint));
+  if (narration.includes(euroStr)) return narration;
+  // Fallback (rare: the model dropped the figure) — deterministic, owner-framed, no pool internals.
+  return `Pelo que vi, há cerca de ${euroStr} em risco no seu restaurante. Já registrei pra acompanhar e estou cuidando disso. Quer que eu detalhe?`;
 }
