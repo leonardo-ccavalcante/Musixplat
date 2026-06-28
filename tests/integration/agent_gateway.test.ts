@@ -88,6 +88,11 @@ describe("agent chat gateway — bind + diagnose E2E (real DB, faked LLM)", () =
     expect(sig.map((s) => s.problem_type)).toContain("payment"); // real failed orders → real signal (not a guess)
   });
 
+  it("fn_restaurant_signals emits NO phantom signal for an unknown restaurant", async () => {
+    const sig = await scanSignals(query, "R-DOES-NOT-EXIST");
+    expect(sig).toHaveLength(0); // 'no usage' is vacuously true for an unknown id — guarded out
+  });
+
   it("unknown restaurant id binds NOTHING (no leak)", async () => {
     const deps = makeDeps([
       '{"action":"bind","restaurant_id":"R-NOPE","reply":"achei"}',

@@ -33,11 +33,14 @@ language sql stable as $$
 
   union all
   -- adoption: no feature_use event within adoption_gap_days ⇒ the owner isn't using the platform.
+  -- Guard on restaurant existence first: "no usage" is vacuously true for an unknown id, so without this a
+  -- dangling restaurant would get a phantom adoption signal (the other branches need real orders/membership).
   select 'adoption', 'below', 0, catalog.knob_required_num('adoption_gap_days')
-  where not exists (
-    select 1 from tenant."Usage_Event"
-    where restaurant_id = p_restaurant
-      and event_type = 'feature_use'
-      and ts >= current_date - (catalog.knob_required_num('adoption_gap_days')::int)
-  );
+  where exists (select 1 from tenant."Restaurant" where restaurant_id = p_restaurant)
+    and not exists (
+      select 1 from tenant."Usage_Event"
+      where restaurant_id = p_restaurant
+        and event_type = 'feature_use'
+        and ts >= current_date - (catalog.knob_required_num('adoption_gap_days')::int)
+    );
 $$;
