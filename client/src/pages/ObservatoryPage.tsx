@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { LoadingState, ErrorState } from "@/components/ui/EmptyState";
-import { FreedomTier } from "@/features/observatory/FreedomTier";
+import { LoadingState } from "@/components/ui/EmptyState";
 import { EvalCoachPanel } from "@/features/observatory/EvalCoachPanel";
-import { LearningTier } from "@/features/observatory/LearningTier";
+import { NeedsYouBar } from "@/features/observatory/NeedsYouBar";
 import { ActivityTier } from "@/features/observatory/ActivityTier";
-import type { ExpandCmd } from "@/features/observatory/useExpandGroup";
+import { LearningTier } from "@/features/observatory/LearningTier";
+import { LimitsTier } from "@/features/observatory/LimitsTier";
+import { type ExpandCmd, useExpandGroup } from "@/features/observatory/useExpandGroup";
 
-// Observatory — read-only awareness of what the AI does on its own. Awareness screen: the signal
-// (Posture) is the hero; actions are quiet/guarded and reuse the existing cockpit/motor surfaces. Every
-// number is read from a producer (§14); nothing is computed here. dev-login mints the POOL-001 operator
-// (the SAME pool as Cohorts/Cockpit, so the cohort/eval/motor data produced there shows here); tenant is
-// resolved server-side.
+// Observatory — read-only awareness of what the AI does on its own, redesigned to read calm: the eval-coach
+// HERO (the one path that raises autonomy LOW→MEDIUM) leads; "Needs you" triages what awaits the operator
+// NOW; the rest collapses to one-line summaries you open on demand. Every number is read from a producer
+// (§14); nothing is computed here. dev-login mints the POOL-001 operator (same pool as Cohorts/Cockpit);
+// tenant is resolved server-side.
+const TIER_KEYS = ["activity", "learning", "limits"] as const; // stable identity ⇒ safe for useExpandGroup
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-mxm border border-mxm-border p-4">
@@ -50,69 +53,74 @@ export function ObservatoryPage() {
   const week = trpc.cockpit.weekSummary.useQuery(undefined, { enabled: ready });
   const cost = trpc.cost.summary.useQuery(undefined, { enabled: ready });
 
-  // Expand all / Collapse all broadcasts to every detail tier. The nonce makes repeated clicks of the same
-  // action re-fire (re-open rows a human had collapsed). null = no broadcast yet (rows start collapsed).
+  // Page-level Expand all / Collapse all drives the three tier sections. The nonce makes repeated clicks of
+  // the same action re-fire (re-open a tier a human had collapsed). Tiers start collapsed (calm default).
   const [expandCmd, setExpandCmd] = useState<ExpandCmd | null>(null);
   const nonce = useRef(0);
   const broadcast = (open: boolean) => setExpandCmd({ open, n: (nonce.current += 1) });
+  const { isOpen, setOpen } = useExpandGroup(expandCmd, TIER_KEYS as unknown as string[]);
+
+  const costValue = cost.data && cost.data.total.costUsd !== null ? `$${cost.data.total.costUsd.toFixed(2)}` : "—";
 
   return (
     <main className="mx-auto max-w-screen-xl p-[clamp(1rem,2vw,2rem)]">
-      <header className="mb-6">
-        <h1 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-mxm-content">Observatory</h1>
-        <p className="mt-1.5 max-w-[64ch] text-sm leading-relaxed text-mxm-content-secondary">
-          What the AI is doing on its own — what it acted on, what it learned, how far it may go, and the cost.
-          Read-only; every number is measured by a producer, never invented.
-        </p>
+      <header className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-mxm-content">Observatory</h1>
+          <span className="flex items-center gap-1.5 text-xs text-mxm-content-tertiary">
+            <span aria-hidden="true" className="inline-block h-[7px] w-[7px] rounded-full bg-mxm-green" />
+            live · last 7 days
+          </span>
+        </div>
+        <span className="text-xs text-mxm-content-tertiary">acting within your limits</span>
       </header>
+      <p className="mb-1 max-w-[64ch] text-sm leading-relaxed text-mxm-content-secondary">
+        What the AI is doing on its own — read-only; every number is measured by a producer, never invented.
+      </p>
 
-      {/* The golden-set coach is self-contained — its own modal + on-click eval mutations, no dependency on
-          weekSummary — so it renders as soon as the session is ready, even while activity loads or errors.
-          It used to live INSIDE the week-data branch, so a pool with no cockpit activity hid the only in-app
-          path to raise the AI above the LOW floor. */}
+      {/* HERO: the eval-coach is self-contained (its own modal + mutations) — renders as soon as the session
+          is ready, even while activity loads, so the only in-app path above the LOW floor is always present. */}
       {ready && <EvalCoachPanel />}
+      {ready && <NeedsYouBar ready={ready} />}
 
-      {!ready || week.isLoading ? (
-        <LoadingState label={!ready ? "Signing in…" : "Reading activity…"} />
-      ) : week.isError || !week.data ? (
-        <ErrorState />
+      {!ready ? (
+        <LoadingState label="Signing in…" />
       ) : (
         <>
-          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="AI posture this week">
-            <Stat label="Acted alone (7d)" value={String(week.data.auto_acted)} />
-            <Stat label="Released by you" value={String(week.data.released)} />
-            <Stat label="Paused by you" value={String(week.data.paused)} />
-            <Stat
-              label="Token cost (total)"
-              value={cost.data && cost.data.total.costUsd !== null ? `$${cost.data.total.costUsd.toFixed(2)}` : "—"}
-              sub="details on /cost"
-            />
+          <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="AI posture this week">
+            <Stat label="Acted alone (7d)" value={week.data ? String(week.data.auto_acted) : "—"} />
+            <Stat label="Released by you" value={week.data ? String(week.data.released) : "—"} />
+            <Stat label="Paused by you" value={week.data ? String(week.data.paused) : "—"} />
+            <Stat label="Token cost (total)" value={costValue} sub="details on /cost" />
           </section>
 
-          <div className="mt-8 mb-3 flex items-center justify-end gap-1" role="group" aria-label="Expand or collapse all detail">
-            <button
-              type="button"
-              onClick={() => broadcast(true)}
-              className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mxm-brand"
-            >
-              Expand all
-            </button>
-            <span className="text-mxm-content-tertiary" aria-hidden="true">
-              ·
-            </span>
-            <button
-              type="button"
-              onClick={() => broadcast(false)}
-              className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mxm-brand"
-            >
-              Collapse all
-            </button>
+          <div className="mt-8 mb-1 flex items-center justify-between gap-2 border-t border-mxm-border pt-3">
+            <span className="text-xs text-mxm-content-tertiary">Detail — open only what you need</span>
+            <div className="flex items-center gap-1" role="group" aria-label="Expand or collapse all detail">
+              <button
+                type="button"
+                onClick={() => broadcast(true)}
+                className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mxm-brand"
+              >
+                Expand all
+              </button>
+              <span className="text-mxm-content-tertiary" aria-hidden="true">
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={() => broadcast(false)}
+                className="inline-flex min-h-[24px] items-center rounded-mxm px-2 text-sm text-mxm-content-secondary hover:text-mxm-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mxm-brand"
+              >
+                Collapse all
+              </button>
+            </div>
           </div>
 
-          <div className="[&>section:first-child]:mt-0">
-            <FreedomTier ready={ready} cmd={expandCmd} />
-            <LearningTier ready={ready} cmd={expandCmd} />
-            <ActivityTier ready={ready} cmd={expandCmd} />
+          <div>
+            <ActivityTier open={isOpen("activity")} onOpenChange={(o) => setOpen("activity", o)} />
+            <LearningTier open={isOpen("learning")} onOpenChange={(o) => setOpen("learning", o)} />
+            <LimitsTier open={isOpen("limits")} onOpenChange={(o) => setOpen("limits", o)} />
           </div>
         </>
       )}

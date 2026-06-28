@@ -54,6 +54,19 @@ export const learningCasesInput = z.object({
   outcome: z.enum(["resolved", "not_resolved", "escalated"]).optional(),
 });
 
+// One row of the per-tier autonomy "Limits" table. yourCap is the human-approved ceiling (Policy_Tier.
+// tier_cap, [V], the 3rd min() arm); proven is the highest MEASURED ([V], green) eval level among the
+// tier's cohorts (NULL ⇒ "not graded" — an [I] floor never counts as proven, §14); runsAlone is the
+// effective floor the AI acts at = least(yourCap, coalesce(proven, 'LOW')) over the ordered autonomy_level
+// enum (deterministic SQL, never recomputed in the client). "AI acts at the lower of proven and your cap."
+export const observatoryCapRow = z.object({
+  tier: z.string(), // tier_id (managed_brand / managed_midmarket / long_tail)
+  yourCap: z.enum(AUTONOMY_LEVELS),
+  proven: z.enum(AUTONOMY_LEVELS).nullable(),
+  runsAlone: z.enum(AUTONOMY_LEVELS),
+});
+export type ObservatoryCapRow = z.infer<typeof observatoryCapRow>;
+
 // One auto-origin governance trace (what the AI did alone + its gates). gateResult/timeToSignatureSec/
 // rubberStampFlag are RESULT, NULL pre-run; independenceGuaranteed is a generated column (trustworthy).
 export const observatoryTrace = z.object({

@@ -2,6 +2,7 @@ import { router, tenantProcedure } from "../_core/trpc.js";
 import { query } from "../db/pool.js";
 import {
   learningCasesInput,
+  type ObservatoryCapRow,
   type ObservatoryEvalCell,
   type ObservatoryLearningCase,
   type ObservatoryTrace,
@@ -61,6 +62,52 @@ export const observatoryRouter = router({
       cuisine: x.cuisine,
       zone: x.zone,
       tierBase: x.tier_base,
+    }));
+  }),
+
+  // Limits cap table (one row per tier). The honest "proven vs your cap" split (§3.10/§14): yourCap is the
+  // human-approved ceiling (Policy_Tier.tier_cap, [V]); proven is the highest MEASURED ([V], green) eval
+  // level among the tier's current-version cohorts (an [I] floor never counts ⇒ NULL "not graded"); runsAlone
+  // = least(yourCap, coalesce(proven,'LOW')) over the ordered autonomy_level enum, computed in SQL (never
+  // recomputed client-side). Policy_Tier is tier-keyed/global (no tenant_id) ⇒ tenant is anchored on
+  // human_signature → User.tenant_id (the autoDispatch-safe anchor, §3.4): a tier the pool's manager never
+  // signed is simply absent (fail-closed), not shown as this pool's cap.
+  capTable: tenantProcedure.query(async ({ ctx }): Promise<ObservatoryCapRow[]> => {
+    const version = (
+      await query<{ value: string }>(`select value from catalog."Config_Knobs" where key='cohort_rule_version_current'`)
+    )[0]?.value;
+    if (!version) return []; // fail-closed (§3.8): no current version ⇒ nothing to show
+    const r = await query<{ tier: string; your_cap: string; proven: string | null; runs_alone: string }>(
+      `with pol as (
+         select distinct on (pt.tier_id) pt.tier_id as tier, pt.tier_cap
+           from gov."Policy_Tier" pt
+           join gov."User" u on u.user_id = pt.human_signature and u.tenant_id = $1
+          order by pt.tier_id, pt.policy_version desc
+       ),
+       proven as (
+         select c.tier_base::text as tier, max(e.released_evals) as proven
+           from gov."Eval_Cell" e
+           join cohort."Cohort" c on c.cohort_id = e.cohort_id
+          where e.status = 'green'
+            and e.provenance_by_field->>'status' = '[V]'
+            and exists (
+              select 1 from cohort."Cohort_Membership_Snapshot" cms
+                join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1
+               where cms.cohort_id = e.cohort_id and cms.cohort_rule_version = $2)
+          group by c.tier_base
+       )
+       select pol.tier, pol.tier_cap::text as your_cap, pr.proven::text as proven,
+              least(pol.tier_cap, coalesce(pr.proven, 'LOW'::public.autonomy_level))::text as runs_alone
+         from pol
+         left join proven pr on pr.tier = pol.tier
+        order by pol.tier`,
+      [ctx.tenantId, version],
+    );
+    return r.map((x) => ({
+      tier: x.tier,
+      yourCap: x.your_cap as ObservatoryCapRow["yourCap"],
+      proven: x.proven as ObservatoryCapRow["proven"],
+      runsAlone: x.runs_alone as ObservatoryCapRow["runsAlone"],
     }));
   }),
 
