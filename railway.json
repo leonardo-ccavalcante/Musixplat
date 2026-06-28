@@ -5,6 +5,7 @@
   },
   "deploy": {
     "preDeployCommand": "node dist/server/scripts/apply-hosted.js",
-    "startCommand": "pnpm start"
+    "startCommand": "pnpm start",
+    "healthcheckPath": "/healthz"
   }
 }
