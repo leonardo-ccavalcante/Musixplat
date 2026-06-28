@@ -11,6 +11,10 @@ dotenv.config();
 // fails-closed at boot, not mid-request).
 const DEV_JWT_SECRET = "dev-only-insecure-secret-change-me";
 const LOCAL_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:54522/postgres";
+// Service token the channel relay (n8n) sends as `Authorization: Bearer …` to POST /api/chat.
+// Dev fallback only; prod refuses it (assertProdSecrets) so a deploy that forgot to inject a real
+// token can't accept unauthenticated chat traffic.
+const DEV_AGENT_GATEWAY_TOKEN = "dev-only-agent-gateway-token-change-me";
 
 function name(key: string, fallback?: string): string {
   const v = process.env[key] ?? fallback;
@@ -25,6 +29,8 @@ export const env = {
   DATABASE_URL: name("DATABASE_URL", LOCAL_DATABASE_URL),
   // Session cookie HS256 secret. Dev fallback only; prod refuses empty (see assertProdSecrets).
   JWT_SECRET: name("JWT_SECRET", DEV_JWT_SECRET),
+  // Bearer token for the channel relay → POST /api/chat. Dev fallback only; prod refuses it.
+  AGENT_GATEWAY_TOKEN: name("AGENT_GATEWAY_TOKEN", DEV_AGENT_GATEWAY_TOKEN),
 };
 
 // Fail-closed boot guard (called from server/index.ts BEFORE serving). In production every load-bearing
@@ -42,6 +48,8 @@ export function assertProdSecrets(e: NodeJS.ProcessEnv = process.env): void {
   if (!e.JWT_SECRET || e.JWT_SECRET === DEV_JWT_SECRET) missing.push("JWT_SECRET");
   if (!e.DATABASE_URL || e.DATABASE_URL === LOCAL_DATABASE_URL) missing.push("DATABASE_URL");
   if (!e.OPENAI_API_KEY) missing.push("OPENAI_API_KEY");
+  if (!e.AGENT_GATEWAY_TOKEN || e.AGENT_GATEWAY_TOKEN === DEV_AGENT_GATEWAY_TOKEN)
+    missing.push("AGENT_GATEWAY_TOKEN");
   if (missing.length > 0) {
     throw new Error(
       `Production requires real values for: ${missing.join(", ")} ` +
