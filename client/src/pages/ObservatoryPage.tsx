@@ -87,11 +87,29 @@ export function ObservatoryPage() {
         <LoadingState label="Signing in…" />
       ) : (
         <>
-          <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="AI posture this week">
-            <Stat label="Acted alone (7d)" value={week.data ? String(week.data.auto_acted) : "—"} />
-            <Stat label="Released by you" value={week.data ? String(week.data.released) : "—"} />
-            <Stat label="Paused by you" value={week.data ? String(week.data.paused) : "—"} />
-            <Stat label="Token cost (total)" value={costValue} sub="details on /cost" />
+          <section className="mt-4" aria-label="AI posture this week">
+            {week.isLoading ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="h-[4.75rem] animate-pulse rounded-mxm border border-mxm-border" />
+                ))}
+              </div>
+            ) : week.isError || !week.data ? (
+              <p className="text-sm text-mxm-red">Couldn&apos;t read this week&apos;s posture — try again.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Stat label="Acted alone (7d)" value={String(week.data.auto_acted)} />
+                <Stat label="Released by you" value={String(week.data.released)} />
+                <Stat label="Paused by you" value={String(week.data.paused)} />
+                {/* cost is a secondary read: an error reads "couldn't read", a null cost (no priced rows) reads
+                    "—" honestly, never a fabricated $0 (§14). */}
+                <Stat
+                  label="Token cost (total)"
+                  value={cost.isError ? "—" : costValue}
+                  sub={cost.isError ? "couldn't read" : "details on /cost"}
+                />
+              </div>
+            )}
           </section>
 
           <div className="mt-8 mb-1 flex items-center justify-between gap-2 border-t border-mxm-border pt-3">
