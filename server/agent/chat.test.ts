@@ -143,6 +143,17 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     expect(out.reply.toLowerCase()).toContain("id"); // asks for the restaurant id instead
   });
 
+  it("a stalling bind-confirmation does NOT re-ask for the id (bound THIS turn)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => null, // not linked at the start of the turn...
+      resolveRestaurant: async () => RESOLVED, // ...but the id resolves and binds now
+      chatResponses: ['{"action":"bind","restaurant_id":"R-1","reply":"Achei! Vou verificar tudo, um momento."}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "é o R-1" }, deps);
+    expect(out.reply.toLowerCase()).not.toContain("passa o id"); // the link succeeded → don't ask again
+    expect(out.reply.toLowerCase()).not.toMatch(/um momento|vou verificar/); // still de-stalled
+  });
+
   it("a money narration that ALSO stalls is rejected → deterministic €, no stall (§14 + sync)", async () => {
     const { deps } = makeDeps({
       getBinding: async () => bound,

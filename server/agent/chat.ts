@@ -147,6 +147,7 @@ export async function handleChatTurn(
 
   let reply: string;
   let action: string;
+  let boundNow = false; // a bind that succeeded THIS turn (binding was read before it)
 
   if (!decision) {
     action = "handoff";
@@ -164,6 +165,7 @@ export async function handleChatTurn(
           tenant_id: resolved.tenantId,
           user_id: resolved.userId,
         });
+        boundNow = true; // the link just succeeded this turn (binding was read before it)
         reply = decision.reply;
       } else {
         // Unknown id: never confirm a link, never leak — a grounded "couldn't find it" in the owner's language.
@@ -183,8 +185,10 @@ export async function handleChatTurn(
     }
   }
 
-  // STRUCTURAL guarantee (not a prompt hope): no async-stalling reply ever reaches the owner.
-  reply = antiStall(reply, signals, binding !== null);
+  // STRUCTURAL guarantee (not a prompt hope): no async-stalling reply ever reaches the owner. "Bound" includes
+  // a link that just succeeded THIS turn (binding was read before the bind), so a stalling bind-confirmation
+  // doesn't wrongly ask for the id again.
+  reply = antiStall(reply, signals, binding !== null || boundNow);
 
   await deps.appendTurn(sessionId, text, reply, binding?.tenant_id ?? null);
   return { reply, action };
