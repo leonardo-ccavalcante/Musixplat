@@ -5,14 +5,24 @@ import {
   SYSTEM_PROMPT,
   NOT_FOUND_SYS,
   NARRATE_OWNER_SYS,
+  NARRATE_OWNER_NOMONEY_SYS,
   ROUTE_PLAN,
   buildTurnUser,
   buildOwnerNarrateUser,
+  buildOwnerNarrateNoMoneyUser,
 } from "./prompt.js";
 
 // Owner-facing currency rendering — code-owned, NEVER the LLM (§14). e.g. 472111.2 -> "€472,111".
 function euro(n: number): string {
   return `€${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+// §14 narration guard: the model must contribute NO figure of its own. Reject any digit AND any currency
+// word (a spelled-out amount almost always carries one), so a fabricated amount can't ride alongside the
+// one code-injected figure. The real number only ever appears where CODE puts it.
+const CURRENCY_WORD = /\b(euros?|eur|reais|real|d[óo]lar(es)?|dollars?|libras?|pounds?)\b/i;
+function modelWroteNoFigure(textWithoutFig: string): boolean {
+  return !/\d/.test(textWithoutFig) && !CURRENCY_WORD.test(textWithoutFig);
 }
 
 // The channel-agnostic agent loop. ONE turn: redact PII -> decide (LLM) -> execute the chosen action by
@@ -41,7 +51,7 @@ export interface EngineCaller {
       restaurantId: string;
       problem_type: string;
       conversationId?: string;
-    }): Promise<{ problem_id: string }>;
+    }): Promise<{ problem_id: string; created: boolean }>;
     run(input: { problemId: string }): Promise<{
       affected: number | null;
       silent: number | null;
@@ -57,6 +67,8 @@ export interface ChatDeps {
   chat: (system: string, user: string, maxTokens?: number) => Promise<string>;
   getBinding: (channel: string, externalId: string) => Promise<Binding | null>;
   scanSignals: (restaurantId: string) => Promise<{ problem_type: string; direction: string }[]>;
+  restaurantAtRisk: (restaurantId: string, problemType: string) => Promise<number>;
+  recordCase: (tenantId: string, areaType: string, pattern: string) => Promise<void>;
   resolveRestaurant: (restaurantId: string) => Promise<{ tenantId: string; userId: string } | null>;
   upsertBinding: (b: Binding) => Promise<void>;
   loadHistory: (sessionId: string) => Promise<Turn[]>;
@@ -168,21 +180,51 @@ async function runDiagnose(
   });
   const r = await engine.diagnosis.run({ problemId: reported.problem_id });
 
+  // The conversation becomes a Knowledge_Case (reviewed=false, outcome NULL) — the chat's learning
+  // contribution: it enters the human RLHF queue and, once reviewed, grounds future diagnoses (BR-B3).
+  // Only on a NEW problem (not a dedup-increment) so a chatty owner doesn't spam cases. Best-effort:
+  // a learning-write failure must never break the owner's reply.
+  if (reported.created) {
+    await deps
+      .recordCase(binding.tenant_id, r.area_type, `chat: ${ownerText} → ${problemType}`)
+      .catch(() => undefined);
+  } else {
+    // A case for this restaurant is already open (reportProblem dedups on tenant+restaurant and KEEPS the
+    // existing type). The requested type may differ, so narrating an at-risk figure here could mismatch the
+    // diagnosed problem — instead, honestly acknowledge it's already tracked. No (possibly-wrong) number.
+    return "Já tem um caso aberto pro seu restaurante e estou acompanhando. Quer uma atualização ou prefere falar com alguém do time?";
+  }
+
   // Unmeasurable → honest, still TRACKED (the ticket exists), a person follows up. No number invented (§14).
   if (r.degraded || r.affected == null || r.revenue_lost == null) {
     return "Olhei aqui, mas ainda não consigo medir isso com confiança. Já registrei pra acompanhar e vou trazer uma pessoa do time pra investigar com você.";
   }
 
-  // §14 STRICT: the LLM NEVER writes a number. It frames the reply in the owner's language and marks where
-  // the amount goes with the literal token [[FIG]]; CODE injects the ONLY number (euro(), from SQL). Any digit
-  // the model wrote itself, or a missing placeholder, ⇒ deterministic fallback. (No pool internals like
-  // affected/silent — those are operator metrics, meaningless to one owner.)
-  const euroStr = euro(r.revenue_lost);
   const planHint = ROUTE_PLAN[r.route] ?? "it's being looked into by the team";
+  // The owner-honest figure is THIS restaurant's OWN at-risk € (NOT the pool-wide revenue_lost, which is far
+  // too high for one restaurant). 0 ⇒ a non-money type (connection/menu_quality/adoption) ⇒ show NO number.
+  const atRisk = await deps.restaurantAtRisk(binding.restaurant_id, problemType);
+
+  if (atRisk <= 0) {
+    // No honest per-restaurant money figure: narrate the finding + plan with NO number/currency at all.
+    const narration = await deps.chat(
+      NARRATE_OWNER_NOMONEY_SYS,
+      buildOwnerNarrateNoMoneyUser(ownerText, problemType, planHint),
+    );
+    if (!narration.includes("[[FIG]]") && modelWroteNoFigure(narration)) return narration;
+    return `Encontrei um ponto em ${problemType} que dá pra melhorar no seu restaurante. Já registrei pra acompanhar e estou cuidando disso. Quer que eu detalhe?`;
+  }
+
+  // §14 STRICT: the LLM NEVER writes a figure. It frames the reply in the owner's language and marks where
+  // the amount goes with EXACTLY ONE [[FIG]] token; CODE injects the only number (euro(), per-restaurant from
+  // SQL). Reject if the placeholder count isn't 1, or the model wrote any digit/currency word ⇒ fallback.
+  const euroStr = euro(atRisk);
   const narration = await deps.chat(NARRATE_OWNER_SYS, buildOwnerNarrateUser(ownerText, planHint));
   const FIG = "[[FIG]]";
-  const modelWroteNoDigit = !/\d/.test(narration.split(FIG).join(""));
-  if (narration.includes(FIG) && modelWroteNoDigit) return narration.split(FIG).join(euroStr);
-  // Fallback (model dropped the placeholder or tried to write its own number) — deterministic, owner-framed.
+  const figCount = narration.split(FIG).length - 1;
+  if (figCount === 1 && modelWroteNoFigure(narration.split(FIG).join(" "))) {
+    return narration.split(FIG).join(euroStr);
+  }
+  // Fallback (no/again-too-many placeholders, or the model tried to write its own figure) — deterministic.
   return `Pelo que vi, há cerca de ${euroStr} em risco no seu restaurante. Já registrei pra acompanhar e estou cuidando disso. Quer que eu detalhe?`;
 }
