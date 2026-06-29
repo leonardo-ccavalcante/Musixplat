@@ -104,6 +104,44 @@ describe("02:F-1.1 — listCockpitRows over real proposals", () => {
       c.release();
     }
   });
+
+  // 02:CP — the prod bug: generation mints one NBA_Proposal PER problem-restaurant, but the cockpit's
+  // unit of decision is (cohort, action_type) — the same grain the autonomous path dedups on (autoDispatch)
+  // and a dispatch acts on (reach = the whole cohort). Without aggregation the queue shows the SAME case
+  // dozens of times ("Touches money" showed ~48 identical rows), and releasing the second feels like a
+  // repeated case. The read surface must collapse them to ONE representative row per (cohort, action_type).
+  it("collapses duplicate per-restaurant proposals to one row per (cohort, action_type)", async () => {
+    const c = await pool.connect();
+    try {
+      await c.query("begin");
+      const exec: Exec = (sql, params) => c.query(sql, params as unknown[]).then((r) => r.rows) as never;
+
+      const r = (
+        await c.query<{ restaurant_id: string; cohort_id: string; tenant_id: string }>(
+          `select cms.restaurant_id, cms.cohort_id, rest.tenant_id
+           from cohort."Cohort_Membership_Snapshot" cms
+           join tenant."Restaurant" rest on rest.restaurant_id = cms.restaurant_id
+           where cms.week=$1 and cms.m_connection < 0.50 order by cms.restaurant_id limit 1`,
+          [W1],
+        )
+      ).rows[0]!;
+
+      // Two proposals for the SAME (cohort, action) — the per-restaurant generation that duplicates one
+      // cohort-level decision (re-proposing the same restaurant is deterministic ⇒ identical action_type).
+      const a = await proposeNba({ restaurantId: r.restaurant_id, cohortId: r.cohort_id, week: W1 }, undefined, c);
+      const b = await proposeNba({ restaurantId: r.restaurant_id, cohortId: r.cohort_id, week: W1 }, undefined, c);
+      expect(a.actionType).toBe(b.actionType); // same diagnosis ⇒ same cohort-level action
+      expect(a.nbaId).not.toBe(b.nbaId); // but two distinct proposal rows
+
+      const rows = await listCockpitRows(r.tenant_id, exec);
+      const same = rows.filter((x) => x.cohort_id === r.cohort_id && x.action_type === a.actionType);
+      expect(same).toHaveLength(1); // ONE decision row, not one-per-restaurant
+      expect([a.nbaId, b.nbaId]).toContain(same[0]!.nba_id); // representative is a real proposal
+    } finally {
+      await c.query("rollback");
+      c.release();
+    }
+  });
 });
 
 describe("02:F-1.2 — weekSummary counts traced decisions (read, §14: 0 before any release)", () => {
