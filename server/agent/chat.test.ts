@@ -101,6 +101,27 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     expect(append.mock.calls[0]![1]).not.toContain("a@b.c1");
   });
 
+  it("NEVER lets an async-stalling reply reach the owner — replaced by an honest, immediate one (code guard)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      scanSignals: async () => [{ problem_type: "connection", direction: "below" }],
+      // the exact failure from the transcript: an 'ask' that promises a future analysis
+      chatResponses: ['{"action":"ask","reply":"Entendi, vou verificar como você usa a plataforma. Um momento!"}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "como melhorar meus ingressos?" }, deps);
+    expect(out.reply.toLowerCase()).not.toMatch(/um momento|vou verificar|analisando|aguarde/);
+    expect(out.reply).toContain("connection"); // forward-moving: names what it CAN measure right now
+  });
+
+  it("a normal (non-stalling) reply passes through unchanged", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: ['{"action":"ask","reply":"Quando você começou a notar isso?"}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "tá estranho" }, deps);
+    expect(out.reply).toBe("Quando você começou a notar isso?");
+  });
+
   it("ask: returns the reply and persists the turn, no bind", async () => {
     const { deps, upsert, append } = makeDeps({ chatResponses: ['{"action":"ask","reply":"quando começou?"}'] });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "vendas estranhas" }, deps);
@@ -265,7 +286,9 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "acho que é pagamento" }, deps);
     expect(caller.diagnosis.run).not.toHaveBeenCalled(); // payment has no signal → never measured
-    expect(out.reply).toBe("vou ver pagamentos");
+    // the model's dead-end "vou ver pagamentos" promise is replaced by an honest forward reply (anti-stall)
+    expect(out.reply).toContain("adoption"); // names the signal it CAN actually measure
+    expect(out.reply.toLowerCase()).not.toContain("vou ver pagamentos");
   });
 
   it("the engine's real signals are handed to the model in the prompt", async () => {

@@ -25,6 +25,23 @@ function modelWroteNoFigure(textWithoutFig: string): boolean {
   return !/\d/.test(textWithoutFig) && !CURRENCY_WORD.test(textWithoutFig);
 }
 
+// Async-stalling detector (PT/ES/IT/EN). The platform is SYNCHRONOUS — there is no background job — so the
+// agent must NEVER promise to "analyze and report back / one moment / I'll let you know". This is a CODE
+// guarantee (not a prompt hope): a stalling reply is replaced with an honest, forward-moving one.
+const STALL =
+  /\b(um|un)\s+momento\b|\baguard\w*\b|\bvou\s+(verificar|analisar|olhar|ver|checar)\b|\b(estou|estarei)\s+analisando\b|\banalis(ando|arei|aremos)\b|\bte\s+aviso\b|\bem\s+breve\b|\bj[áa]\s+(te\s+)?retorno\b|\bone\s+moment\b|\bin\s+a\s+(moment|sec)\b|\bi'?ll\s+(let\s+you\s+know|get\s+back|check|look)\b|\b(checking|analyzing)\b|\bun\s+attimo\b|\bsto\s+analizzando\b|\bvoy\s+a\s+(revisar|analizar)\b|\bestoy\s+analizando\b|\bd[ée]jame\s+revisar\b|\ben\s+un\s+momento\b/i;
+
+/** Replace any async-stalling reply with an honest, immediate, forward-moving one driven by the signals. */
+function antiStall(reply: string, signals: { problem_type: string }[]): string {
+  if (reply.includes("€")) return reply; // a code-injected figure is a real synchronous result, not a stall
+  if (!STALL.test(reply)) return reply;
+  if (signals.length) {
+    const types = signals.map((s) => s.problem_type).join(", ");
+    return `Eu não faço análise "pra depois" — olho na hora. Agora consigo medir: ${types}. Quer que eu veja algum desses pra você?`;
+  }
+  return `Eu não faço análise "pra depois" — olho na hora. Agora não estou medindo nenhum problema no seu restaurante. Me conta o que mudou que eu olho já.`;
+}
+
 // The channel-agnostic agent loop. ONE turn: redact PII -> decide (LLM) -> execute the chosen action by
 // reusing the existing engine procedures via the injected caller -> narrate honestly. All side-effects are
 // injected (deps) so the loop is unit-testable with no DB/LLM/network. The platform owns authorization:
@@ -152,6 +169,9 @@ export async function handleChatTurn(
       reply = decision.reply;
     }
   }
+
+  // STRUCTURAL guarantee (not a prompt hope): no async-stalling reply ever reaches the owner.
+  reply = antiStall(reply, signals);
 
   await deps.appendTurn(sessionId, text, reply, binding?.tenant_id ?? null);
   return { reply, action };
