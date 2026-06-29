@@ -122,6 +122,40 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     expect(out.reply).toBe("Quando você começou a notar isso?");
   });
 
+  it("catches an EN stall too ('I'll check and get back to you')", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      scanSignals: async () => [{ problem_type: "connection", direction: "below" }],
+      chatResponses: ['{"action":"ask","reply":"Got it. I will check and get back to you."}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "something is off" }, deps);
+    expect(out.reply.toLowerCase()).not.toContain("get back to you");
+    expect(out.reply).toContain("connection");
+  });
+
+  it("unbound + stall → asks for the restaurant id (never a 'measured nothing' claim)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => null, // not linked
+      chatResponses: ['{"action":"ask","reply":"Vou verificar, um momento!"}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "oi" }, deps);
+    expect(out.reply.toLowerCase()).not.toMatch(/um momento|vou verificar/);
+    expect(out.reply.toLowerCase()).toContain("id"); // asks for the restaurant id instead
+  });
+
+  it("a money narration that ALSO stalls is rejected → deterministic €, no stall (§14 + sync)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: [
+        '{"action":"diagnose","problem_type":"payment","reply":"vou ver"}',
+        "Vejo [[FIG]] em risco. Vou verificar mais detalhes e te aviso.", // a real figure BUT also a stall
+      ],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
+    expect(out.reply).toContain("€80");
+    expect(out.reply.toLowerCase()).not.toMatch(/vou verificar|te aviso/);
+  });
+
   it("ask: returns the reply and persists the turn, no bind", async () => {
     const { deps, upsert, append } = makeDeps({ chatResponses: ['{"action":"ask","reply":"quando começou?"}'] });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "vendas estranhas" }, deps);
