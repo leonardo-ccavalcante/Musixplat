@@ -25,6 +25,36 @@ function modelWroteNoFigure(textWithoutFig: string): boolean {
   return !/\d/.test(textWithoutFig) && !CURRENCY_WORD.test(textWithoutFig);
 }
 
+// Async-stalling markers (PT/ES/IT/EN). The platform is SYNCHRONOUS — there is no background job — so the
+// agent must NEVER promise to "analyze and get back / wait / one moment". A CODE guarantee, not a prompt hope.
+const STALL_PATTERNS = [
+  "(um|un) momento", "un attimo", "en un momento", "aguard\\w*", "hold on", "bear with me",
+  "give me a (moment|sec|second|minute)", "espera(me)?",
+  "te aviso", "te retorno", "j[áa] (te )?retorno", "j[áa] volto", "get back to you",
+  "i'?ll let you know", "ti faccio sapere", "ti aggiorno", "(ya )?te digo", "em breve", "in a (moment|bit|sec)",
+  "vou (verificar|analisar|olhar|ver|checar|revisar|investigar)",
+  "deixa eu (ver|verificar|olhar|checar|revisar|analisar)",
+  "(estou|estarei) analisando", "analis(ando|arei|aremos)",
+  "let me (check|look|see|review|take a look)", "i'?ll (check|look|review|investigate|analyze|get)",
+  "looking into", "voy a (revisar|analizar|mirar|ver|comprobar)", "d[ée]jame (ver|revisar|mirar)",
+  "estoy analizando", "lo (miro|reviso|veo)", "fammi (controllare|vedere)",
+  "sto (controllando|analizzando|verificando)", "controllo e ti",
+];
+const STALL = new RegExp("\\b(" + STALL_PATTERNS.join("|") + ")", "i");
+
+/** Replace any async-stalling reply with an honest, immediate, forward-moving one — the platform answers in
+ *  the same turn, so the agent never defers. (Replacement is PT-BR; multilingual deterministic copy is a
+ *  follow-up — a non-stalling PT line still beats a stall.) */
+function antiStall(reply: string, signals: { problem_type: string }[], bound: boolean): string {
+  if (!STALL.test(reply)) return reply;
+  if (!bound) return "Me passa o id interno do seu restaurante que eu já olho na hora pra você.";
+  if (signals.length) {
+    const types = signals.map((s) => s.problem_type).join(", ");
+    return `Eu olho na hora, sem deixar pra depois. Agora consigo medir: ${types}. Quer que eu veja algum desses?`;
+  }
+  return "Eu olho na hora, sem deixar pra depois. Agora não estou medindo nenhum problema; me conta o que mudou que eu vejo já.";
+}
+
 // The channel-agnostic agent loop. ONE turn: redact PII -> decide (LLM) -> execute the chosen action by
 // reusing the existing engine procedures via the injected caller -> narrate honestly. All side-effects are
 // injected (deps) so the loop is unit-testable with no DB/LLM/network. The platform owns authorization:
@@ -117,6 +147,7 @@ export async function handleChatTurn(
 
   let reply: string;
   let action: string;
+  let boundNow = false; // a bind that succeeded THIS turn (binding was read before it)
 
   if (!decision) {
     action = "handoff";
@@ -134,6 +165,7 @@ export async function handleChatTurn(
           tenant_id: resolved.tenantId,
           user_id: resolved.userId,
         });
+        boundNow = true; // the link just succeeded this turn (binding was read before it)
         reply = decision.reply;
       } else {
         // Unknown id: never confirm a link, never leak — a grounded "couldn't find it" in the owner's language.
@@ -152,6 +184,11 @@ export async function handleChatTurn(
       reply = decision.reply;
     }
   }
+
+  // STRUCTURAL guarantee (not a prompt hope): no async-stalling reply ever reaches the owner. "Bound" includes
+  // a link that just succeeded THIS turn (binding was read before the bind), so a stalling bind-confirmation
+  // doesn't wrongly ask for the id again.
+  reply = antiStall(reply, signals, binding !== null || boundNow);
 
   await deps.appendTurn(sessionId, text, reply, binding?.tenant_id ?? null);
   return { reply, action };
@@ -211,7 +248,7 @@ async function runDiagnose(
       NARRATE_OWNER_NOMONEY_SYS,
       buildOwnerNarrateNoMoneyUser(ownerText, problemType, planHint),
     );
-    if (!narration.includes("[[FIG]]") && modelWroteNoFigure(narration)) return narration;
+    if (!narration.includes("[[FIG]]") && modelWroteNoFigure(narration) && !STALL.test(narration)) return narration;
     return `Encontrei um ponto em ${problemType} que dá pra melhorar no seu restaurante. Já registrei pra acompanhar e estou cuidando disso. Quer que eu detalhe?`;
   }
 
@@ -222,7 +259,7 @@ async function runDiagnose(
   const narration = await deps.chat(NARRATE_OWNER_SYS, buildOwnerNarrateUser(ownerText, planHint));
   const FIG = "[[FIG]]";
   const figCount = narration.split(FIG).length - 1;
-  if (figCount === 1 && modelWroteNoFigure(narration.split(FIG).join(" "))) {
+  if (figCount === 1 && modelWroteNoFigure(narration.split(FIG).join(" ")) && !STALL.test(narration)) {
     return narration.split(FIG).join(euroStr);
   }
   // Fallback (no/again-too-many placeholders, or the model tried to write its own figure) — deterministic.

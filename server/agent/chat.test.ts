@@ -101,6 +101,72 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     expect(append.mock.calls[0]![1]).not.toContain("a@b.c1");
   });
 
+  it("NEVER lets an async-stalling reply reach the owner — replaced by an honest, immediate one (code guard)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      scanSignals: async () => [{ problem_type: "connection", direction: "below" }],
+      // the exact failure from the transcript: an 'ask' that promises a future analysis
+      chatResponses: ['{"action":"ask","reply":"Entendi, vou verificar como você usa a plataforma. Um momento!"}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "como melhorar meus ingressos?" }, deps);
+    expect(out.reply.toLowerCase()).not.toMatch(/um momento|vou verificar|analisando|aguarde/);
+    expect(out.reply).toContain("connection"); // forward-moving: names what it CAN measure right now
+  });
+
+  it("a normal (non-stalling) reply passes through unchanged", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: ['{"action":"ask","reply":"Quando você começou a notar isso?"}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "tá estranho" }, deps);
+    expect(out.reply).toBe("Quando você começou a notar isso?");
+  });
+
+  it("catches an EN stall too ('I'll check and get back to you')", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      scanSignals: async () => [{ problem_type: "connection", direction: "below" }],
+      chatResponses: ['{"action":"ask","reply":"Got it. I will check and get back to you."}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "something is off" }, deps);
+    expect(out.reply.toLowerCase()).not.toContain("get back to you");
+    expect(out.reply).toContain("connection");
+  });
+
+  it("unbound + stall → asks for the restaurant id (never a 'measured nothing' claim)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => null, // not linked
+      chatResponses: ['{"action":"ask","reply":"Vou verificar, um momento!"}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "oi" }, deps);
+    expect(out.reply.toLowerCase()).not.toMatch(/um momento|vou verificar/);
+    expect(out.reply.toLowerCase()).toContain("id"); // asks for the restaurant id instead
+  });
+
+  it("a stalling bind-confirmation does NOT re-ask for the id (bound THIS turn)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => null, // not linked at the start of the turn...
+      resolveRestaurant: async () => RESOLVED, // ...but the id resolves and binds now
+      chatResponses: ['{"action":"bind","restaurant_id":"R-1","reply":"Achei! Vou verificar tudo, um momento."}'],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "é o R-1" }, deps);
+    expect(out.reply.toLowerCase()).not.toContain("passa o id"); // the link succeeded → don't ask again
+    expect(out.reply.toLowerCase()).not.toMatch(/um momento|vou verificar/); // still de-stalled
+  });
+
+  it("a money narration that ALSO stalls is rejected → deterministic €, no stall (§14 + sync)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: [
+        '{"action":"diagnose","problem_type":"payment","reply":"vou ver"}',
+        "Vejo [[FIG]] em risco. Vou verificar mais detalhes e te aviso.", // a real figure BUT also a stall
+      ],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
+    expect(out.reply).toContain("€80");
+    expect(out.reply.toLowerCase()).not.toMatch(/vou verificar|te aviso/);
+  });
+
   it("ask: returns the reply and persists the turn, no bind", async () => {
     const { deps, upsert, append } = makeDeps({ chatResponses: ['{"action":"ask","reply":"quando começou?"}'] });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "vendas estranhas" }, deps);
@@ -265,7 +331,9 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     });
     const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "acho que é pagamento" }, deps);
     expect(caller.diagnosis.run).not.toHaveBeenCalled(); // payment has no signal → never measured
-    expect(out.reply).toBe("vou ver pagamentos");
+    // the model's dead-end "vou ver pagamentos" promise is replaced by an honest forward reply (anti-stall)
+    expect(out.reply).toContain("adoption"); // names the signal it CAN actually measure
+    expect(out.reply.toLowerCase()).not.toContain("vou ver pagamentos");
   });
 
   it("the engine's real signals are handed to the model in the prompt", async () => {
