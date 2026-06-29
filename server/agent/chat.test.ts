@@ -204,7 +204,7 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
     expect(recordCase).toHaveBeenCalledWith("POOL-X", "finance", expect.stringContaining("payment"));
   });
 
-  it("diagnose on a dedup-increment (problem not new) → does NOT record a duplicate case", async () => {
+  it("diagnose on a dedup-increment (problem not new) → acknowledges the open case, NO figure, no dup case", async () => {
     const { deps, caller, recordCase } = makeDeps({
       getBinding: async () => bound,
       chatResponses: [
@@ -213,8 +213,36 @@ describe("handleChatTurn — agent loop (faked deps)", () => {
       ],
     });
     caller.diagnosis.reportProblem.mockResolvedValueOnce({ problem_id: "P-1", status: "open", frequency: 2, created: false });
-    await handleChatTurn({ channel: "telegram", externalId: "777", text: "de novo os pagamentos" }, deps);
-    expect(recordCase).not.toHaveBeenCalled();
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "de novo os pagamentos" }, deps);
+    expect(recordCase).not.toHaveBeenCalled(); // no duplicate learning case
+    expect(out.reply.toLowerCase()).toContain("caso aberto"); // honest "already tracked"
+    expect(out.reply).not.toContain("€"); // no possibly-mismatched figure
+  });
+
+  it("diagnose: model spells a money word (no digit) → guard rejects it; only the SQL € reaches the owner (§14)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: [
+        '{"action":"diagnose","problem_type":"payment","reply":"vou ver"}',
+        "Vejo oitenta euros além de [[FIG]], grave.", // spelled amount + currency word, no digit
+      ],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
+    expect(out.reply).toContain("€80"); // the real figure
+    expect(out.reply).not.toContain("oitenta"); // the spelled fabrication was discarded (fallback used)
+  });
+
+  it("diagnose: model repeats the [[FIG]] placeholder → guard rejects (only one code-owned figure, §14)", async () => {
+    const { deps } = makeDeps({
+      getBinding: async () => bound,
+      chatResponses: [
+        '{"action":"diagnose","problem_type":"payment","reply":"vou ver"}',
+        "Risco de [[FIG]] e mais [[FIG]] amanhã.", // two placeholders ⇒ would inject the figure twice
+      ],
+    });
+    const out = await handleChatTurn({ channel: "telegram", externalId: "777", text: "pagamentos falhando" }, deps);
+    expect(out.reply).toContain("€80");
+    expect(out.reply.split("€80").length - 1).toBe(1); // figure appears exactly once (deterministic fallback)
   });
 
   it("diagnose: model drops the figure → deterministic fallback still carries the exact € (§14)", async () => {

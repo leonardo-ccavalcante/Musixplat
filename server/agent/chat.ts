@@ -17,6 +17,14 @@ function euro(n: number): string {
   return `€${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+// §14 narration guard: the model must contribute NO figure of its own. Reject any digit AND any currency
+// word (a spelled-out amount almost always carries one), so a fabricated amount can't ride alongside the
+// one code-injected figure. The real number only ever appears where CODE puts it.
+const CURRENCY_WORD = /\b(euros?|eur|reais|real|d[óo]lar(es)?|dollars?|libras?|pounds?)\b/i;
+function modelWroteNoFigure(textWithoutFig: string): boolean {
+  return !/\d/.test(textWithoutFig) && !CURRENCY_WORD.test(textWithoutFig);
+}
+
 // The channel-agnostic agent loop. ONE turn: redact PII -> decide (LLM) -> execute the chosen action by
 // reusing the existing engine procedures via the injected caller -> narrate honestly. All side-effects are
 // injected (deps) so the loop is unit-testable with no DB/LLM/network. The platform owns authorization:
@@ -180,6 +188,11 @@ async function runDiagnose(
     await deps
       .recordCase(binding.tenant_id, r.area_type, `chat: ${ownerText} → ${problemType}`)
       .catch(() => undefined);
+  } else {
+    // A case for this restaurant is already open (reportProblem dedups on tenant+restaurant and KEEPS the
+    // existing type). The requested type may differ, so narrating an at-risk figure here could mismatch the
+    // diagnosed problem — instead, honestly acknowledge it's already tracked. No (possibly-wrong) number.
+    return "Já tem um caso aberto pro seu restaurante e estou acompanhando. Quer uma atualização ou prefere falar com alguém do time?";
   }
 
   // Unmeasurable → honest, still TRACKED (the ticket exists), a person follows up. No number invented (§14).
@@ -193,23 +206,25 @@ async function runDiagnose(
   const atRisk = await deps.restaurantAtRisk(binding.restaurant_id, problemType);
 
   if (atRisk <= 0) {
-    // No honest per-restaurant money figure: narrate the finding + plan with NO number at all.
+    // No honest per-restaurant money figure: narrate the finding + plan with NO number/currency at all.
     const narration = await deps.chat(
       NARRATE_OWNER_NOMONEY_SYS,
       buildOwnerNarrateNoMoneyUser(ownerText, problemType, planHint),
     );
-    if (!/\d/.test(narration)) return narration; // model honored "no numbers"
+    if (!narration.includes("[[FIG]]") && modelWroteNoFigure(narration)) return narration;
     return `Encontrei um ponto em ${problemType} que dá pra melhorar no seu restaurante. Já registrei pra acompanhar e estou cuidando disso. Quer que eu detalhe?`;
   }
 
-  // §14 STRICT: the LLM NEVER writes a number. It frames the reply in the owner's language and marks where
-  // the amount goes with the literal token [[FIG]]; CODE injects the ONLY number (euro(), per-restaurant from
-  // SQL). Any digit the model wrote itself, or a missing placeholder, ⇒ deterministic fallback.
+  // §14 STRICT: the LLM NEVER writes a figure. It frames the reply in the owner's language and marks where
+  // the amount goes with EXACTLY ONE [[FIG]] token; CODE injects the only number (euro(), per-restaurant from
+  // SQL). Reject if the placeholder count isn't 1, or the model wrote any digit/currency word ⇒ fallback.
   const euroStr = euro(atRisk);
   const narration = await deps.chat(NARRATE_OWNER_SYS, buildOwnerNarrateUser(ownerText, planHint));
   const FIG = "[[FIG]]";
-  const modelWroteNoDigit = !/\d/.test(narration.split(FIG).join(""));
-  if (narration.includes(FIG) && modelWroteNoDigit) return narration.split(FIG).join(euroStr);
-  // Fallback (model dropped the placeholder or tried to write its own number) — deterministic, owner-framed.
+  const figCount = narration.split(FIG).length - 1;
+  if (figCount === 1 && modelWroteNoFigure(narration.split(FIG).join(" "))) {
+    return narration.split(FIG).join(euroStr);
+  }
+  // Fallback (no/again-too-many placeholders, or the model tried to write its own figure) — deterministic.
   return `Pelo que vi, há cerca de ${euroStr} em risco no seu restaurante. Já registrei pra acompanhar e estou cuidando disso. Quer que eu detalhe?`;
 }
