@@ -151,9 +151,11 @@ describe("02:1A — NBA engine proposes a lever (deterministic gap-rank) + fires
     }
   });
 
-  it("e5: min() arms are FAIL-CLOSED — an unambiguous arm flows through; ambiguity ⇒ LOW (§3.7/§3.5)", async () => {
-    // loadArms grants a non-LOW arm ONLY from exactly one distinct candidate value; 0 or >1 distinct
-    // (across intents / policy versions) ⇒ null ⇒ LOW. Proven via the arm columns the gate stores.
+  it("e5: the tier_cap arm is FAIL-CLOSED — one policy version flows through; ambiguous versions ⇒ LOW (§3.5)", async () => {
+    // tier_cap still resolves ONLY from exactly one distinct candidate; 0 or >1 (policy-version disagreement)
+    // ⇒ null ⇒ LOW. NOTE: the released_evals arm is NO LONGER per-cohort — it is certified BY TIER (02:B4-TIER:
+    // inherit / tighten / [V]-gate / cross-pool) and is covered in nba_tier_cert.test.ts. Here no cell is
+    // promoted, so released_evals stays at the fail-closed LOW floor.
     const rid = await pick("m_connection < 0.50"); // a lever exists ⇒ min() is sealed
     const c = await pool.connect();
     try {
@@ -168,8 +170,7 @@ describe("02:1A — NBA engine proposes a lever (deterministic gap-rank) + fires
       const cohort = cr.rows[0]!.cohort_id;
       const tier = cr.rows[0]!.tier;
 
-      // (a) exactly one distinct value per arm ⇒ resolves to that value.
-      await c.query(`insert into gov."Eval_Cell"(cohort_id,intent,version,released_evals) values ($1,'menu','gs-v1','HIGH')`, [cohort]);
+      // (a) exactly one policy version ⇒ tier_cap resolves to it; no promoted eval ⇒ released_evals LOW.
       await c.query(`insert into gov."Policy_Tier"(policy_id,policy_version,tier_cap,tier_id) values ('PT-a','pv-a','HIGH',$1)`, [tier]);
       const r1 = await proposeNba({ restaurantId: rid, cohortId: cohort, week: W1 }, undefined, c);
       expect(r1.levered).toBe(true);
@@ -177,10 +178,9 @@ describe("02:1A — NBA engine proposes a lever (deterministic gap-rank) + fires
         `select released_evals, tier_cap from gov."min_calculation" where nba_id=$1`,
         [r1.nbaId],
       );
-      expect(a1.rows[0]).toMatchObject({ released_evals: "HIGH", tier_cap: "HIGH" });
+      expect(a1.rows[0]).toMatchObject({ released_evals: "LOW", tier_cap: "HIGH" });
 
-      // (b) a 2nd, DIFFERENT value per arm ⇒ ambiguous (intent/version disagreement) ⇒ fail-closed LOW.
-      await c.query(`insert into gov."Eval_Cell"(cohort_id,intent,version,released_evals) values ($1,'order_review','gs-v1','MEDIUM')`, [cohort]);
+      // (b) a 2nd, DIFFERENT policy version ⇒ ambiguous ⇒ tier_cap fail-closed LOW.
       await c.query(`insert into gov."Policy_Tier"(policy_id,policy_version,tier_cap,tier_id) values ('PT-b','pv-b','MEDIUM',$1)`, [tier]);
       const r2 = await proposeNba({ restaurantId: rid, cohortId: cohort, week: W1 }, undefined, c);
       const a2 = await c.query<{ released_evals: string; tier_cap: string }>(

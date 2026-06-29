@@ -62,7 +62,7 @@ describe("observatory.capTable — yourCap [V] vs proven (measured-only) vs runs
     await pool.query(
       `insert into gov."Eval_Cell"(cohort_id,intent,version,released_evals,status,provenance_by_field)
        values ('c_cap_brand',$1,'gs-1','MEDIUM'::public.autonomy_level,'green'::public.eval_status,
-               jsonb_build_object('released_evals','[V]','status','[V]'))
+               jsonb_build_object('released_evals','[V]','status','[V]','released_evals_signed_by','U-OP-002'))
        on conflict (cohort_id,intent,version) do nothing`,
       [intent],
     );
@@ -170,7 +170,7 @@ describe("observatory.capTable — yourCap [V] vs proven (measured-only) vs runs
     await pool.query(
       `insert into gov."Eval_Cell"(cohort_id,intent,version,released_evals,status,provenance_by_field)
        values ('c_cap_high',$1,'gs-1','HIGH'::public.autonomy_level,'green'::public.eval_status,
-               jsonb_build_object('released_evals','[V]','status','[V]'))
+               jsonb_build_object('released_evals','[V]','status','[V]','released_evals_signed_by','U-OP-001'))
        on conflict (cohort_id,intent,version) do nothing`,
       [intent],
     );

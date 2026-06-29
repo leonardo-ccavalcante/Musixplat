@@ -93,10 +93,11 @@ export const observatoryRouter = router({
            join cohort."Cohort" c on c.cohort_id = e.cohort_id
           where e.status = 'green'
             and e.provenance_by_field->>'released_evals' = '[V]'
-            and exists (
-              select 1 from cohort."Cohort_Membership_Snapshot" cms
-                join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $1
-               where cms.cohort_id = e.cohort_id and cms.cohort_rule_version = $2)
+            -- GLOBAL (02:B4-TIER eval-global model): the eval certifies the MODEL on a cohort-type for ALL
+            -- pools, so proven = the highest [V] promotion of the tier in the current version, regardless of
+            -- pool — matching loadArms' tier_default. The per-tenant scope is the POLICY cap (the pol CTE),
+            -- NOT the proof. (Who may promote globally = the platform_admin governance follow-up.)
+            and c.cohort_rule_version = $2
           group by c.tier_base
        )
        select pol.tier, pol.tier_cap::text as your_cap, pr.proven::text as proven,
