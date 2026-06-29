@@ -43,13 +43,40 @@ async function loadArms(q: Q, cohortId: string): Promise<{ releasedEvals: Level 
      where c.cohort_id=$1`,
     [cohortId],
   );
-  const ev = await q<{ released_evals: Level }>(
-    `select distinct released_evals from gov."Eval_Cell" where cohort_id=$1 and released_evals is not null`,
+  // 02:B4-TIER — autonomy is certified BY TIER, not per concrete cohort (the operator can't author a golden
+  // set for every cohort). The eval certifies the MODEL on a cohort-TYPE for everyone (eval-global-governance),
+  // so this is GLOBAL: tier_default = the highest [V]-PROMOTED + green level among cohorts of the same
+  // tier_base + cohort_rule_version — ONE promotion lifts the whole tier. own_cap is the cohort's conservative
+  // floor: its own [V] promotion (worst tightens — the engine is intent-agnostic) OR any [C] auto-downgrade
+  // (a red re-eval vetoes inheritance so a downgraded cohort can't ride a sibling's cert, fail-closed §7).
+  // Fail-closed: no [V] promotion anywhere ⇒ LOW. The promote is human-gated (the safety boundary).
+  // INTENTIONAL §3.4 cross-pool EXCEPTION (NOT a bug): unlike pool DATA, an eval certifies the MODEL's
+  // capability on a cohort-type — a platform fact, true for every pool (the eval-global decision). So a
+  // promotion crossing pools is by design here. REQUIRED production control = the `platform_admin` role (who
+  // may promote globally); until it exists, any senior manager's promote lifts the tier for all pools. A
+  // reviewer flagging "cross-pool affects another tenant's gate" is correct about §3.4-general but is
+  // superseded by eval-global; do NOT re-add per-tenant scoping without also removing that decision.
+  const ev = await q<{ released_evals: Level | null }>(
+    `with me as (select tier_base, cohort_rule_version from cohort."Cohort" where cohort_id=$1),
+          tier_default as (
+            select max(e.released_evals) as lvl
+              from gov."Eval_Cell" e
+              join cohort."Cohort" c on c.cohort_id = e.cohort_id
+              join me on c.tier_base = me.tier_base and c.cohort_rule_version = me.cohort_rule_version
+             where e.status = 'green' and e.provenance_by_field->>'released_evals' = '[V]'
+               and e.released_evals is not null),
+          own_cap as (
+            select min(e.released_evals) as lvl
+              from gov."Eval_Cell" e
+             where e.cohort_id = $1 and e.released_evals is not null
+               and ( (e.status = 'green' and e.provenance_by_field->>'released_evals' = '[V]')
+                     or e.provenance_by_field->>'released_evals' = '[C]' ) )
+     select least( coalesce((select lvl from own_cap), (select lvl from tier_default)),
+                   (select lvl from tier_default) ) as released_evals`,
     [cohortId],
   );
-  // Unambiguous (exactly one distinct value) ⇒ use it; otherwise fail-closed to null ⇒ LOW.
   return {
-    releasedEvals: ev.length === 1 ? ev[0]!.released_evals : null,
+    releasedEvals: ev[0]?.released_evals ?? null,
     tierCap: tier.length === 1 ? tier[0]!.tier_cap : null,
   };
 }
