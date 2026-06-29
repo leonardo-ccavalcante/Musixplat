@@ -60,24 +60,37 @@ function toRow(r: RawRow): NbaCockpitRow {
   return { ...r, ...cockpitStatus(r) };
 }
 
-// AUTO rows first within each cohort (the cockpit surfaces what the AI already cleared, then the queue).
+// One row per DECISION, AUTO-first within each cohort. The cockpit's unit of work is the (cohort, action_type)
+// decision — the same grain the autonomous path dedups on (autoDispatch) and a dispatch acts on (reach = the
+// whole cohort). But generation mints one NBA_Proposal PER problem-restaurant (runNbaForCohort loops the
+// per-restaurant engine), so the same cohort-level action surfaces as many identical rows. Collapse them with
+// `distinct on (cohort_id, action_type)` to a single representative: prefer the auto one (the action the AI is
+// already handling), then a stable nba_id — then re-order for display (auto-first within cohort). Read-only,
+// §14-safe (no number recomputed); the smallest-surface fix (CLAUDE.md §3.11), not touching the §14 producers.
 const SQL = `
-  select p.nba_id::text as nba_id, p.cohort_id, p.action_type, p.root_cause,
-         p.financial_class::text as financial_class, m.effective_level::text as effective_level,
-         m.auto_releasable, p.before_after_expected, p.cohort_rule_version
-  from gov."NBA_Proposal" p
-  left join lateral (
-    select effective_level, auto_releasable
-    from gov."min_calculation" where nba_id = p.nba_id::text
-    order by computed_at desc limit 1
-  ) m on true
-  where p.cohort_rule_version = $1
-    and exists (
-      select 1 from cohort."Cohort_Membership_Snapshot" cms
-      join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
-      where cms.cohort_id = p.cohort_id and cms.cohort_rule_version = $1
-    )
-  order by p.cohort_id, m.auto_releasable desc nulls last, p.nba_id`;
+  with ranked as (
+    select distinct on (p.cohort_id, p.action_type)
+           p.nba_id::text as nba_id, p.cohort_id, p.action_type, p.root_cause,
+           p.financial_class::text as financial_class, m.effective_level::text as effective_level,
+           m.auto_releasable, p.before_after_expected, p.cohort_rule_version
+    from gov."NBA_Proposal" p
+    left join lateral (
+      select effective_level, auto_releasable
+      from gov."min_calculation" where nba_id = p.nba_id::text
+      order by computed_at desc limit 1
+    ) m on true
+    where p.cohort_rule_version = $1
+      and exists (
+        select 1 from cohort."Cohort_Membership_Snapshot" cms
+        join tenant."Restaurant" r on r.restaurant_id = cms.restaurant_id and r.tenant_id = $2
+        where cms.cohort_id = p.cohort_id and cms.cohort_rule_version = $1
+      )
+    order by p.cohort_id, p.action_type, m.auto_releasable desc nulls last, p.nba_id
+  )
+  select nba_id, cohort_id, action_type, root_cause, financial_class, effective_level,
+         auto_releasable, before_after_expected, cohort_rule_version
+  from ranked
+  order by cohort_id, auto_releasable desc nulls last, nba_id`;
 
 export async function listCockpitRows(tenantId: string, exec: Exec): Promise<NbaCockpitRow[]> {
   const vr = await exec<{ value: string }>(
